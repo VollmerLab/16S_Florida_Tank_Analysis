@@ -14,7 +14,9 @@ preprocess_metadata <- read_csv('../Data/Florida_Census_outcomes.csv',
   group_by(tank, treatment, genotype) %>%
   filter(n() == 2) %>%
   mutate(final_disease_state = disease_state[time == 'T7']) %>%
-  ungroup
+  ungroup %>%
+  mutate(sample_id = str_c(time, treatment, tank, genotype, sep = '_')) %>%
+  select(sample_id, everything())
 
 write_csv(preprocess_metadata, '../intermediate_files/preprocess_metadata.csv')
 
