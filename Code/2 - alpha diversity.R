@@ -4,6 +4,12 @@ library(tidyverse)
 library(phyloseq)
 library(microbiome)
 library(vegan)
+library(lme4)
+library(afex)
+library(emmeans)
+library(car)
+library(emmeans)
+library(multcomp)
 
 aggregation_level <- 'Genus' #or none
 
@@ -34,33 +40,32 @@ alpha_table
 timepoint_data <- alpha_table %>%
   filter(time %in% c('T3', 'T7'))
 
+
+#### Various Models ####
 lm(observed ~ (exposure + final_disease_state) * time, data = timepoint_data) %>% car::Anova(type = 2)
 glm(observed ~ (exposure + final_disease_state) * time, data = timepoint_data, family = 'poisson')
 
-library(lme4)
+
 linear_model <- lmer(observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) + 
                        (1 | tank), data = timepoint_data)
-count_model_1 <- glmer(observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) + (1 | tank), 
-      data = timepoint_data, family = 'poisson') 
+count_model_1 <- glmer(observed ~ (exposure + final_disease_state) * time + 
+                         (1 | fragment_id) + (1 | tank), data = timepoint_data, family = 'poisson') 
 car::Anova(count_model_1, type = 2) #poisson is for count data
 summary(count_model_1)
 
-count_model_nb <- glmer.nb(observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) + (1 | tank), 
+count_model_nb <- glmer.nb(observed ~ (exposure + final_disease_state) * time + 
+                             (1 | fragment_id) + (1 | tank), 
          data = timepoint_data)
 summary(count_model_nb)
 car::Anova(count_model_nb, type = 2)
 
 AIC(count_model_nb, count_model_1, linear_model) #better model has smaller AIC value
 
-library(afex)
-
-mixed(observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) + (1 | tank), data = timepoint_data)
+mixed(observed ~ (exposure + final_disease_state) * time + 
+        (1 | fragment_id) + (1 | tank), data = timepoint_data)
       #does essentially the same thing as repeated measures but can do multiple random effects
 aov_4(observed ~ exposure + final_disease_state + time + (1 + time | fragment_id), data = timepoint_data)
       #only one random effect at a time
-
-library(emmeans)
-select(timepoint_data, exposure, final_di)
 
 emmeans(count_model_nb, ~final_disease_state * time, type = 'link') %>% contrast('pairwise')
 emmeans(count_model_nb, ~final_disease_state * time, type = 'response') %>%
@@ -76,7 +81,9 @@ emmeans(count_model_nb, ~final_disease_state * time, type = 'response') %>%
             vjust = -1) +
   scale_colour_manual(values = c('D' = 'red', 'H' = 'blue'))
 
+#### Analyzing Alpha Table ####
 
+#all diversity metrics in table
 select(alpha_table, sample_id, observed, any_of(colnames(metadata)))
 
 colnames(timepoint_data)
@@ -92,6 +99,158 @@ tmp <- timepoint_data %>%
 tmp$data[[1]]
 
 tmp
+
+#Selected measures:
+
+#richness - observed; dominance - dbp, gini; rarity - rare abundance
+#diversity - shannon; evenness - camargo, bulla
+
+kept_columns <- c("sample_id", "fragment_id", "observed", "dominance_dbp", 
+                  "dominance_gini", "rarity_rare_abundance",
+                  "diversity_shannon", "evenness_camargo", "evenness_bulla")
+alpha_kept_columns <- paste("alpha_table$", kept_columns, sep = "")
+
+reduced_alpha_table <- timepoint_data %>% #only T3 and T7
+  select(all_of(kept_columns), any_of(colnames(metadata)))
+
+r_alpha_models <- reduced_alpha_table %>%
+  pivot_longer(cols = observed:evenness_bulla,
+               names_to = 'metric',
+               values_to = 'value') %>%
+  nest_by(metric) %>%
+  summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                                (1 | fragment_id) + (1 | tank), data = data)))
+
+r_alpha_models$model[1]
+r_alpha_models$metric[1]
+
+
+#### emmeans graphs of alpha characteristics ####
+
+emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time) %>%
+  contrast('pairwise')
+
+#Shannon Diversity - how diverse the species in a given community are
+
+emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time, 
+                         type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[1])
+
+#DBP Dominance - relative abundance of most abundant species, 0-1 & bigger #s means more dominant
+
+#greater dominance at T3 than T7, matches the increase in shannon diversity at T7
+emmeans(r_alpha_models$model[[2]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[2])
+
+#Gini Dominance - how unevenly abundances are distributed, 0-1 & perfect equality is 0
+
+#slight increase in evenness at T7, matches the decreased dominance
+emmeans(r_alpha_models$model[[3]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[3])
+
+#Bulla Evenness - evenness w/ equal weight to all species, sensitive to rare species
+
+emmeans(r_alpha_models$model[[4]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[4])
+
+#Camargo's Evenness - proportions of indivs between sites, 0-1 & 1 is even, 0 is patchy
+
+#T3 is really even and T7 is patchier
+
+emmeans(r_alpha_models$model[[5]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[5])
+
+#Observed Species Richness
+
+#more species richness at T7 than T3, matches shannon diversity
+
+emmeans(r_alpha_models$model[[6]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[6])
+
+#Rare Abundance - relative proportion of rare species(i.e. not most abundant in all sites), 0-1
+
+#for healthy samples, rare species increased in abundance at T7
+
+emmeans(r_alpha_models$model[[7]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure, shape = final_disease_state)) +
+  facet_wrap(~final_disease_state) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[7])
+
+#buffer line 
 
 #### Alpha Diversity Index Notes ####
 
@@ -111,9 +270,9 @@ tmp
     #(specify the number with the argument ntaxa)
 #relative index equals to the relative abundance of the most dominant n species of the sample 
     #(specify the number with the argument ntaxa). This index gives values in interval 0 to 1
-#simpson's lambda is  the probability that two randomly chosen individuals belongs to the same species. 
+#simpson's lambda is the probability that two randomly chosen individuals belongs to the same species. 
     #The higher the probability, the greater the dominance
-#core_abundance is Core abundance index is sum of relative abundances of core species in the sample. 
+#core_abundance is the sum of relative abundances of core species in the sample. 
     #Index gives values in interval 0 to 1, where bigger value represent greater dominance
     #Core species are species that are most abundant in all samples
 #gini measures how unevenly abundances are distributed
@@ -125,28 +284,42 @@ tmp
 
 #log_modulo_skewness is a rarity index that characterizes the concentration of species at low abundance. 
     #It uses the skewness of the frequency distribution of arithmetic abundance classes
-#low abundance gives the concentration of species at low abundance, or the relative proportion of rare species in [0,1].
-    #The species that are below the indicated detection threshold are considered rare. #use "detection = " (ex: 0.2/100)
+#low abundance gives the concentration of species at low abundance, or the relative proportion of rare 
+    #species in [0,1].The species that are below the indicated detection threshold are considered rare.
+    # #use "detection = " (ex: detection = 0.2/100)
     #Note that population prevalence is not considered. If the detection argument is a vector, 
     #then a data.frame is returned, one column for each detection threshold.
-#rare abundance gives the relative proportion of rare species (ie. those that are not part of the core microbiota)
-    #in the interval [0,1]. This is the complement (1-x) of the core abundance. The rarity function provides the 
+#rare abundance gives the relative proportion of rare species in the interval [0,1].
+    #(rare = those that are not part of the core microbiota)
+    #This is the complement (1-x) of the core abundance. The rarity function provides the 
     #abundance of the least abundant taxa within each sample, regardless of the population prevalence.
-
-#Coverage
-
-#coverage gives the number of groups needed to have a given proportion of the ecosystem occupied (by default is 0.5 ie 50%)
 
 #Diversity
 
-#inverse_simpson is an indication of the richness in a community with uniform evenness that would have the 
-    #same level of diversity, calculated as 1/lambda where lambda is the simpson index #difficult to find info about
+#inverse_simpson is an indication of the richness in a community with uniform evenness that would have
+    #the same level of diversity, calculated as 1/lambda where lambda is the simpson index 
 #gini-simpson measures the probability that two randomly selected individuals belong to different species
     #1 - lambda where lambda is the simpson index
+#shannon shows how diverse the species in a given community are
+    #It rises with the number of species and the evenness of their abundance
+#fisher's alpha describes mathematically the relationship between the number of species 
+    #and the number of individuals in those species
+#coverage gives the number of groups needed to have a given proportion of the ecosystem occupied 
+    #(by default is 0.5 ie 50%)
 
+#Evenness
 
-
-
+#camargo's compares proportions of individuals between sites, with 1 being even and 0 being patchy
+    #relatively unaffected by sites with very few organisms, and is unaffected by site richness
+#simpson's evenness is a variant of the reciprocal Simpson index
+    #Index values range from near 0 (1/s) (patchy or skewed) to 1 (even), and the index 
+    #is relatively unaffected by sites with very few individuals.
+#pielou is shannon diversity index value divided by the maximum possible shannon diversity index given
+    #complete evenness (proportion 0 to 1)
+#evar is based on the variance in abundance over the species taken over log abundance
+    #so proportional differences are compared, then converted to a 0-1 scale by arctan
+#bulla gives equal weight to all species regardless of abundance so it's 
+    #sensitive to the presence of rare species
 
 
 #### exploratory plots ####
