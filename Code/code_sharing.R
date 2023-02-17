@@ -1,33 +1,38 @@
-#### Filtering and normalizing data
-otu_tmm <- microbiome %>%
-  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
-  # phyloseq_transform_css() %>%
-  otu_table() %>% 
-  t %>% #need this if no phyloseq_transform_css
-  as.data.frame %>%
-  as.matrix %>%
-  DGEList %>%
-  edgeR::calcNormFactors(method = 'TMM') #change method to TMM
+cpm(gene_normalize_factors, log = TRUE, prior.count = 2) %>%
+  rowMeans %>%
+  quantile(0.05)
 
 
+cpm(gene_normalize_factors, log = TRUE, prior.count = 2) %>%
+  rowMeans %>%
+  tibble(x = .) %>%
+  ggplot(aes(x = x)) +
+  geom_histogram(fill = "grey", bins = 100) +
+  theme_classic() +
+  labs(y = "Density", x = "Filtered read counts (logCPM)",
+       title = "Distribution of normalized, filtered read counts")
 
-filter_transcripts <- function(data, min_cpm, prop_samples){
-  keep <- rowMeans(cpm(data, log = TRUE) > min_cpm) >= prop_samples
-  message('Genes Removed by Filter: ', scales::comma(table(keep)[1]))
-  message('Genes Kept by Filter: ', scales::comma(table(keep)[2]))
-  # message('Percet of Genes of Interest Kept after Filter: ', 
-  #         scales::percent(sum(rownames(data[keep, ]$counts) %in% genes_of_interest$gene_id) / length(genes_of_interest$gene_id)))
-  # message('Percet of Genes in Linkage Region Kept after Filter: ', 
-  #         scales::percent(sum(rownames(data[keep, ]$counts) %in% linkage_genes$gene_id) / length(linkage_genes$gene_id)))
+plot_pcoa <- function(cpm_counts){
+  filtered_pcoa <- t(cpm_counts) %>%
+    vegdist(method = 'euclidean') %>%
+    divide_by(1000) %>%
+    pcoa()
   
-  data[keep, keep.lib.sizes = FALSE]
+  percent_variance <- filtered_pcoa$values$Eigenvalues / sum(filtered_pcoa$values$Eigenvalue)
+  
+  filtered_pcoa$vectors %>%
+    as_tibble(rownames = 'sequence_id') %>%
+    dplyr::select(sequence_id, Axis.1, Axis.2) %>%
+    inner_join(sample_metadata,
+               by = 'sequence_id') %>%
+    ggplot(aes(x = Axis.1, y = Axis.2, colour = treat_outcome, 
+               shape = timepoint, group = fragment_id)) +
+    geom_point() +
+    geom_path() +
+    labs(x = str_c('PCoA 1 (', scales::percent(percent_variance[1]), ')'),
+         y = str_c('PCoA 2 (', scales::percent(percent_variance[2]), ')')) +
+    theme_classic()
+  
 }
 
-gene_normalize_factors <- pivot_wider(raw_gene_expression, names_from = sequence_id,
-                                      values_from = gene_count) %>%
-  # filter(str_detect(gene_id, '^__', negate = TRUE)) %>%
-  column_to_rownames('gene_id') %>%
-  as.matrix() %>% 
-  DGEList(remove.zeros = TRUE) %>%
-  filter_transcripts(0.1, 0.1) %>%
-  calcNormFactors(method = 'TMMws')
+cpm(gene_normalize_factors, log = TRUE, prior.count = 2) %>% plot_pcoa()
