@@ -110,3 +110,31 @@ make_aov_summary <- function(model){
                 values_from = c('df', 'f', 'p', 'pes'), 
                 names_vary = 'slowest')
 }
+
+
+
+ungroup %>%
+  rowwise %>%
+  mutate(terms = list(find_unique_significant_terms(full_model, alpha))) %>%
+  unnest(terms, keep_empty = TRUE) %>%
+  # slice(1:3) %>%
+  # filter(str_detect(terms, 'disease_resistance')) %>%
+  rowwise %>%
+  mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(full_model, 
+                                                                     as.formula(str_c('~', terms)), 
+                                                                     alpha)),
+         plot = list(possibly(make_model_plot, otherwise = NULL)(em_out, data, terms))) %>%
+  group_by(gene_id, data, full_model) %>%
+  summarise(plot = ifelse(any(is.na(terms)),
+                          list(NULL),
+                          list(wrap_plots(plot) & 
+                                 labs(y = 'log2(CPM)') &
+                                 plot_annotation(title = gene_id) & 
+                                 theme_classic() &
+                                 theme(panel.background = element_rect(colour = 'black', fill = NA),
+                                       axis.text = element_text(colour = 'black', size = 12),
+                                       axis.title = element_text(colour = 'black', size = 16)))),
+            .groups = 'rowwise') %>%
+  mutate(make_aov_summary(full_model), .groups = 'drop') %>%
+  ungroup 
+
