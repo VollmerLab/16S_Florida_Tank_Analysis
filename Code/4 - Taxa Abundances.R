@@ -282,6 +282,11 @@ aov_and_graphs <- all_models %>%
   mutate(possibly(make_aov_summary, otherwise = NULL)(model)) %>%
   ungroup
 
+
+aov_and_graphs %>%
+  filter(str_detect(taxon, '[fF]ran')) %>%
+  pull(plot) %>%
+  pluck(1)
 #how to check for scenarios that fulfill specific combos of significant conditions
 
 aov_and_graphs %>% 

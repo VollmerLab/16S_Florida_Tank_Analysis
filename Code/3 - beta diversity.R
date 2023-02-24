@@ -21,7 +21,7 @@ library(permute)
 library(tidyverse)
 
 #### Read in Data ####
-aggregation_level <- 'Genus' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -36,7 +36,7 @@ if(aggregation_level != 'none'){
 }
 
 mb_data <- microbiome_data %>%
-  subset_samples(time %in% c('T3', 'T7')) %>%
+  #subset_samples(time %in% c('T3', 'T7')) %>%
   phyloseq_transform_css %>% #normalizing by column and then log transform
   phyloseq_filter_prevalence(prev.trh = 0.1) %>% #filter for only 10%+ prevalence
   otu_table %>%
@@ -44,14 +44,19 @@ mb_data <- microbiome_data %>%
 
 #### Analysis ####
 
-otu_nmds <- metaMDS(mb_data, distance = 'bray', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
-plot(otu_nmds)
+#sequential permanova 
+
+#envfit(ord = nmds, env = condensed otu table)
+
+#nmds for each time point separately
+otu_nmds <- metaMDS(mb_data, distance = 'robust.aitchison', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
+#plot(otu_nmds)
 
 scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
-  ggplot(aes(x = NMDS1, y = NMDS2, colour = final_disease_state)) +
+  ggplot(aes(x = NMDS1, y = NMDS2, colour = exposure)) +
   
   geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
              colour = 'gray50', size = 0.1) +
@@ -59,6 +64,9 @@ scores(otu_nmds)$sites %>%
   geom_point() +
   theme_classic()
 
+scores(otu_nmds)$sites %>%
+  as_tibble(rownames = 'sample_id') %>%
+  filter(NMDS1 < -2)
 
 adonis2(mb_data ~ time + exposure + final_disease_state, data = filter(metadata, time %in% c('T3', 'T7')), 
         permutations = 999, method = 'bray', by = NULL)
@@ -102,6 +110,7 @@ anova(rda1, permutations = h2, model = 'reduced', by = 'term')
 #good in detecting underlying ecological gradients:
   #"gower" - divides all distances by the number of observations (rows) and scales each column to 
       #unit range, differs from "altGower" by the scaling, how different two records are from 0-1
+      #can include categorical variables
   #"bray" - semimetric, the default
       #semimetric means it violates the triangle inequality property
   #"jaccard" - metric, calculated using the Bray–Curtis dissimilarity

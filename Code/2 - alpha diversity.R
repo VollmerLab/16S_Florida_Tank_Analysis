@@ -31,6 +31,7 @@ if(aggregation_level != 'none'){
 #data filtering step?
     #must use untrimmed data set for alpha diversity measures of richness to get meaningful results
     #functions depend heavily on singletons
+#TODO add read abundance sort of 1000 reads or more
   
     #there are 2 samples with 5 or less species observed, might be skewing the data
 
@@ -123,6 +124,20 @@ r_alpha_models <- reduced_alpha_table %>%
   summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
                                 (1 | fragment_id) + (1 | tank), data = data)))
 
+
+#core abundance and relative abundance
+
+#broom , broom mixed, fixef
+
+#just fragment id as random effect
+
+#what happens to things without genus and in general
+
+#collapse ASVs and plot NAs as gray
+
+#of the things that we added, how did they change
+
+#mds plot
 
 #### Shannon Diversity ####
 
