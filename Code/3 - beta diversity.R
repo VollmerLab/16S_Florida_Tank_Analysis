@@ -1,15 +1,28 @@
 #code to calculate the beta diversity
-setwd("~/Documents/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
-library(tidyverse)
+#### Packages ####
+library(multcomp)
 library(phyloseq)
 library(microbiome)
 library(vegan)
+library(lme4)
+library(afex)
+library(emmeans)
+library(car)
+library(edgeR)
 library(metagMisc)
-
-aggregation_level <- 'Genus' #or none
+library(ape)
+library(ggdist)
+library(gghalves)
+library(patchwork)
+library(magrittr)
+library(permute)
+library(tidyverse)
 
 #### Read in Data ####
+aggregation_level <- 'Genus' #or none
+
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -29,8 +42,7 @@ mb_data <- microbiome_data %>%
   otu_table %>%
   t #transposes the data (flips the axes)
 
-
-#look into distance metrics
+#### Analysis ####
 
 otu_nmds <- metaMDS(mb_data, distance = 'bray', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
 plot(otu_nmds)
@@ -60,7 +72,7 @@ adonis2(mb_data ~ time * exposure * final_disease_state - time:exposure:final_di
 adonis2(mb_data ~ time * exposure * final_disease_state - time:exposure:final_disease_state - exposure:final_disease_state, data = filter(metadata, time %in% c('T3', 'T7')), 
         permutations = 999, method = 'bray', by = 'terms')
 
-library(permute)
+
 tmp_data <- filter(metadata, time %in% c('T3', 'T7')) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, sep = '_')) 
 rda1 <- rda(mb_data ~ time * (exposure + final_disease_state) + Condition(fragment_id), data = tmp_data) 
@@ -81,4 +93,69 @@ h2
 
 anova(rda1, permutations = h2, model = 'reduced', by = 'term')
 
+#### Notes on metaMDS distance metrics ####
 
+#view info and equations for calculating under ?vegdist
+#can also find some good explanations at 
+      #https://r.qcbs.ca/workshop09/book-en/types-of-distance-coefficients.html  
+
+#good in detecting underlying ecological gradients:
+  #"gower" - divides all distances by the number of observations (rows) and scales each column to 
+      #unit range, differs from "altGower" by the scaling, how different two records are from 0-1
+  #"bray" - semimetric, the default
+      #semimetric means it violates the triangle inequality property
+  #"jaccard" - metric, calculated using the Bray–Curtis dissimilarity
+      #they think this should be preferred over the default bray
+  #"kulczynski" - can be substitute for jaccard when some species have small ranges that are 
+      #subsets of larger ranges
+
+#able to handle different sample sizes:
+  #"morisita" - can be used with genuine count data (integers) only
+      #a statistical measure of dispersion of individuals in a population. 
+      #It is used to compare overlap among samples. This formula is based on the assumption that 
+      #increasing the size of the samples will increase the diversity 
+      #because it will include different habitats
+  #"horn" (Horn–Morisita) - variant of morisita, able to handle any abundance data
+  #"binomial" - derived from Binomial deviance under null hypothesis that the two compared communities 
+      #are equal
+  #"chao" - tries to take into account the number of unseen species pairs
+  #"cao" - a minimally biased index for high beta diversity and variable sampling intensity
+      #intended for count (integer) data, and it is undefined for zero abundance
+
+#presence–absence data (should be able to handle unknown (and variable) sample sizes):
+  #"mountford" - inverse of Fisher's alpha, takes into consideration the # of species in each separate
+      #community and the # of species that are present in both
+  #"raup" (Raup–Crick) - based on the probability of observing at least j species in shared 
+      #in compared communities
+
+#for compositional data
+  #"aitchison" - equivalent to Euclidean distance between CLR-transformed samples (centered log ratio) 
+      #and deals with positive compositional data
+      #aitchison thinks it's better than bray bc it has a better stability to subsetting and aggregation
+      #and is a proper distance
+  #"robust.aitchison" - uses robust CLR ("rlcr"), making it applicable to non-negative data 
+      #including zeroes (unlike the standard Aitchison)
+
+#not good in gradient separation without proper standardization:
+  #"manhattan"
+  #"euclidean"
+
+#miscellaneous:
+  
+  #"canberra" - weighted version of the Manhattan distance, a numerical measure of the distance between 
+      #pairs of points in a vector space
+      #has also been used to analyze the gut microbiome in different disease states
+  #"altGower" - how different two records are from 0-1
+      #omits double-zeros and divides by the number of pairs with at least one above-zero value
+      #does not scale columns
+  #"mahalanobis" - Euclidean distances of a matrix where columns are centred, have unit variance, and 
+      #are uncorrelated. The index is not commonly used for community data, but it is sometimes used for 
+      #environmental variables
+  #"chisq" - Euclidean distances of Chi-square transformed data
+  #"chord" - Euclidean distance of a matrix where rows are standardized to unit norm 
+      #(their sums of squares are 1) 
+  #"hellinger" - used to quantify the similarity between two probability distributions
+      #it's a type of f-divergence
+  #"clark" - ?
+
+#### ####

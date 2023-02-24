@@ -1,6 +1,7 @@
 #code to calculate the alpha diversity
-setwd("~/Documents/GitHub/16S_Florida_Tank_Analysis/Code")
-library(tidyverse)
+setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+
+#### Packages ####
 library(phyloseq)
 library(microbiome)
 library(vegan)
@@ -10,10 +11,11 @@ library(emmeans)
 library(car)
 library(emmeans)
 library(multcomp)
-
-aggregation_level <- 'Genus' #or none
+library(tidyverse)
 
 #### Read in Data ####
+aggregation_level <- 'Genus' #or none
+
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -27,6 +29,10 @@ if(aggregation_level != 'none'){
 }
 
 #data filtering step?
+    #must use untrimmed data set for alpha diversity measures of richness to get meaningful results
+    #functions depend heavily on singletons
+  
+    #there are 2 samples with 5 or less species observed, might be skewing the data
 
 #### Alpha Diversity ####
 alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
@@ -96,10 +102,6 @@ tmp <- timepoint_data %>%
   summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
                                 (1 | fragment_id) + (1 | tank), data = data)))
 
-tmp$data[[1]]
-
-tmp
-
 #Selected measures:
 
 #richness - observed; dominance - dbp, gini; rarity - rare abundance
@@ -121,19 +123,47 @@ r_alpha_models <- reduced_alpha_table %>%
   summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
                                 (1 | fragment_id) + (1 | tank), data = data)))
 
-r_alpha_models$model[1]
-r_alpha_models$metric[1]
 
+#### Shannon Diversity ####
 
-#### emmeans graphs of alpha characteristics ####
+#how diverse the species in a given community are
 
-emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time) %>%
-  contrast('pairwise')
+#greater diversity at T7 than T3
 
-#Shannon Diversity - how diverse the species in a given community are
+anova(r_alpha_models$model[[1]])
+#time ***
 
-emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time, 
+#exposure:time *
+emmeans(r_alpha_models$model[[1]], ~(exposure) * time, 
                          type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[1])
+
+#final_disease_state:time *
+emmeans(r_alpha_models$model[[1]], ~(final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[1])
+
+#all
+emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time, 
+        type = 'response') %>%
   cld(Letters = LETTERS) %>%
   as_tibble() %>%
   mutate(.group = str_trim(.group)) %>%
@@ -146,9 +176,31 @@ emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[1])
 
-#DBP Dominance - relative abundance of most abundant species, 0-1 & bigger #s means more dominant
+#### DBP Dominance ####
+
+#relative abundance of most abundant species, 0-1 & bigger #s means more dominant
 
 #greater dominance at T3 than T7, matches the increase in shannon diversity at T7
+
+anova(r_alpha_models$model[[2]])
+#time ***
+#final_disease_state:time .
+
+#exposure:time *
+emmeans(r_alpha_models$model[[2]], ~(exposure) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[2])
+
+#all
 emmeans(r_alpha_models$model[[2]], ~(exposure + final_disease_state) * time, 
         type = 'response') %>%
   cld(Letters = LETTERS) %>%
@@ -163,9 +215,32 @@ emmeans(r_alpha_models$model[[2]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[2])
 
-#Gini Dominance - how unevenly abundances are distributed, 0-1 & perfect equality is 0
+#### Gini Dominance ####
+
+#how unevenly abundances are distributed, 0-1 & perfect equality is 0
 
 #slight increase in evenness at T7, matches the decreased dominance
+#scale of y-axis is very slight
+
+anova(r_alpha_models$model[[3]])
+#time ***
+#exposure:time .
+
+#final_disease_state:time *
+emmeans(r_alpha_models$model[[3]], ~(final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[3])
+
+#all
 emmeans(r_alpha_models$model[[3]], ~(exposure + final_disease_state) * time, 
         type = 'response') %>%
   cld(Letters = LETTERS) %>%
@@ -180,62 +255,103 @@ emmeans(r_alpha_models$model[[3]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[3])
 
-#Bulla Evenness - evenness w/ equal weight to all species, sensitive to rare species
+#### Bulla Evenness ####
 
-emmeans(r_alpha_models$model[[4]], ~(exposure + final_disease_state) * time, 
-        type = 'response') %>%
-  cld(Letters = LETTERS) %>%
-  as_tibble() %>%
-  mutate(.group = str_trim(.group)) %>%
-  #rename(emmean = response) %>%
-  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
-             col = exposure, shape = final_disease_state)) +
-  facet_wrap(~final_disease_state) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  geom_text(aes(y = (emmean + SE), label = .group),
-            position = position_dodge(0.5), vjust = -1) +
-  ylab(r_alpha_models$metric[4])
+#evenness w/ equal weight to all species, sensitive to rare species
 
-#Camargo's Evenness - proportions of indivs between sites, 0-1 & 1 is even, 0 is patchy
+#nothing significant
+
+anova(r_alpha_models$model[[4]])
+#exposure:time .
+
+      #not worth plotting (plot showed nothing)
+
+#### Camargo's Evenness ####
+
+#proportions of indivs between sites, 0-1 & 1 is even, 0 is patchy
 
 #T3 is really even and T7 is patchier
 
-emmeans(r_alpha_models$model[[5]], ~(exposure + final_disease_state) * time, 
+anova(r_alpha_models$model[[5]])
+#final_disease_state **
+#time ***
+
+#final_disease_state:time **
+emmeans(r_alpha_models$model[[5]], ~(final_disease_state) * time, 
         type = 'response') %>%
   cld(Letters = LETTERS) %>%
   as_tibble() %>%
   mutate(.group = str_trim(.group)) %>%
   #rename(emmean = response) %>%
   ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
-             col = exposure, shape = final_disease_state)) +
-  facet_wrap(~final_disease_state) +
+             col = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[5])
 
-#Observed Species Richness
+#### Observed Species Richness ####
+
+#number of species observed
 
 #more species richness at T7 than T3, matches shannon diversity
 
-emmeans(r_alpha_models$model[[6]], ~(exposure + final_disease_state) * time, 
+anova(r_alpha_models$model[[6]])
+#time ***
+
+#final_disease_state:time **
+emmeans(r_alpha_models$model[[6]], ~(final_disease_state) * time, 
         type = 'response') %>%
   cld(Letters = LETTERS) %>%
   as_tibble() %>%
   mutate(.group = str_trim(.group)) %>%
   #rename(emmean = response) %>%
   ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
-             col = exposure, shape = final_disease_state)) +
-  facet_wrap(~final_disease_state) +
+             col = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[6])
 
-#Rare Abundance - relative proportion of rare species(i.e. not most abundant in all sites), 0-1
+#### Rare Abundance ####
+
+#relative proportion of rare species(i.e. not most abundant in all sites), 0-1
 
 #for healthy samples, rare species increased in abundance at T7
 
+anova(r_alpha_models$model[[7]])
+#final_disease_state ***
+#time ***
+
+#exposure:time *
+emmeans(r_alpha_models$model[[7]], ~(exposure) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = exposure)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[7])
+
+#final_disease_state:time ***
+emmeans(r_alpha_models$model[[7]], ~(final_disease_state) * time, 
+        type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = time, y = emmean, ymin = emmean - SE, ymax = emmean + SE, 
+             col = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  ylab(r_alpha_models$metric[7])
+
+#all
 emmeans(r_alpha_models$model[[7]], ~(exposure + final_disease_state) * time, 
         type = 'response') %>%
   cld(Letters = LETTERS) %>%

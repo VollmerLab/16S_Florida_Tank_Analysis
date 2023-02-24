@@ -1,8 +1,8 @@
 #code to examine changes to taxa abundances
 
-setwd("~/Documents/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
-#### loading in packages ####
+#### Packages ####
 
 library(multcomp)
 library(phyloseq)
