@@ -127,17 +127,24 @@ r_alpha_models <- reduced_alpha_table %>%
 
 #core abundance and relative abundance
 
-#broom , broom mixed, fixef
+#broom , broom mixed, fixef  -> adapt make_aov_summary function
 
 #just fragment id as random effect
 
-#what happens to things without genus and in general
+#what happens to things without genus and in general #look at documentation
+
+#family genus and ASVs
+    #extra credit if i do all three at once
 
 #collapse ASVs and plot NAs as gray
 
 #of the things that we added, how did they change
 
 #mds plot
+
+#make filter and add to data preprocessing 1 file and recode NAs
+
+#add T0 to alpha?
 
 #### Shannon Diversity ####
 

@@ -48,18 +48,19 @@ mb_data <- microbiome_data %>%
 
 #envfit(ord = nmds, env = condensed otu table)
 
+#normalize and do log2 cpm 
+
 #nmds for each time point separately
-otu_nmds <- metaMDS(mb_data, distance = 'robust.aitchison', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
+otu_nmds <- metaMDS(mb_data, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
 #plot(otu_nmds)
 
 scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
-  ggplot(aes(x = NMDS1, y = NMDS2, colour = exposure)) +
-  
+  ggplot(aes(x = NMDS1, y = NMDS2, colour = exposure, shape = time)) +
   geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
-             colour = 'gray50', size = 0.1) +
+             colour = 'gray50', size = 0.1, shape = 'circle') +
   
   geom_point() +
   theme_classic()
