@@ -1,0 +1,1024 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<style type="text/css">
+.inline {
+  background-color: #f7f7f7;
+  border:solid 1px #B0B0B0;
+}
+.error {
+	font-weight: bold;
+	color: #FF0000;
+}
+.warning {
+	font-weight: bold;
+}
+.message {
+	font-style: italic;
+}
+.source, .output, .warning, .error, .message {
+	padding: 0 1em;
+  border:solid 1px #F7F7F7;
+}
+.source {
+  background-color: #f5f5f5;
+}
+.left {
+  text-align: left;
+}
+.right {
+  text-align: right;
+}
+.center {
+  text-align: center;
+}
+.hl.num {
+  color: #AF0F91;
+}
+.hl.str {
+  color: #317ECC;
+}
+.hl.com {
+  color: #AD95AF;
+  font-style: italic;
+}
+.hl.opt {
+  color: #000000;
+}
+.hl.std {
+  color: #585858;
+}
+.hl.kwa {
+  color: #295F94;
+  font-weight: bold;
+}
+.hl.kwb {
+  color: #B05A65;
+}
+.hl.kwc {
+  color: #55aa55;
+}
+.hl.kwd {
+  color: #BC5A65;
+  font-weight: bold;
+}
+</style>
+  <script src="https://yihui.name/media/js/center-images.js"></script>
+  <title></title>
+</head>
+<body>
+
+  <p>This report is automatically generated with the R
+    package <a href="https://yihui.name/knitr/"><strong>knitr</strong></a>
+    (version <code class="knitr inline">1.42</code>)
+    .</p>
+
+<div class="chunk" id="auto-report"><div class="rcode"><div class="source"><pre class="knitr r"><span class="hl com">#code to calculate the alpha diversity</span>
+<span class="hl kwd">setwd</span><span class="hl std">(</span><span class="hl str">&quot;~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code&quot;</span><span class="hl std">)</span>
+
+<span class="hl com">#### Packages ####</span>
+<span class="hl kwd">library</span><span class="hl std">(phyloseq)</span>
+<span class="hl kwd">library</span><span class="hl std">(microbiome)</span>
+<span class="hl kwd">library</span><span class="hl std">(vegan)</span>
+<span class="hl kwd">library</span><span class="hl std">(lme4)</span>
+<span class="hl kwd">library</span><span class="hl std">(afex)</span>
+<span class="hl kwd">library</span><span class="hl std">(emmeans)</span>
+<span class="hl kwd">library</span><span class="hl std">(car)</span>
+<span class="hl kwd">library</span><span class="hl std">(emmeans)</span>
+<span class="hl kwd">library</span><span class="hl std">(multcomp)</span>
+<span class="hl kwd">library</span><span class="hl std">(tidyverse)</span>
+
+<span class="hl com">#### Read in Data ####</span>
+<span class="hl std">aggregation_level</span> <span class="hl kwb">&lt;-</span> <span class="hl str">'Genus'</span> <span class="hl com">#or none</span>
+
+<span class="hl std">microbiome_data</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">read_rds</span><span class="hl std">(</span><span class="hl str">&quot;../intermediate_files/preprocess_microbiome.rds&quot;</span><span class="hl std">)</span>
+<span class="hl std">metadata</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">sample_data</span><span class="hl std">(microbiome_data)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">(</span><span class="hl kwc">rownames</span> <span class="hl std">=</span> <span class="hl str">'sample_id'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">select</span><span class="hl std">(</span><span class="hl opt">-</span><span class="hl std">retain_sample)</span>
+
+<span class="hl kwa">if</span><span class="hl std">(aggregation_level</span> <span class="hl opt">!=</span> <span class="hl str">'none'</span><span class="hl std">){</span>
+  <span class="hl std">microbiome_data</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">aggregate_taxa</span><span class="hl std">(microbiome_data, aggregation_level)</span>
+  <span class="hl kwd">taxa_names</span><span class="hl std">(microbiome_data)</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">str_replace_all</span><span class="hl std">(</span><span class="hl kwd">taxa_names</span><span class="hl std">(microbiome_data),</span> <span class="hl str">' |-'</span><span class="hl std">,</span> <span class="hl str">'_'</span><span class="hl std">)</span>
+<span class="hl std">}</span> <span class="hl kwa">else</span> <span class="hl std">{</span>
+  <span class="hl kwd">taxa_names</span><span class="hl std">(microbiome_data)</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">str_c</span><span class="hl std">(</span><span class="hl str">'ASV'</span><span class="hl std">,</span> <span class="hl num">1</span><span class="hl opt">:</span><span class="hl kwd">length</span><span class="hl std">(</span><span class="hl kwd">taxa_names</span><span class="hl std">(microbiome_data)),</span> <span class="hl kwc">sep</span> <span class="hl std">=</span> <span class="hl str">'_'</span><span class="hl std">)</span>
+<span class="hl std">}</span>
+
+<span class="hl com">#data filtering step?</span>
+    <span class="hl com">#must use untrimmed data set for alpha diversity measures of richness to get meaningful results</span>
+    <span class="hl com">#functions depend heavily on singletons</span>
+
+    <span class="hl com">#there are 2 samples with 5 or less species observed, might be skewing the data</span>
+
+<span class="hl com">#### Alpha Diversity ####</span>
+<span class="hl std">alpha_table</span> <span class="hl kwb">&lt;-</span> <span class="hl std">microbiome</span><span class="hl opt">::</span><span class="hl kwd">alpha</span><span class="hl std">(microbiome_data,</span> <span class="hl kwc">index</span> <span class="hl std">=</span> <span class="hl str">&quot;all&quot;</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">(</span><span class="hl kwc">rownames</span> <span class="hl std">=</span> <span class="hl str">'sample_id'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">inner_join</span><span class="hl std">(metadata,</span> <span class="hl kwc">by</span> <span class="hl std">=</span> <span class="hl str">'sample_id'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">fragment_id</span> <span class="hl std">=</span> <span class="hl kwd">str_c</span><span class="hl std">(</span><span class="hl kwd">str_replace_na</span><span class="hl std">(exposure,</span> <span class="hl str">'NA'</span><span class="hl std">), tank, genotype,</span> <span class="hl kwc">sep</span> <span class="hl std">=</span> <span class="hl str">'_'</span><span class="hl std">))</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## Observed richness
+</pre></div>
+<div class="message"><pre class="knitr r">## Other forms of richness
+</pre></div>
+<div class="message"><pre class="knitr r">## Diversity
+</pre></div>
+<div class="message"><pre class="knitr r">## Evenness
+</pre></div>
+<div class="message"><pre class="knitr r">## Dominance
+</pre></div>
+<div class="message"><pre class="knitr r">## Rarity
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">alpha_table</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## # A tibble: 226 × 30
+##    sample_id obser…¹ chao1 diver…² diver…³ diver…⁴ diver…⁵ diver…⁶ evenn…⁷ evenn…⁸ evenn…⁹
+##    &lt;chr&gt;       &lt;dbl&gt; &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;   &lt;dbl&gt;
+##  1 Acerv_NA…      19  22.5    1.46   0.315   0.892    4.77       1   1       0.303  0.0769
+##  2 Acerv_NA…      47  57.5    7.33   0.864   2.40     9.25       3   0.999   0.623  0.156 
+##  3 Acerv_NA…      47  60.6   10.8    0.907   3.07    17.4        5   0.996   0.797  0.229 
+##  4 Acerv_NA…      24  29.6    2.35   0.575   1.21     3.78       1   1       0.379  0.0980
+##  5 Acerv_NA…      19  26.5    1.46   0.315   0.828    4.19       1   0.998   0.281  0.0768
+##  6 Acerv_NA…      24  31      6.41   0.844   2.42     8.04       3   1       0.761  0.267 
+##  7 T0_D_HOM…     142 147.     8.62   0.884   2.97    20.5        3   0.900   0.599  0.0607
+##  8 T0_D_HOM…     188 213.     7.93   0.874   3.33    34.9        4   0.761   0.636  0.0422
+##  9 T0_D_HOM…     176 191      9.22   0.891   3.40    31.9        4   0.798   0.657  0.0524
+## 10 T0_D_HOM…     156 194.     6.96   0.856   3.36    33.8        6   0.806   0.665  0.0446
+## # … with 216 more rows, 19 more variables: evenness_evar &lt;dbl&gt;, evenness_bulla &lt;dbl&gt;,
+## #   dominance_dbp &lt;dbl&gt;, dominance_dmn &lt;dbl&gt;, dominance_absolute &lt;dbl&gt;,
+## #   dominance_relative &lt;dbl&gt;, dominance_simpson &lt;dbl&gt;, dominance_core_abundance &lt;dbl&gt;,
+## #   dominance_gini &lt;dbl&gt;, rarity_log_modulo_skewness &lt;dbl&gt;, rarity_low_abundance &lt;dbl&gt;,
+## #   rarity_rare_abundance &lt;dbl&gt;, time &lt;chr&gt;, exposure &lt;chr&gt;, tank &lt;chr&gt;, genotype &lt;chr&gt;,
+## #   disease_state &lt;chr&gt;, final_disease_state &lt;chr&gt;, fragment_id &lt;chr&gt;, and abbreviated
+## #   variable names ¹​observed, ²​diversity_inverse_simpson, ³​diversity_gini_simpson, …
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#only looking at time points 3 and 7</span>
+<span class="hl std">timepoint_data</span> <span class="hl kwb">&lt;-</span> <span class="hl std">alpha_table</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">filter</span><span class="hl std">(time</span> <span class="hl opt">%in%</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">'T3'</span><span class="hl std">,</span> <span class="hl str">'T7'</span><span class="hl std">))</span>
+
+
+<span class="hl com">#### Various Models ####</span>
+<span class="hl kwd">lm</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span> <span class="hl opt">%&gt;%</span> <span class="hl std">car</span><span class="hl opt">::</span><span class="hl kwd">Anova</span><span class="hl std">(</span><span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl num">2</span><span class="hl std">)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Anova Table (Type II tests)
+## 
+## Response: observed
+##                          Sum Sq  Df  F value    Pr(&gt;F)    
+## exposure                     35   1   0.0639  0.800748    
+## final_disease_state          42   1   0.0765  0.782454    
+## time                      73281   1 133.4975 &lt; 2.2e-16 ***
+## exposure:time                 6   1   0.0111  0.916265    
+## final_disease_state:time   4277   1   7.7917  0.005797 ** 
+## Residuals                102102 186                       
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">glm</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data,</span> <span class="hl kwc">family</span> <span class="hl std">=</span> <span class="hl str">'poisson'</span><span class="hl std">)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## 
+## Call:  glm(formula = observed ~ (exposure + final_disease_state) * time, 
+##     family = &quot;poisson&quot;, data = timepoint_data)
+## 
+## Coefficients:
+##                 (Intercept)                    exposureH         final_disease_stateH  
+##                     4.28385                     -0.02967                     -0.19742  
+##                      timeT7             exposureH:timeT7  final_disease_stateH:timeT7  
+##                     0.25953                      0.02269                      0.35262  
+## 
+## Degrees of Freedom: 191 Total (i.e. Null);  186 Residual
+## Null Deviance:	    2438 
+## Residual Deviance: 1426 	AIC: 2621
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">linear_model</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">lmer</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span>
+                       <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span>
+<span class="hl std">count_model_1</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">glmer</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span>
+                         <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data,</span> <span class="hl kwc">family</span> <span class="hl std">=</span> <span class="hl str">'poisson'</span><span class="hl std">)</span>
+<span class="hl std">car</span><span class="hl opt">::</span><span class="hl kwd">Anova</span><span class="hl std">(count_model_1,</span> <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl num">2</span><span class="hl std">)</span> <span class="hl com">#poisson is for count data</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Analysis of Deviance Table (Type II Wald chisquare tests)
+## 
+## Response: observed
+##                             Chisq Df Pr(&gt;Chisq)    
+## exposure                   0.0796  1     0.7779    
+## final_disease_state        0.1467  1     0.7018    
+## time                     844.0122  1  &lt; 2.2e-16 ***
+## exposure:time              0.3480  1     0.5553    
+## final_disease_state:time  51.0773  1   8.88e-13 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">summary</span><span class="hl std">(count_model_1)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Generalized linear mixed model fit by maximum likelihood (Laplace Approximation) [glmerMod
+## ]
+##  Family: poisson  ( log )
+## Formula: observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) +  
+##     (1 | tank)
+##    Data: timepoint_data
+## 
+##      AIC      BIC   logLik deviance df.resid 
+##     2176     2202    -1080     2160      184 
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -6.0307 -1.1039 -0.0845  1.0291  6.8471 
+## 
+## Random effects:
+##  Groups      Name        Variance  Std.Dev.
+##  fragment_id (Intercept) 0.0431676 0.20777 
+##  tank        (Intercept) 0.0007822 0.02797 
+## Number of obs: 192, groups:  fragment_id, 96; tank, 7
+## 
+## Fixed effects:
+##                             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)                  4.26315    0.04222 100.980  &lt; 2e-16 ***
+## exposureH                   -0.03813    0.07748  -0.492   0.6226    
+## final_disease_stateH        -0.18943    0.07524  -2.518   0.0118 *  
+## timeT7                       0.25910    0.02515  10.302  &lt; 2e-16 ***
+## exposureH:timeT7             0.02845    0.04823   0.590   0.5553    
+## final_disease_stateH:timeT7  0.34851    0.04876   7.147 8.88e-13 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Correlation of Fixed Effects:
+##             (Intr) expsrH fnl__H timeT7 exH:T7
+## exposureH   -0.176                            
+## fnl_dss_stH -0.398 -0.706                     
+## timeT7      -0.337  0.041  0.155              
+## expsrH:tmT7  0.039 -0.395  0.303 -0.106       
+## fnl_ds_H:T7  0.143  0.291 -0.401 -0.432 -0.737
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">count_model_nb</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">glmer.nb</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span>
+                             <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span>
+         <span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span>
+<span class="hl kwd">summary</span><span class="hl std">(count_model_nb)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Generalized linear mixed model fit by maximum likelihood (Laplace Approximation) [glmerMod
+## ]
+##  Family: Negative Binomial(11.2013)  ( log )
+## Formula: observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) +  
+##     (1 | tank)
+##    Data: timepoint_data
+## 
+##      AIC      BIC   logLik deviance df.resid 
+##   1822.2   1851.6   -902.1   1804.2      183 
+## 
+## Scaled residuals: 
+##     Min      1Q  Median      3Q     Max 
+## -2.9411 -0.6518 -0.0587  0.5042  4.4895 
+## 
+## Random effects:
+##  Groups      Name        Variance  Std.Dev.
+##  fragment_id (Intercept) 0.0060197 0.07759 
+##  tank        (Intercept) 0.0006657 0.02580 
+## Number of obs: 192, groups:  fragment_id, 96; tank, 7
+## 
+## Fixed effects:
+##                             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)                  4.27906    0.05633  75.960  &lt; 2e-16 ***
+## exposureH                   -0.03295    0.10398  -0.317 0.751310    
+## final_disease_stateH        -0.19929    0.10344  -1.927 0.054030 .  
+## timeT7                       0.26164    0.07275   3.596 0.000323 ***
+## exposureH:timeT7             0.02946    0.13648   0.216 0.829094    
+## final_disease_stateH:timeT7  0.35295    0.13884   2.542 0.011020 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Correlation of Fixed Effects:
+##             (Intr) expsrH fnl__H timeT7 exH:T7
+## exposureH   -0.132                            
+## fnl_dss_stH -0.412 -0.725                     
+## timeT7      -0.663  0.066  0.301              
+## expsrH:tmT7  0.066 -0.692  0.523 -0.103       
+## fnl_ds_H:T7  0.286  0.512 -0.704 -0.439 -0.735
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">car</span><span class="hl opt">::</span><span class="hl kwd">Anova</span><span class="hl std">(count_model_nb,</span> <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl num">2</span><span class="hl std">)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Analysis of Deviance Table (Type II Wald chisquare tests)
+## 
+## Response: observed
+##                             Chisq Df Pr(&gt;Chisq)    
+## exposure                   0.0539  1    0.81648    
+## final_disease_state        0.0371  1    0.84719    
+## time                     107.1688  1    &lt; 2e-16 ***
+## exposure:time              0.0466  1    0.82909    
+## final_disease_state:time   6.4621  1    0.01102 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">AIC</span><span class="hl std">(count_model_nb, count_model_1, linear_model)</span> <span class="hl com">#better model has smaller AIC value</span>
+</pre></div>
+<div class="output"><pre class="knitr r">##                df      AIC
+## count_model_nb  9 1822.233
+## count_model_1   8 2175.974
+## linear_model    9 1734.934
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">mixed</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span>
+        <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## Contrasts set to contr.sum for the following variables: exposure, final_disease_state, time, fragment_id, tank
+</pre></div>
+<div class="output"><pre class="knitr r">## Fitting one lmer() model. [DONE]
+## Calculating p-values. [DONE]
+</pre></div>
+<div class="output"><pre class="knitr r">## Mixed Model Anova Table (Type 3 tests, S-method)
+## 
+## Model: observed ~ (exposure + final_disease_state) * time + (1 | fragment_id) + 
+## Model:     (1 | tank)
+## Data: timepoint_data
+##                     Effect       df          F p.value
+## 1                 exposure 1, 10.21       0.04    .847
+## 2      final_disease_state 1, 91.41       0.05    .820
+## 3                     time 1, 93.00 131.49 ***   &lt;.001
+## 4            exposure:time 1, 93.00       0.01    .907
+## 5 final_disease_state:time 1, 93.00    9.57 **    .003
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '+' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r">      <span class="hl com">#does essentially the same thing as repeated measures but can do multiple random effects</span>
+<span class="hl kwd">aov_4</span><span class="hl std">(observed</span> <span class="hl opt">~</span> <span class="hl std">exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state</span> <span class="hl opt">+</span> <span class="hl std">time</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">+</span> <span class="hl std">time</span> <span class="hl opt">|</span> <span class="hl std">fragment_id),</span> <span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## Converting to factor: exposure, final_disease_state
+</pre></div>
+<div class="message"><pre class="knitr r">## Contrasts set to contr.sum for the following variables: exposure, final_disease_state
+</pre></div>
+<div class="output"><pre class="knitr r">## Anova Table (Type 3 tests)
+## 
+## Response: observed
+##                     Effect    df    MSE          F   ges p.value
+## 1                 exposure 1, 93 650.91       0.05 &lt;.001    .817
+## 2      final_disease_state 1, 93 650.91       0.06 &lt;.001    .800
+## 3                     time 1, 93 446.96 131.49 ***  .365   &lt;.001
+## 4            exposure:time 1, 93 446.96       0.01 &lt;.001    .907
+## 5 final_disease_state:time 1, 93 446.96    9.57 **  .040    .003
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '+' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r">      <span class="hl com">#only one random effect at a time</span>
+
+<span class="hl kwd">emmeans</span><span class="hl std">(count_model_nb,</span> <span class="hl opt">~</span><span class="hl std">final_disease_state</span> <span class="hl opt">*</span> <span class="hl std">time,</span> <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'link'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span> <span class="hl kwd">contrast</span><span class="hl std">(</span><span class="hl str">'pairwise'</span><span class="hl std">)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">##  contrast    estimate     SE  df z.ratio p.value
+##  D T3 - H T3    0.199 0.1034 Inf   1.927  0.2168
+##  D T3 - D T7   -0.276 0.0945 Inf  -2.925  0.0181
+##  D T3 - H T7   -0.430 0.0883 Inf  -4.870  &lt;.0001
+##  H T3 - D T7   -0.476 0.0878 Inf  -5.420  &lt;.0001
+##  H T3 - H T7   -0.629 0.0735 Inf  -8.566  &lt;.0001
+##  D T7 - H T7   -0.154 0.0988 Inf  -1.556  0.4042
+## 
+## Results are averaged over the levels of: exposure 
+## Results are given on the log (not the response) scale. 
+## P value adjustment: tukey method for comparing a family of 4 estimates
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">emmeans</span><span class="hl std">(count_model_nb,</span> <span class="hl opt">~</span><span class="hl std">final_disease_state</span> <span class="hl opt">*</span> <span class="hl std">time,</span> <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl std">multcomp</span><span class="hl opt">::</span><span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl std">as_tibble</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com"># rename(response = emmean,</span>
+  <span class="hl com">#        asymp.UCL = upper.CL, </span>
+  <span class="hl com">#        asymp.LCL = lower.CL) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= response,</span> <span class="hl kwc">ymin</span> <span class="hl std">= asymp.LCL,</span> <span class="hl kwc">ymax</span> <span class="hl std">= asymp.UCL,</span> <span class="hl kwc">colour</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= asymp.UCL,</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span> <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span>
+            <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">scale_colour_manual</span><span class="hl std">(</span><span class="hl kwc">values</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">'D'</span> <span class="hl std">=</span> <span class="hl str">'red'</span><span class="hl std">,</span> <span class="hl str">'H'</span> <span class="hl std">=</span> <span class="hl str">'blue'</span><span class="hl std">))</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-1.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### Analyzing Alpha Table ####</span>
+
+<span class="hl com">#all diversity metrics in table</span>
+<span class="hl kwd">select</span><span class="hl std">(alpha_table, sample_id, observed,</span> <span class="hl kwd">any_of</span><span class="hl std">(</span><span class="hl kwd">colnames</span><span class="hl std">(metadata)))</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## # A tibble: 226 × 8
+##    sample_id    observed time  exposure tank  genotype disease_state final_disease_state
+##    &lt;chr&gt;           &lt;dbl&gt; &lt;chr&gt; &lt;chr&gt;    &lt;chr&gt; &lt;chr&gt;    &lt;chr&gt;         &lt;chr&gt;              
+##  1 Acerv_NA_D_3       19 Acerv &lt;NA&gt;     D     3        &lt;NA&gt;          &lt;NA&gt;               
+##  2 Acerv_NA_D_4       47 Acerv &lt;NA&gt;     D     4        &lt;NA&gt;          &lt;NA&gt;               
+##  3 Acerv_NA_D_5       47 Acerv &lt;NA&gt;     D     5        &lt;NA&gt;          &lt;NA&gt;               
+##  4 Acerv_NA_H_3       24 Acerv &lt;NA&gt;     H     3        &lt;NA&gt;          &lt;NA&gt;               
+##  5 Acerv_NA_H_4       19 Acerv &lt;NA&gt;     H     4        &lt;NA&gt;          &lt;NA&gt;               
+##  6 Acerv_NA_H_5       24 Acerv &lt;NA&gt;     H     5        &lt;NA&gt;          &lt;NA&gt;               
+##  7 T0_D_HOMO_1       142 T0    D        HOMO  1        &lt;NA&gt;          &lt;NA&gt;               
+##  8 T0_D_HOMO_2       188 T0    D        HOMO  2        &lt;NA&gt;          &lt;NA&gt;               
+##  9 T0_D_HOMO_3       176 T0    D        HOMO  3        &lt;NA&gt;          &lt;NA&gt;               
+## 10 T0_D_HOMO_4       156 T0    D        HOMO  4        &lt;NA&gt;          &lt;NA&gt;               
+## # … with 216 more rows
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl kwd">colnames</span><span class="hl std">(timepoint_data)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">##  [1] &quot;sample_id&quot;                  &quot;observed&quot;                  
+##  [3] &quot;chao1&quot;                      &quot;diversity_inverse_simpson&quot; 
+##  [5] &quot;diversity_gini_simpson&quot;     &quot;diversity_shannon&quot;         
+##  [7] &quot;diversity_fisher&quot;           &quot;diversity_coverage&quot;        
+##  [9] &quot;evenness_camargo&quot;           &quot;evenness_pielou&quot;           
+## [11] &quot;evenness_simpson&quot;           &quot;evenness_evar&quot;             
+## [13] &quot;evenness_bulla&quot;             &quot;dominance_dbp&quot;             
+## [15] &quot;dominance_dmn&quot;              &quot;dominance_absolute&quot;        
+## [17] &quot;dominance_relative&quot;         &quot;dominance_simpson&quot;         
+## [19] &quot;dominance_core_abundance&quot;   &quot;dominance_gini&quot;            
+## [21] &quot;rarity_log_modulo_skewness&quot; &quot;rarity_low_abundance&quot;      
+## [23] &quot;rarity_rare_abundance&quot;      &quot;time&quot;                      
+## [25] &quot;exposure&quot;                   &quot;tank&quot;                      
+## [27] &quot;genotype&quot;                   &quot;disease_state&quot;             
+## [29] &quot;final_disease_state&quot;        &quot;fragment_id&quot;
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl std">tmp</span> <span class="hl kwb">&lt;-</span> <span class="hl std">timepoint_data</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">pivot_longer</span><span class="hl std">(</span><span class="hl kwc">cols</span> <span class="hl std">= observed</span><span class="hl opt">:</span><span class="hl std">rarity_rare_abundance,</span>
+               <span class="hl kwc">names_to</span> <span class="hl std">=</span> <span class="hl str">'metric'</span><span class="hl std">,</span>
+               <span class="hl kwc">values_to</span> <span class="hl std">=</span> <span class="hl str">'value'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">nest_by</span><span class="hl std">(metric)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">summarise</span><span class="hl std">(</span><span class="hl kwc">model</span> <span class="hl std">=</span> <span class="hl kwd">list</span><span class="hl std">(</span><span class="hl kwd">lmer</span><span class="hl std">(value</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span>
+                                <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span> <span class="hl kwc">data</span> <span class="hl std">= data)))</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## boundary (singular) fit: see help('isSingular')
+</pre></div>
+<div class="message"><pre class="knitr r">## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+</pre></div>
+<div class="message"><pre class="knitr r">## `summarise()` has grouped output by 'metric'. You can override using the `.groups`
+## argument.
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#Selected measures:</span>
+
+<span class="hl com">#richness - observed; dominance - dbp, gini; rarity - rare abundance</span>
+<span class="hl com">#diversity - shannon; evenness - camargo, bulla</span>
+
+<span class="hl std">kept_columns</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;sample_id&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;fragment_id&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;observed&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;dominance_dbp&quot;</span><span class="hl std">,</span>
+                  <span class="hl str">&quot;dominance_gini&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;rarity_rare_abundance&quot;</span><span class="hl std">,</span>
+                  <span class="hl str">&quot;diversity_shannon&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;evenness_camargo&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;evenness_bulla&quot;</span><span class="hl std">)</span>
+<span class="hl std">alpha_kept_columns</span> <span class="hl kwb">&lt;-</span> <span class="hl kwd">paste</span><span class="hl std">(</span><span class="hl str">&quot;alpha_table$&quot;</span><span class="hl std">, kept_columns,</span> <span class="hl kwc">sep</span> <span class="hl std">=</span> <span class="hl str">&quot;&quot;</span><span class="hl std">)</span>
+
+<span class="hl std">reduced_alpha_table</span> <span class="hl kwb">&lt;-</span> <span class="hl std">timepoint_data</span> <span class="hl opt">%&gt;%</span> <span class="hl com">#only T3 and T7</span>
+  <span class="hl kwd">select</span><span class="hl std">(</span><span class="hl kwd">all_of</span><span class="hl std">(kept_columns),</span> <span class="hl kwd">any_of</span><span class="hl std">(</span><span class="hl kwd">colnames</span><span class="hl std">(metadata)))</span>
+
+<span class="hl std">r_alpha_models</span> <span class="hl kwb">&lt;-</span> <span class="hl std">reduced_alpha_table</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">pivot_longer</span><span class="hl std">(</span><span class="hl kwc">cols</span> <span class="hl std">= observed</span><span class="hl opt">:</span><span class="hl std">evenness_bulla,</span>
+               <span class="hl kwc">names_to</span> <span class="hl std">=</span> <span class="hl str">'metric'</span><span class="hl std">,</span>
+               <span class="hl kwc">values_to</span> <span class="hl std">=</span> <span class="hl str">'value'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">nest_by</span><span class="hl std">(metric)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">summarise</span><span class="hl std">(</span><span class="hl kwc">model</span> <span class="hl std">=</span> <span class="hl kwd">list</span><span class="hl std">(</span><span class="hl kwd">lmer</span><span class="hl std">(value</span> <span class="hl opt">~</span> <span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time</span> <span class="hl opt">+</span>
+                                <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">fragment_id)</span> <span class="hl opt">+</span> <span class="hl std">(</span><span class="hl num">1</span> <span class="hl opt">|</span> <span class="hl std">tank),</span> <span class="hl kwc">data</span> <span class="hl std">= data)))</span>
+</pre></div>
+<div class="message"><pre class="knitr r">## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## boundary (singular) fit: see help('isSingular')
+## `summarise()` has grouped output by 'metric'. You can override using the `.groups` argument.
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#### Shannon Diversity ####</span>
+
+<span class="hl com">#how diverse the species in a given community are</span>
+
+<span class="hl com">#greater diversity at T7 than T3</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">1</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                           Sum Sq Mean Sq NumDF  DenDF F value    Pr(&gt;F)    
+## exposure                  0.0142  0.0142     1  9.667  0.0662   0.80236    
+## final_disease_state       0.1771  0.1771     1 90.679  0.8244   0.36631    
+## time                     16.3254 16.3254     1 93.000 76.0032 1.052e-13 ***
+## exposure:time             1.0646  1.0646     1 93.000  4.9562   0.02841 *  
+## final_disease_state:time  1.1047  1.1047     1 93.000  5.1427   0.02566 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#time ***</span>
+
+<span class="hl com">#exposure:time *</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">1</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+                         <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">1</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-2.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#final_disease_state:time *</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">1</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">1</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-3.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#all</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">1</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure,</span> <span class="hl kwc">shape</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">final_disease_state)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">1</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-4.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### DBP Dominance ####</span>
+
+<span class="hl com">#relative abundance of most abundant species, 0-1 &amp; bigger #s means more dominant</span>
+
+<span class="hl com">#greater dominance at T3 than T7, matches the increase in shannon diversity at T7</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">2</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                           Sum Sq Mean Sq NumDF DenDF F value    Pr(&gt;F)    
+## exposure                 0.01037 0.01037     1   186  0.4862   0.48651    
+## final_disease_state      0.00935 0.00935     1   186  0.4383   0.50875    
+## time                     1.53844 1.53844     1   186 72.1426 6.301e-15 ***
+## exposure:time            0.10153 0.10153     1   186  4.7612   0.03036 *  
+## final_disease_state:time 0.06242 0.06242     1   186  2.9270   0.08878 .  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#time ***</span>
+<span class="hl com">#final_disease_state:time .</span>
+
+<span class="hl com">#exposure:time *</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">2</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">2</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-5.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#all</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">2</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure,</span> <span class="hl kwc">shape</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">final_disease_state)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">2</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-6.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### Gini Dominance ####</span>
+
+<span class="hl com">#how unevenly abundances are distributed, 0-1 &amp; perfect equality is 0</span>
+
+<span class="hl com">#slight increase in evenness at T7, matches the decreased dominance</span>
+<span class="hl com">#scale of y-axis is very slight</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">3</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                             Sum Sq   Mean Sq NumDF DenDF F value    Pr(&gt;F)    
+## exposure                 0.0000103 0.0000103     1  3.32  0.1851   0.69342    
+## final_disease_state      0.0001330 0.0001330     1 90.93  2.3884   0.12571    
+## time                     0.0037063 0.0037063     1 93.00 66.5681 1.576e-12 ***
+## exposure:time            0.0001764 0.0001764     1 93.00  3.1691   0.07831 .  
+## final_disease_state:time 0.0003569 0.0003569     1 93.00  6.4108   0.01302 *  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#time ***</span>
+<span class="hl com">#exposure:time .</span>
+
+<span class="hl com">#final_disease_state:time *</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">3</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">3</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-7.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#all</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">3</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure,</span> <span class="hl kwc">shape</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">final_disease_state)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">3</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-8.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### Bulla Evenness ####</span>
+
+<span class="hl com">#evenness w/ equal weight to all species, sensitive to rare species</span>
+
+<span class="hl com">#nothing significant</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">4</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                             Sum Sq   Mean Sq NumDF   DenDF F value  Pr(&gt;F)  
+## exposure                 0.0004665 0.0004665     1  10.214  0.0760 0.78830  
+## final_disease_state      0.0011835 0.0011835     1 185.821  0.1928 0.66112  
+## time                     0.0024538 0.0024538     1 181.511  0.3997 0.52802  
+## exposure:time            0.0196227 0.0196227     1 181.511  3.1966 0.07546 .
+## final_disease_state:time 0.0003939 0.0003939     1 181.511  0.0642 0.80031  
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#exposure:time .</span>
+
+      <span class="hl com">#not worth plotting (plot showed nothing)</span>
+
+<span class="hl com">#### Camargo's Evenness ####</span>
+
+<span class="hl com">#proportions of indivs between sites, 0-1 &amp; 1 is even, 0 is patchy</span>
+
+<span class="hl com">#T3 is really even and T7 is patchier</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">5</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                           Sum Sq Mean Sq NumDF   DenDF F value    Pr(&gt;F)    
+## exposure                 0.00012 0.00012     1   4.059  0.0107  0.922492    
+## final_disease_state      0.09523 0.09523     1 185.946  8.4859  0.004018 ** 
+## time                     1.11114 1.11114     1 179.628 99.0138 &lt; 2.2e-16 ***
+## exposure:time            0.01544 0.01544     1 179.628  1.3763  0.242292    
+## final_disease_state:time 0.11256 0.11256     1 179.628 10.0304  0.001810 ** 
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#final_disease_state **</span>
+<span class="hl com">#time ***</span>
+
+<span class="hl com">#final_disease_state:time **</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">5</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">5</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-9.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### Observed Species Richness ####</span>
+
+<span class="hl com">#number of species observed</span>
+
+<span class="hl com">#more species richness at T7 than T3, matches shannon diversity</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">6</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                          Sum Sq Mean Sq NumDF  DenDF  F value    Pr(&gt;F)    
+## exposure                     17      17     1 10.209   0.0390  0.847327    
+## final_disease_state          23      23     1 91.407   0.0521  0.820010    
+## time                      58771   58771     1 93.000 131.4910 &lt; 2.2e-16 ***
+## exposure:time                 6       6     1 93.000   0.0136  0.907368    
+## final_disease_state:time   4277    4277     1 93.000   9.5694  0.002613 ** 
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#time ***</span>
+
+<span class="hl com">#final_disease_state:time **</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">6</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">6</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-10.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#### Rare Abundance ####</span>
+
+<span class="hl com">#relative proportion of rare species(i.e. not most abundant in all sites), 0-1</span>
+
+<span class="hl com">#for healthy samples, rare species increased in abundance at T7</span>
+
+<span class="hl kwd">anova</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">7</span><span class="hl std">]])</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## Type III Analysis of Variance Table with Satterthwaite's method
+##                            Sum Sq  Mean Sq NumDF  DenDF F value    Pr(&gt;F)    
+## exposure                 0.000039 0.000039     1  3.311  0.0322   0.86803    
+## final_disease_state      0.024400 0.024400     1 89.646 20.1021 2.165e-05 ***
+## time                     0.045466 0.045466     1 93.000 37.4580 2.197e-08 ***
+## exposure:time            0.008363 0.008363     1 93.000  6.8901   0.01013 *  
+## final_disease_state:time 0.021241 0.021241     1 93.000 17.4997 6.505e-05 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#final_disease_state ***</span>
+<span class="hl com">#time ***</span>
+
+<span class="hl com">#exposure:time *</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">7</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">7</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-11.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#final_disease_state:time ***</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">7</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">7</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-12.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#all</span>
+<span class="hl kwd">emmeans</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">model[[</span><span class="hl num">7</span><span class="hl std">]],</span> <span class="hl opt">~</span><span class="hl std">(exposure</span> <span class="hl opt">+</span> <span class="hl std">final_disease_state)</span> <span class="hl opt">*</span> <span class="hl std">time,</span>
+        <span class="hl kwc">type</span> <span class="hl std">=</span> <span class="hl str">'response'</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">cld</span><span class="hl std">(</span><span class="hl kwc">Letters</span> <span class="hl std">= LETTERS)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">as_tibble</span><span class="hl std">()</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">mutate</span><span class="hl std">(</span><span class="hl kwc">.group</span> <span class="hl std">=</span> <span class="hl kwd">str_trim</span><span class="hl std">(.group))</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl com">#rename(emmean = response) %&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= time,</span> <span class="hl kwc">y</span> <span class="hl std">= emmean,</span> <span class="hl kwc">ymin</span> <span class="hl std">= emmean</span> <span class="hl opt">-</span> <span class="hl std">SE,</span> <span class="hl kwc">ymax</span> <span class="hl std">= emmean</span> <span class="hl opt">+</span> <span class="hl std">SE,</span>
+             <span class="hl kwc">col</span> <span class="hl std">= exposure,</span> <span class="hl kwc">shape</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">final_disease_state)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_pointrange</span><span class="hl std">(</span><span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_text</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">y</span> <span class="hl std">= (emmean</span> <span class="hl opt">+</span> <span class="hl std">SE),</span> <span class="hl kwc">label</span> <span class="hl std">= .group),</span>
+            <span class="hl kwc">position</span> <span class="hl std">=</span> <span class="hl kwd">position_dodge</span><span class="hl std">(</span><span class="hl num">0.5</span><span class="hl std">),</span> <span class="hl kwc">vjust</span> <span class="hl std">=</span> <span class="hl opt">-</span><span class="hl num">1</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">ylab</span><span class="hl std">(r_alpha_models</span><span class="hl opt">$</span><span class="hl std">metric[</span><span class="hl num">7</span><span class="hl std">])</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-13.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl com">#buffer line </span>
+
+<span class="hl com">#### Alpha Diversity Index Notes ####</span>
+
+<span class="hl com">#richness </span>
+
+<span class="hl com">#observed is observed species richness</span>
+<span class="hl com">#chao1 is nonparametric method for estimating the number of species in a community, </span>
+    <span class="hl com">#based on the concept that rare species infer the most information about the number of missing species</span>
+    <span class="hl com">#particularly useful for data sets skewed toward the low-abundance species</span>
+
+<span class="hl com">#dominance</span>
+
+<span class="hl com">#dbp is the relative abundance of the most abundant species of the sample. </span>
+    <span class="hl com">#Index gives values in interval 0 to 1, where bigger value represent greater dominance</span>
+<span class="hl com">#dmn is the sum of relative abundances of the two most abundant species of the sample</span>
+<span class="hl com">#absolute index equals to the absolute abundance of the most dominant n species of the sample </span>
+    <span class="hl com">#(specify the number with the argument ntaxa)</span>
+<span class="hl com">#relative index equals to the relative abundance of the most dominant n species of the sample </span>
+    <span class="hl com">#(specify the number with the argument ntaxa). This index gives values in interval 0 to 1</span>
+<span class="hl com">#simpson's lambda is the probability that two randomly chosen individuals belongs to the same species. </span>
+    <span class="hl com">#The higher the probability, the greater the dominance</span>
+<span class="hl com">#core_abundance is the sum of relative abundances of core species in the sample. </span>
+    <span class="hl com">#Index gives values in interval 0 to 1, where bigger value represent greater dominance</span>
+    <span class="hl com">#Core species are species that are most abundant in all samples</span>
+<span class="hl com">#gini measures how unevenly abundances are distributed</span>
+    <span class="hl com">#If there is small group of species that represent large portion of total abundance of microbes, </span>
+    <span class="hl com">#the inequality is large and Gini index closer to 1. If all species has equally large abundances, </span>
+    <span class="hl com">#the equality is perfect and Gini index equals 0</span>
+
+<span class="hl com">#Rarity and low abundance</span>
+
+<span class="hl com">#log_modulo_skewness is a rarity index that characterizes the concentration of species at low abundance. </span>
+    <span class="hl com">#It uses the skewness of the frequency distribution of arithmetic abundance classes</span>
+<span class="hl com">#low abundance gives the concentration of species at low abundance, or the relative proportion of rare </span>
+    <span class="hl com">#species in [0,1].The species that are below the indicated detection threshold are considered rare.</span>
+    <span class="hl com"># #use &quot;detection = &quot; (ex: detection = 0.2/100)</span>
+    <span class="hl com">#Note that population prevalence is not considered. If the detection argument is a vector, </span>
+    <span class="hl com">#then a data.frame is returned, one column for each detection threshold.</span>
+<span class="hl com">#rare abundance gives the relative proportion of rare species in the interval [0,1].</span>
+    <span class="hl com">#(rare = those that are not part of the core microbiota)</span>
+    <span class="hl com">#This is the complement (1-x) of the core abundance. The rarity function provides the </span>
+    <span class="hl com">#abundance of the least abundant taxa within each sample, regardless of the population prevalence.</span>
+
+<span class="hl com">#Diversity</span>
+
+<span class="hl com">#inverse_simpson is an indication of the richness in a community with uniform evenness that would have</span>
+    <span class="hl com">#the same level of diversity, calculated as 1/lambda where lambda is the simpson index </span>
+<span class="hl com">#gini-simpson measures the probability that two randomly selected individuals belong to different species</span>
+    <span class="hl com">#1 - lambda where lambda is the simpson index</span>
+<span class="hl com">#shannon shows how diverse the species in a given community are</span>
+    <span class="hl com">#It rises with the number of species and the evenness of their abundance</span>
+<span class="hl com">#fisher's alpha describes mathematically the relationship between the number of species </span>
+    <span class="hl com">#and the number of individuals in those species</span>
+<span class="hl com">#coverage gives the number of groups needed to have a given proportion of the ecosystem occupied </span>
+    <span class="hl com">#(by default is 0.5 ie 50%)</span>
+
+<span class="hl com">#Evenness</span>
+
+<span class="hl com">#camargo's compares proportions of individuals between sites, with 1 being even and 0 being patchy</span>
+    <span class="hl com">#relatively unaffected by sites with very few organisms, and is unaffected by site richness</span>
+<span class="hl com">#simpson's evenness is a variant of the reciprocal Simpson index</span>
+    <span class="hl com">#Index values range from near 0 (1/s) (patchy or skewed) to 1 (even), and the index </span>
+    <span class="hl com">#is relatively unaffected by sites with very few individuals.</span>
+<span class="hl com">#pielou is shannon diversity index value divided by the maximum possible shannon diversity index given</span>
+    <span class="hl com">#complete evenness (proportion 0 to 1)</span>
+<span class="hl com">#evar is based on the variance in abundance over the species taken over log abundance</span>
+    <span class="hl com">#so proportional differences are compared, then converted to a 0-1 scale by arctan</span>
+<span class="hl com">#bulla gives equal weight to all species regardless of abundance so it's </span>
+    <span class="hl com">#sensitive to the presence of rare species</span>
+
+
+<span class="hl com">#### exploratory plots ####</span>
+
+<span class="hl std">timepoint_data</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= observed))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_histogram</span><span class="hl std">(</span><span class="hl kwc">bins</span> <span class="hl std">=</span> <span class="hl num">100</span><span class="hl std">)</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-14.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl std">alpha_table</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">arrange</span><span class="hl std">(exposure)</span> <span class="hl opt">%&gt;%</span>
+<span class="hl kwd">ggplot</span><span class="hl std">()</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_point</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= sample_id,</span> <span class="hl kwc">y</span> <span class="hl std">= observed,</span> <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-15.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= alpha_table)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_boxplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= disease_state,</span> <span class="hl kwc">y</span> <span class="hl std">= observed,</span> <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">scale_color_manual</span><span class="hl std">(</span><span class="hl kwc">values</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;tomato&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;skyblue&quot;</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">exposure)</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-16.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_histogram</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= disease_state,</span> <span class="hl kwc">fill</span> <span class="hl std">= final_disease_state),</span> <span class="hl kwc">stat</span><span class="hl std">=</span><span class="hl str">&quot;count&quot;</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">scale_fill_manual</span><span class="hl std">(</span><span class="hl kwc">values</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;tomato&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;skyblue&quot;</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">exposure)</span>
+</pre></div>
+<div class="warning"><pre class="knitr r">## Warning in geom_histogram(aes(x = disease_state, fill = final_disease_state), : Ignoring
+## unknown parameters: `binwidth`, `bins`, and `pad`
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-17.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= alpha_table)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_boxplot</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= disease_state,</span> <span class="hl kwc">y</span> <span class="hl std">= observed,</span> <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">scale_color_manual</span><span class="hl std">(</span><span class="hl kwc">values</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;tomato&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;skyblue&quot;</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">time)</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-18.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_histogram</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= disease_state,</span> <span class="hl kwc">fill</span> <span class="hl std">= final_disease_state),</span> <span class="hl kwc">stat</span><span class="hl std">=</span><span class="hl str">&quot;count&quot;</span><span class="hl std">)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">scale_fill_manual</span><span class="hl std">(</span><span class="hl kwc">values</span> <span class="hl std">=</span> <span class="hl kwd">c</span><span class="hl std">(</span><span class="hl str">&quot;tomato&quot;</span><span class="hl std">,</span> <span class="hl str">&quot;skyblue&quot;</span><span class="hl std">))</span> <span class="hl opt">+</span>
+  <span class="hl kwd">facet_wrap</span><span class="hl std">(</span><span class="hl opt">~</span><span class="hl std">time)</span>
+</pre></div>
+<div class="warning"><pre class="knitr r">## Warning in geom_histogram(aes(x = disease_state, fill = final_disease_state), : Ignoring
+## unknown parameters: `binwidth`, `bins`, and `pad`
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-19.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_jitter</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= final_disease_state,</span> <span class="hl kwc">y</span> <span class="hl std">= diversity_shannon,</span> <span class="hl kwc">col</span> <span class="hl std">= disease_state))</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-20.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl std">timepoint_data</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">filter</span><span class="hl std">(time</span> <span class="hl opt">==</span> <span class="hl str">&quot;T7&quot;</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+<span class="hl kwd">ggplot</span><span class="hl std">()</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_jitter</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= final_disease_state,</span> <span class="hl kwc">y</span> <span class="hl std">= diversity_shannon,</span> <span class="hl kwc">col</span> <span class="hl std">= disease_state))</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-21.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl std">timepoint_data</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">filter</span><span class="hl std">(time</span> <span class="hl opt">==</span> <span class="hl str">&quot;T7&quot;</span><span class="hl std">)</span> <span class="hl opt">%&gt;%</span>
+  <span class="hl kwd">ggplot</span><span class="hl std">()</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_jitter</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= final_disease_state,</span> <span class="hl kwc">y</span> <span class="hl std">= observed,</span> <span class="hl kwc">col</span> <span class="hl std">= disease_state))</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-22.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r"><span class="hl kwd">ggplot</span><span class="hl std">(</span><span class="hl kwc">data</span> <span class="hl std">= timepoint_data)</span> <span class="hl opt">+</span>
+  <span class="hl kwd">geom_point</span><span class="hl std">(</span><span class="hl kwd">aes</span><span class="hl std">(</span><span class="hl kwc">x</span> <span class="hl std">= observed,</span> <span class="hl kwc">y</span> <span class="hl std">= diversity_shannon,</span> <span class="hl kwc">col</span> <span class="hl std">= final_disease_state))</span> <span class="hl com">#+</span>
+</pre></div>
+</div><div class="rimage center"><img src="figure/2---alpha-diversity-Rhtmlauto-report-23.png" alt="plot of chunk auto-report" class="plot" /></div><div class="rcode">
+<div class="source"><pre class="knitr r">  <span class="hl kwd">geom_smooth</span><span class="hl std">(</span><span class="hl kwc">method</span> <span class="hl std">=</span> <span class="hl str">&quot;lm&quot;</span><span class="hl std">,</span> <span class="hl kwc">se</span> <span class="hl std">=</span> <span class="hl num">TRUE</span><span class="hl std">)</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## geom_smooth: na.rm = FALSE, orientation = NA, se = TRUE
+## stat_smooth: na.rm = FALSE, orientation = NA, se = TRUE, method = lm
+## position_identity
+</pre></div>
+<div class="source"><pre class="knitr r"><span class="hl com">#### ####</span>
+</pre></div>
+</div></div>
+
+  <p>The R session information (including the OS info, R version and all
+    packages used):</p>
+
+<div class="chunk" id="session-info"><div class="rcode"><div class="source"><pre class="knitr r">    <span class="hl kwd">sessionInfo</span><span class="hl std">()</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## R version 4.2.1 (2022-06-23)
+## Platform: x86_64-apple-darwin17.0 (64-bit)
+## Running under: macOS Monterey 12.5
+## 
+## Matrix products: default
+## LAPACK: /Library/Frameworks/R.framework/Versions/4.2/Resources/lib/libRlapack.dylib
+## 
+## locale:
+## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] forcats_1.0.0     stringr_1.5.0     dplyr_1.1.0       purrr_1.0.1      
+##  [5] readr_2.1.3       tidyr_1.3.0       tibble_3.1.8      tidyverse_1.3.2  
+##  [9] multcomp_1.4-20   TH.data_1.1-1     MASS_7.3-58.2     survival_3.5-0   
+## [13] mvtnorm_1.1-3     car_3.1-1         carData_3.0-5     emmeans_1.8.4-1  
+## [17] afex_1.2-1        lme4_1.1-31       Matrix_1.5-3      vegan_2.6-4      
+## [21] lattice_0.20-45   permute_0.9-7     microbiome_1.20.0 ggplot2_3.4.0    
+## [25] phyloseq_1.42.0  
+## 
+## loaded via a namespace (and not attached):
+##   [1] googledrive_2.0.0      Rtsne_0.16             minqa_1.2.5           
+##   [4] colorspace_2.1-0       ellipsis_0.3.2         estimability_1.4.1    
+##   [7] snakecase_0.11.0       XVector_0.38.0         fs_1.6.1              
+##  [10] rstudioapi_0.14        farver_2.1.1           fansi_1.0.4           
+##  [13] lubridate_1.9.1        xml2_1.3.3             codetools_0.2-19      
+##  [16] splines_4.2.1          knitr_1.42             ade4_1.7-20           
+##  [19] jsonlite_1.8.4         nloptr_2.0.3           pbkrtest_0.5.2        
+##  [22] broom_1.0.3            cluster_2.1.4          dbplyr_2.3.0          
+##  [25] httr_1.4.4             compiler_4.2.1         backports_1.4.1       
+##  [28] assertthat_0.2.1       gargle_1.3.0           limma_3.54.1          
+##  [31] cli_3.6.0              tools_4.2.1            lmerTest_3.1-3        
+##  [34] igraph_1.3.5           gtable_0.3.1           glue_1.6.2            
+##  [37] GenomeInfoDbData_1.2.9 reshape2_1.4.4         tinytex_0.44          
+##  [40] Rcpp_1.0.10            Biobase_2.58.0         cellranger_1.1.0      
+##  [43] vctrs_0.5.2            Biostrings_2.66.0      rhdf5filters_1.10.0   
+##  [46] multtest_2.54.0        ape_5.6-2              nlme_3.1-162          
+##  [49] iterators_1.0.14       xfun_0.37              rvest_1.0.3           
+##  [52] timechange_0.2.0       lifecycle_1.0.3        googlesheets4_1.0.1   
+##  [55] edgeR_3.40.2           zlibbioc_1.44.0        zoo_1.8-11            
+##  [58] scales_1.2.1           hms_1.1.2              parallel_4.2.1        
+##  [61] biomformat_1.26.0      sandwich_3.0-2         rhdf5_2.42.0          
+##  [64] stringi_1.7.12         highr_0.10             S4Vectors_0.36.1      
+##  [67] foreach_1.5.2          BiocGenerics_0.44.0    boot_1.3-28.1         
+##  [70] GenomeInfoDb_1.34.9    rlang_1.0.6            pkgconfig_2.0.3       
+##  [73] bitops_1.0-7           evaluate_0.20          Rhdf5lib_1.20.0       
+##  [76] labeling_0.4.2         tidyselect_1.2.0       plyr_1.8.8            
+##  [79] magrittr_2.0.3         R6_2.5.1               multcompView_0.1-8    
+##  [82] IRanges_2.32.0         generics_0.1.3         DBI_1.1.3             
+##  [85] haven_2.5.1            pillar_1.8.1           withr_2.5.0           
+##  [88] mgcv_1.8-41            abind_1.4-5            RCurl_1.98-1.10       
+##  [91] modelr_0.1.10          janitor_2.2.0          crayon_1.5.2          
+##  [94] utf8_1.2.3             tzdb_0.3.0             readxl_1.4.1          
+##  [97] locfit_1.5-9.7         grid_4.2.1             data.table_1.14.6     
+## [100] reprex_2.0.2           xtable_1.8-4           numDeriv_2016.8-1.1   
+## [103] stats4_4.2.1           munsell_0.5.0
+</pre></div>
+<div class="source"><pre class="knitr r">    <span class="hl kwd">Sys.time</span><span class="hl std">()</span>
+</pre></div>
+<div class="output"><pre class="knitr r">## [1] &quot;2023-02-24 10:56:23 EST&quot;
+</pre></div>
+</div></div>
+
+
+</body>
+</html>
