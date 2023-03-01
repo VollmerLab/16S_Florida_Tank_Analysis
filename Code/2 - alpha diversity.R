@@ -2,10 +2,7 @@
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #TODO:
-
 #what happens to things without genus and in general #look at documentation
-#family genus and ASVs
-#extra credit if i do all three at once
 #collapse ASVs and plot NAs as gray
 #of the things that we added, how did they change
 #mds plot
@@ -21,6 +18,7 @@ library(emmeans)
 library(car)
 library(emmeans)
 library(multcomp)
+library(strex)
 library(tidyverse)
 
 #### Functions ####
@@ -366,6 +364,168 @@ sig_metric_list <- as_tibble(cbind(one_star_metrics,two_star_metrics,three_star_
 sig_metric_list
 #p-values with stars
 starred_metric_results
+
+#listing significant metrics for different aggregations of the data
+significant_metrics_all_aggs <- tibble("aggregation" = "", "metric" = "", "interaction" = "",
+                                       "value" = "", "stars" = "")
+indexval <-  1
+i <- 1
+for(c in 5:6) {
+  for(r in 1:nrow(test_mat)) {
+    if(grepl("*", test_mat[r,c], fixed=TRUE)){
+      significant_metrics_all_aggs$aggregation[indexval] = agg_levels[i]
+      significant_metrics_all_aggs$metric[indexval] = test_mat[r, 1]
+      significant_metrics_all_aggs$interaction[indexval] = dimnames(test_mat)[[2]][c]
+      significant_metrics_all_aggs$value[indexval] = str_extract_numbers(test_mat[r,c], 
+                                                                          decimals = TRUE)[[1]]
+      significant_metrics_all_aggs$stars[indexval] = str_extract_non_numerics(test_mat[r,c], 
+                                                                          decimals = TRUE)[[1]]
+      indexval <- indexval + 1
+      significant_metrics_all_aggs <-  add_row(significant_metrics_all_aggs, "aggregation" = "", 
+                                               "metric" = "", "interaction" = "", "value" = "", 
+                                               "stars" = "")
+    }
+    
+  }
+}
+
+#### Multiple Aggregation Levels ####
+#read in data
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
+metadata <- sample_data(microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  select(-retain_sample)
+
+agg_levels <- c("none", "Genus", "Family")
+significant_metrics_all_aggs <- tibble("aggregation" = "", "metric" = "", "interaction" = "",
+                                       "value" = "", "stars" = "")
+indexval <-  1
+
+for(i in 1:length(agg_levels)){
+  aggregation_level = agg_levels[i]
+
+if(aggregation_level != 'none'){
+  microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
+  taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+} else {
+  taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+}
+
+alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
+  as_tibble(rownames = 'sample_id') %>%
+  inner_join(metadata, by = 'sample_id') %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+
+timepoint_data <- alpha_table %>%
+  filter(time %in% c('T3', 'T7'))
+
+all_metrics_tp <- timepoint_data %>%
+  pivot_longer(cols = observed:rarity_rare_abundance,
+               names_to = 'metric',
+               values_to = 'value') %>%
+  nest_by(metric) %>%
+  mutate(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                             (1 | fragment_id), data = data)))
+##assign(paste0("metric_model_", i), all_metrics_tp, globalenv())
+
+#full model with plots
+all_metrics_tp_full <- all_metrics_tp %>%
+  ungroup %>%
+  rowwise %>% #computes on a data frame one row at a time
+  mutate(terms = list(find_unique_significant_terms(model, 0.05))) %>%
+  unnest(terms, keep_empty = TRUE) %>%
+  rowwise %>%
+  mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
+                                                                     as.formula(str_c('~', terms)), 
+                                                                     0.05))) %>%
+  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)
+                     (em_out, data, terms))) %>%
+  group_by(metric, data) %>%
+  reframe(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
+                        list(NULL),
+                        list(wrap_plots(plot) & 
+                              labs(y = 'log2(CPM)') &
+                              plot_annotation(title = paste(metric, aggregation_level, sep = ", ")) & 
+                              theme_classic() &
+                              theme(panel.background = element_rect(colour = 'black', fill = NA),
+                                     axis.text = element_text(colour = 'black', size = 12),
+                                     axis.title = element_text(colour = 'black', size = 16))))) %>%
+  rowwise %>% 
+  mutate(possibly(make_aov_summary, otherwise = NULL)(model)) %>%
+  ungroup 
+
+##assign(paste0("full_metric_model_", i), all_metrics_tp_full, globalenv())
+
+all_metrics_plots <- all_metrics_tp_full %>%
+  select(c(metric, plot)) %>%
+  mutate("aggregation" = aggregation_level)
+
+assign(paste0("all_metrics_plots_", i), all_metrics_plots, globalenv())
+
+#all diversity metrics - significance table
+all_metrics_sig_table <- timepoint_data %>%
+  pivot_longer(cols = observed:rarity_rare_abundance,
+               names_to = 'metric',
+               values_to = 'value') %>%
+  nest_by(metric) %>%
+  summarize(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                                (1 | fragment_id), data = data))) %>%
+  ungroup %>%
+  rowwise %>% #computes on a data frame one row at a time
+  group_by(metric) %>%
+  rowwise %>%
+  mutate(possibly(get_aov_p_values, otherwise = NULL)(model)) %>%
+  rowwise %>%
+  mutate(possibly(get_fixed_effects, otherwise = NULL)(model)) %>%
+  select(-model) %>%
+  ungroup
+
+##assign(paste0("all_sig_metrics_", i), all_metrics_sig_table, globalenv())
+
+temp_mat <- as.matrix(all_metrics_sig_table)
+
+for(c in 2:6) {
+  for(r in 1:nrow(temp_mat)) {
+    if(temp_mat[r , c] < 0.001){
+      temp_mat[r , c] <- paste("***", as.character(temp_mat[r,c]), sep = "")
+    } else if(temp_mat[r , c] < 0.01){
+      temp_mat[r , c] <- paste("**", as.character(temp_mat[r,c]), sep = "")
+    } else if(temp_mat[r , c] < 0.05){
+      temp_mat[r , c] <- paste("*", as.character(temp_mat[r,c]), sep = "")
+    }
+  }
+}
+
+starred_metric_results <- as_tibble(temp_mat)
+
+##assign(paste0("starred_metric_results_", i), starred_metric_results, globalenv())
+
+#extracting significant metrics for all aggregation levels
+for(c in 5:6) {
+  for(r in 1:nrow(temp_mat)) {
+    if(grepl("*", temp_mat[r,c], fixed=TRUE)){
+      significant_metrics_all_aggs$aggregation[indexval] = agg_levels[i]
+      significant_metrics_all_aggs$metric[indexval] = temp_mat[r, 1]
+      significant_metrics_all_aggs$interaction[indexval] = dimnames(temp_mat)[[2]][c]
+      significant_metrics_all_aggs$value[indexval] = str_extract_numbers(temp_mat[r,c], 
+                                                                         decimals = TRUE)[[1]]
+      significant_metrics_all_aggs$stars[indexval] = str_extract_non_numerics(temp_mat[r,c], 
+                                                                              decimals = TRUE)[[1]]
+      indexval <- indexval + 1
+      significant_metrics_all_aggs <-  add_row(significant_metrics_all_aggs, "aggregation" = "", 
+                                               "metric" = "", "interaction" = "", "value" = "", 
+                                               "stars" = "")
+      }
+    }
+  }
+}
+#remove extra empty row
+significant_metrics_all_aggs <- significant_metrics_all_aggs[!apply(significant_metrics_all_aggs == 
+                                                                      "", 1, all),] 
+all_aggs_plots <- rbind(all_metrics_plots_1, all_metrics_plots_2, all_metrics_plots_3)
+
+#final tibble showing the significant metrics and plots for all aggregations:
+sig_metrics_final <- left_join(significant_metrics_all_aggs, all_aggs_plots)
 
 #### ####
 
