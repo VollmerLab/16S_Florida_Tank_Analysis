@@ -1,6 +1,16 @@
 #code to calculate the alpha diversity
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
+#TODO:
+
+#what happens to things without genus and in general #look at documentation
+#family genus and ASVs
+#extra credit if i do all three at once
+#collapse ASVs and plot NAs as gray
+#of the things that we added, how did they change
+#mds plot
+#add T0 to alpha?
+
 #### Packages ####
 library(phyloseq)
 library(microbiome)
@@ -13,8 +23,170 @@ library(emmeans)
 library(multcomp)
 library(tidyverse)
 
+#### Functions ####
+find_unique_significant_terms <- function(model, alpha){
+  significant_terms <- car::Anova(model) %>%
+    as_tibble(rownames = 'param') %>%
+    janitor::clean_names() %>%
+    filter(pr_chisq < alpha) %>%
+    pull(param)
+  
+  unique_values <- outer(significant_terms, significant_terms, str_count) %>%
+    colSums() %>%
+    equals(1)
+  
+  str_replace(significant_terms[unique_values], ':', '*')
+}
+
+make_emmean_model <- function(model, form, alpha){
+  emmeans(model, specs = form, type = 'response') %>%
+    cld(Letters = LETTERS, reversed = TRUE, alpha = alpha) 
+}
+
+make_model_plot <- function(predOut, rawData, var_inclusion){
+  
+  all_vars <- str_extract_all(var_inclusion, 'time|final_disease_state|exposure') %>%
+    unlist
+  
+  if(any(str_detect(all_vars, 'time'))){
+    x_var <- str_subset(all_vars, 'time.*')
+  } else {
+    x_var <- all_vars[1]
+  }
+  
+  if(length(all_vars) > 1){
+    colour_var <- str_subset(all_vars, x_var, negate = TRUE)
+  } else {
+    colour_var <- NULL
+  }
+  
+  y_var <- str_subset(colnames(predOut), 'emmean|response')
+  y_data <- str_subset(colnames(rawData), 'value')
+  
+  if(is.null(colour_var)){
+    as_tibble(predOut) %>%
+      mutate(.group = str_trim(.group)) %>%
+      ggplot(aes(x = !!sym(x_var))) +
+      
+      stat_halfeye(data = rawData, aes(y = !!sym(y_data)),
+                   adjust = 0.5, width = 0.6, .width = 0, 
+                   alpha = 0.5, show.legend = FALSE,
+                   fatten_point = 0, justification = -0.25, 
+                   position = position_dodge(0.5), size = 0) +
+      
+      geom_half_point(data = rawData, aes(y = !!sym(y_data)),
+                      side = 'l', range_scale = 0.1, alpha = 1,
+                      position = position_dodge(width = 0.5),
+                      show.legend = FALSE,
+                      transformation = position_jitter(height = 0, width = 0.05)) +
+      
+      geom_pointrange(aes(y = !!sym(y_var),
+                          ymin = lower.CL, ymax = upper.CL),
+                      position = position_dodge(0.5)) +
+      geom_text(aes(y = (upper.CL), label = .group),
+                position = position_dodge(0.5), vjust = -0.1, 
+                show.legend = FALSE) +
+      labs(x = case_when(x_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                         x_var == 'exposure' ~ 'Exposure',
+                         x_var == 'final_disease_state' ~ 'Disease State'))
+    
+  } else {
+    as_tibble(predOut) %>%
+      mutate(.group = str_trim(.group)) %>%
+      ggplot(aes(x = !!sym(x_var), colour = !!sym(colour_var))) +
+      
+      stat_halfeye(data = rawData, aes(y = !!sym(y_data), fill = !!sym(colour_var)),
+                   adjust = 0.5, width = 0.6, .width = 0, 
+                   alpha = 0.5, show.legend = FALSE,
+                   fatten_point = 0, justification = -0.25, 
+                   position = position_dodge(0.5), size = 0) +
+      
+      geom_half_point(data = rawData, aes(y = !!sym(y_data), colour = !!sym(colour_var)),
+                      side = 'l', range_scale = 0.1, alpha = 1,
+                      position = position_dodge(width = 0.5),
+                      show.legend = FALSE,
+                      transformation = position_jitter(height = 0, width = 0.05)) +
+      
+      geom_pointrange(aes(y = !!sym(y_var),
+                          ymin = lower.CL, ymax = upper.CL),
+                      position = position_dodge(0.5)) +
+      geom_text(aes(y = (upper.CL), label = .group),
+                position = position_dodge(0.5), vjust = -0.1,
+                show.legend = FALSE) +
+      labs(x = case_when(x_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                         x_var == 'exposure' ~ 'Exposure',
+                         x_var == 'final_disease_state' ~ 'Disease State'),
+           colour = case_when(colour_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                              colour_var == 'exposure' ~ 'Exposure',
+                              colour_var == 'final_disease_state' ~ 'Disease State'))
+  }
+  
+}
+
+make_aov_summary <- function(model){
+  model$anova_table %>%
+    as_tibble(rownames = 'effect') %>%
+    janitor::clean_names() %>%
+    mutate(across(c(num_df, den_df), round, digits = 3),
+           df = str_c(num_df, den_df, sep = ', '),
+           p = pr_f) %>%
+    dplyr::select(effect, df, f, p) %>%
+    pivot_wider(names_from = 'effect',
+                values_from = c('df', 'f', 'p'), 
+                names_vary = 'slowest')
+}
+
+make_lmer_aov_summary <- function(model){
+  car::Anova(model) %>%
+    as_tibble(rownames = 'effect') %>%
+    janitor::clean_names() %>%
+    mutate(df = round(df, digits = 3), p = pr_chisq) %>%
+    dplyr::select(effect, df, chisq, p) %>%
+    pivot_wider(names_from = 'effect',
+                values_from = c('df', 'chisq', 'p'), 
+                names_vary = 'fastest')
+}
+
+#model <- all_metrics_tp$model[[1]]
+
+get_fixed_effects <- function(model){
+  temp_fe <- fixef(model) %>%
+  as_tibble(rownames = 'component')
+  
+  temp_fe$component <- temp_fe$component %>%
+  str_replace_all(":",".") %>%
+  str_remove_all("[()]") %>%
+  str_remove_all("final_") %>%
+  str_remove_all("_state")
+  
+  temp_fe <- temp_fe %>%
+  pivot_wider(names_from = 'component',
+              values_from = c('value'))
+  temp_fe
+  
+  return(temp_fe)
+}
+
+get_aov_p_values <- function(model){
+  tibble_results <- car::Anova(model) %>%
+  as_tibble(rownames = 'effect') %>%
+  janitor::clean_names() %>%
+  mutate(p = pr_chisq) %>%
+  dplyr::select(effect, p) %>%
+  pivot_wider(names_from = 'effect',
+              values_from = c('p'))
+  
+  tibble_results %>%
+  {colnames(.) ->> namevar} %>% #{x ->> y} saves x to y w/o messing up the pipe
+  {paste("p", namevar, sep = "_") ->> new_names}
+  
+  colnames(tibble_results) = new_names
+  
+  return(tibble_results)
+}
+
 #### Read in Data ####
-aggregation_level <- 'Genus' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -27,13 +199,6 @@ if(aggregation_level != 'none'){
 } else {
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
 }
-
-#data filtering step?
-    #must use untrimmed data set for alpha diversity measures of richness to get meaningful results
-    #functions depend heavily on singletons
-#TODO add read abundance sort of 1000 reads or more
-  
-    #there are 2 samples with 5 or less species observed, might be skewing the data
 
 #### Alpha Diversity ####
 alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
@@ -93,17 +258,119 @@ emmeans(count_model_nb, ~final_disease_state * time, type = 'response') %>%
 #all diversity metrics in table
 select(alpha_table, sample_id, observed, any_of(colnames(metadata)))
 
-colnames(timepoint_data)
-
-tmp <- timepoint_data %>%
+all_metrics_tp <- timepoint_data %>%
   pivot_longer(cols = observed:rarity_rare_abundance,
                names_to = 'metric',
                values_to = 'value') %>%
   nest_by(metric) %>%
-  summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
-                                (1 | fragment_id) + (1 | tank), data = data)))
+  mutate(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                                (1 | fragment_id), data = data)))
 
-#Selected measures:
+#full model with plots
+all_metrics_tp <- all_metrics_tp %>%
+  ungroup %>%
+  rowwise %>% #computes on a data frame one row at a time
+  mutate(terms = list(find_unique_significant_terms(model, 0.05))) %>%
+  unnest(terms, keep_empty = TRUE) %>%
+  rowwise %>%
+  mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
+                                                                     as.formula(str_c('~', terms)), 
+                                                                     0.05))) %>%
+  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)(em_out, data, terms))) %>%
+  group_by(metric, data) %>%
+  reframe(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
+                        list(NULL),
+                        list(wrap_plots(plot) & 
+                               labs(y = 'log2(CPM)') &
+                               plot_annotation(title = metric) & 
+                               theme_classic() &
+                               theme(panel.background = element_rect(colour = 'black', fill = NA),
+                                     axis.text = element_text(colour = 'black', size = 12),
+                                     axis.title = element_text(colour = 'black', size = 16))))) %>%
+  rowwise %>% 
+  mutate(possibly(make_aov_summary, otherwise = NULL)(model)) %>%
+  ungroup
+
+#all diversity metrics - significance table
+all_metrics_tp <- timepoint_data %>%
+  pivot_longer(cols = observed:rarity_rare_abundance,
+               names_to = 'metric',
+               values_to = 'value') %>%
+  nest_by(metric) %>%
+  summarize(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                                (1 | fragment_id), data = data))) %>%
+  ungroup %>%
+  rowwise %>% #computes on a data frame one row at a time
+  group_by(metric) %>%
+  rowwise %>%
+  mutate(possibly(get_aov_p_values, otherwise = NULL)(model)) %>%
+  rowwise %>%
+  mutate(possibly(get_fixed_effects, otherwise = NULL)(model)) %>%
+  select(-model) %>%
+  ungroup
+
+#### Adding Stars to Significant Results ####
+test_mat <- as.matrix(all_metrics_tp)
+
+for(c in 2:6) {
+  for(r in 1:nrow(test_mat)) {
+    if(test_mat[r , c] < 0.001){
+      test_mat[r , c] <- paste("***", as.character(test_mat[r,c]), sep = "")
+    } else if(test_mat[r , c] < 0.01){
+      test_mat[r , c] <- paste("**", as.character(test_mat[r,c]), sep = "")
+    } else if(test_mat[r , c] < 0.05){
+      test_mat[r , c] <- paste("*", as.character(test_mat[r,c]), sep = "")
+    }
+  }
+}
+
+#p values with stars added for all metrics
+starred_metric_results <- as_tibble(test_mat)
+
+one_star_metrics <- c()
+number1 <- 1
+two_star_metrics <- c()
+number2 <- 1
+three_star_metrics <- c()
+number3 <- 1
+for(c in 2:6) {
+  for(r in 1:nrow(test_mat)) {
+    if(grepl("*", test_mat[r,c], fixed=TRUE)){
+      one_star_metrics[number1] <- test_mat[r,1]
+      number1 <- number1 + 1
+    }
+    if(grepl("**", test_mat[r,c], fixed=TRUE)){
+      two_star_metrics[number2] <- test_mat[r,1]
+      number2 <- number2 + 1
+    }
+    if(grepl("***", test_mat[r,c], fixed=TRUE)){
+      three_star_metrics[number3] <- test_mat[r,1]
+      number3 <- number3 + 1
+    }
+  }
+}
+one_star_metrics <- unique(one_star_metrics)
+two_star_metrics <- unique(two_star_metrics)
+three_star_metrics <- unique(three_star_metrics)
+
+lengths <- max(c(length(one_star_metrics), length(two_star_metrics), length(three_star_metrics)))
+length(one_star_metrics) <- lengths
+length(two_star_metrics) <- lengths
+length(three_star_metrics) <- lengths
+
+#list of which metrics give significant results in at least one column
+sig_metric_list <- as_tibble(cbind(one_star_metrics,two_star_metrics,three_star_metrics))
+
+#outputs with stars:
+#list of metrics
+sig_metric_list
+#p-values with stars
+starred_metric_results
+
+#### ####
+
+
+#### Selected Metrics ####
 
 #richness - observed; dominance - dbp, gini; rarity - rare abundance
 #diversity - shannon; evenness - camargo, bulla
@@ -122,29 +389,9 @@ r_alpha_models <- reduced_alpha_table %>%
                values_to = 'value') %>%
   nest_by(metric) %>%
   summarise(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
-                                (1 | fragment_id) + (1 | tank), data = data)))
+                                (1 | fragment_id), data = data)))
 
 
-#core abundance and relative abundance
-
-#broom , broom mixed, fixef  -> adapt make_aov_summary function
-
-#just fragment id as random effect
-
-#what happens to things without genus and in general #look at documentation
-
-#family genus and ASVs
-    #extra credit if i do all three at once
-
-#collapse ASVs and plot NAs as gray
-
-#of the things that we added, how did they change
-
-#mds plot
-
-#make filter and add to data preprocessing 1 file and recode NAs
-
-#add T0 to alpha?
 
 #### Shannon Diversity ####
 

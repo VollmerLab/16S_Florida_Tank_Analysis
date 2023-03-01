@@ -135,6 +135,7 @@ anova(rda1, permutations = h2, model = 'reduced', by = 'term')
 #presence–absence data (should be able to handle unknown (and variable) sample sizes):
   #"mountford" - inverse of Fisher's alpha, takes into consideration the # of species in each separate
       #community and the # of species that are present in both
+      #far less dependent on sample size than jaccards, sorenson, and kulczynski
   #"raup" (Raup–Crick) - based on the probability of observing at least j species in shared 
       #in compared communities
 

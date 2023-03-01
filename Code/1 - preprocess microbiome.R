@@ -21,7 +21,17 @@ microbiome_raw <- read_rds('../Data/ps_fl_tank.rds') %>%
 homogenate_samples <- sample_data(microbiome_raw) %>%
   as_tibble(rownames = 'sample_id') %>%
   filter(time %in% c('Acerv', 'T0')) %>%
-  mutate(retain_sample = TRUE)
+  mutate(retain_sample = TRUE) %>%
+  mutate(time = 'T0',
+         exposure = case_when(is.na(exposure) ~ tank, 
+                              exposure == 'REP1' ~ 'Field',
+                              TRUE ~ exposure),
+         final_disease_state = exposure,
+         tank = case_when(str_detect(sample_id, 'REP1') ~ 'preTank',
+                          str_detect(sample_id, 'Acerv_NA') ~ 'homogenate_fragment',
+                          TRUE ~ tank))
+
+
 
 exposure_samples <- sample_data(microbiome_raw) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -37,6 +47,9 @@ processed_microbiome <- microbiome_raw
 sample_data(processed_microbiome) <- bind_rows(homogenate_samples, exposure_samples) %>%
   column_to_rownames('sample_id')
 processed_microbiome <- subset_samples(processed_microbiome, retain_sample)
+
+#filter for at least 1000 reads
+processed_microbiome <- prune_samples(sample_sums(processed_microbiome)>=1000, processed_microbiome)
 
 #### Output preprocessed microbiome as rds ####
 write_rds(processed_microbiome, '../intermediate_files/preprocess_microbiome.rds')

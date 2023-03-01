@@ -25,11 +25,25 @@ select <- dplyr::select
 
 
 #### Functions ####
-find_unique_significant_terms <- function(model, alpha){
+find_unique_significant_terms_rmANOVA <- function(model, alpha){
   significant_terms <- model$anova_table %>%
     as_tibble(rownames = 'param') %>%
     janitor::clean_names() %>%
     filter(pr_f < alpha) %>%
+    pull(param)
+  
+  unique_values <- outer(significant_terms, significant_terms, str_count) %>%
+    colSums() %>%
+    equals(1)
+  
+  str_replace(significant_terms[unique_values], ':', '*')
+}
+
+find_unique_significant_terms <- function(model, alpha){
+  significant_terms <- car::Anova(model) %>%
+    as_tibble(rownames = 'param') %>%
+    janitor::clean_names() %>%
+    filter(pr_chisq < alpha) %>%
     pull(param)
   
   unique_values <- outer(significant_terms, significant_terms, str_count) %>%
@@ -159,6 +173,54 @@ plot_pcoa <- function(cpm_counts){
     theme_classic()
   
 }
+#### Patchwork PCoA Plot for ASVs, Genus, Family ####
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
+  subset_samples(time %in% c('T3', 'T7'))
+metadata <- sample_data(microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  select(-retain_sample) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
+         .after = sample_id)
+
+agg_levels <- c("none", "Genus", "Family")
+
+for(i in 1:length(agg_levels)){
+  aggregation_level = agg_levels[i]
+  
+  if(aggregation_level != 'none'){
+    microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
+    taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+  } else {
+    taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+  }
+  
+  if(i == 1){
+    otu_tmm <- microbiome_data %>%
+      phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+      otu_table() %>% 
+      t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+      as.data.frame %>%
+      as.matrix %>% 
+      DGEList(remove.zeros = TRUE) %>%
+      edgeR::calcNormFactors(method = 'TMMwsp')
+    plota <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    
+  }else{ 
+    otu_tmm <- microbiome_data %>%
+      phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+      otu_table() %>% 
+      as.data.frame %>%
+      as.matrix %>% 
+      DGEList(remove.zeros = TRUE) %>%
+      edgeR::calcNormFactors(method = 'TMMwsp')
+    if(i == 2){
+      plotb <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    }else if(i == 3){
+      plotc <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    }
+  }
+}
+plota + plotb + plotc
 
 #### Read in Data ####
 
@@ -179,17 +241,18 @@ if(aggregation_level != 'none'){
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
 }
 
-#fix pcoa
 
 #### Filtering and normalizing data ####
+#FIXME NOTE: set # below for whether working with ASV level or not
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
   edgeR::calcNormFactors(method = 'TMMwsp') #TMMwsp is for high prevalence of 0s
-
+  
 #cpm is counts per million, can be used as a descriptive measure for the expression level of a gene
 cpm(otu_tmm, log = TRUE, prior.count = 2) %>% #prior.count is # to add to each value so not log(0)
   rowMeans %>%
@@ -205,11 +268,38 @@ cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
        title = "Distribution of filtered and normalized taxa")
 
 cpm(otu_tmm, log = TRUE, prior.count = 2) %>% plot_pcoa() 
+
   #x axis explains greatest amount of variance, y axis is next largest amount of variance
   #cpm, when given a DGEList, defaults to applying normalization factors for us
   #time explains 29% of variation and final disease state explains 9%
 
+  #PCA focuses on shared variance: it tries to summarize multiple variables in the minimum number 
+  #of components so that each component explains the most variance. 
+  #PCoA on the other hand focuses on distances, and it tries to extract the dimensions that account 
+  #for the maximum distances
+
+taxonomy_tibble <- tax_table(microbiome_data) %>% 
+  as.data.frame %>%
+  as_tibble(rownames = "asv_names")
+
+
+mutate(asv_names = dimnames(cpm(otu_tmm, log = TRUE, prior.count = 2))[[1]]) %>%
+  as_tibble(rownames = "asv_names") 
+  
+  
 #nesting data by taxon abundances
+taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>% #making these into factors
+  #left_join(taxonomy_tibble, by = "asv_names") %>%
+  nest_by(asv_names)
+  
+
+#old
 taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
@@ -218,6 +308,11 @@ taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
                names_to = "taxon", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>% #making these into factors
   nest_by(taxon)
+
+rickettsias <- taxon_abundances %>%
+  filter(Family == "Rickettsiaceae")
+
+
 
 #### Comparing Models ####
 taxon_abundances$taxon
@@ -251,31 +346,43 @@ bind_rows(
   
   
 #### Model Each Taxon Independently ####
-all_models <- taxon_abundances %>%
-  mutate(model = list(aov_4(value ~ time * (exposure + final_disease_state) + (time | fragment_id), 
-                            data = data))) #adds a column w anova results
+library(multidplyr)
+cluster <- new_cluster(parallel::detectCores() - 1)
+cluster_library(cluster, c('lme4', 'dplyr', 'tidyr', 'magrittr', 'stringr'))
+cluster_copy(cluster, c('find_unique_significant_terms'))
 
-all_models %>%
-  reframe(model = list(model), 
-          sig_terms = find_unique_significant_terms(model, 0.05)) 
-  #make new df for taxa w column for anova model and column listing the significant factors
+all_models <- taxon_abundances %>%
+  #partition(cluster) %>%
+  mutate(model = list(lmer(value ~ time * (exposure + final_disease_state) + (1 | genotype) + (1 | tank), 
+                            data = data))) #%>% #adds a column w anova results
+  collect()
+
+#ungroup(all_models) %>% slice(24) %>% pull(model) %>% pluck(1) %>% anova
+
+all_models$model[[1]] %>% find_unique_significant_terms(0.05)
+#make new df for taxa w column for anova model and column listing the significant factors
 
 aov_and_graphs <- all_models %>%
   ungroup %>%
   rowwise %>% #computes on a data frame one row at a time
+  partition(cluster) %>%
   mutate(terms = list(find_unique_significant_terms(model, 0.05))) %>%
+  collect %>%
   unnest(terms, keep_empty = TRUE) %>%
-  rowwise %>%
+  rowwise 
+
+
+%>%
   mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
                                                                      as.formula(str_c('~', terms)), 
                                                                      0.05))) %>%
   mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)(em_out, data, terms))) %>%
-  group_by(taxon, data, model) %>%
+  group_by(asv_names, data, model) %>%
   reframe(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
                         list(NULL),
                         list(wrap_plots(plot) & 
                                labs(y = 'log2(CPM)') &
-                               plot_annotation(title = taxon) & 
+                               plot_annotation(title = asv_names) & 
                                theme_classic() &
                                theme(panel.background = element_rect(colour = 'black', fill = NA),
                                      axis.text = element_text(colour = 'black', size = 12),
@@ -286,7 +393,7 @@ aov_and_graphs <- all_models %>%
 
 
 aov_and_graphs %>%
-  filter(str_detect(taxon, '[fF]ran')) %>%
+  filter(str_detect(taxon, '[Gg]eitlerinema')) %>%
   pull(plot) %>%
   pluck(1)
 #how to check for scenarios that fulfill specific combos of significant conditions
