@@ -173,6 +173,30 @@ plot_pcoa <- function(cpm_counts){
     theme_classic()
   
 }
+
+plot_agg_pcoa <- function(cpm_counts){
+  filtered_pcoa <- t(cpm_counts) %>%
+    vegdist(method = 'euclidean') %>%
+    magrittr::divide_by(1000) %>%
+    pcoa()
+  
+  percent_variance <- filtered_pcoa$values$Eigenvalues / sum(filtered_pcoa$values$Eigenvalue)
+  
+  filtered_pcoa$vectors %>%
+    as_tibble(rownames = 'sample_id') %>%
+    dplyr::select(sample_id, Axis.1, Axis.2) %>%
+    inner_join(metadata,
+               by = 'sample_id') %>%
+    ggplot(aes(x = Axis.1, y = Axis.2, colour = final_disease_state, 
+               shape = time, group = fragment_id)) +
+    geom_point() +
+    geom_path() +
+    labs(x = str_c('PCoA 1 (', scales::percent(percent_variance[1]), ')'),
+         y = str_c('PCoA 2 (', scales::percent(percent_variance[2]), ')'),
+         title = aggregation_level) +
+    theme_classic()
+  
+}
 #### Patchwork PCoA Plot for ASVs, Genus, Family ####
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -203,7 +227,7 @@ for(i in 1:length(agg_levels)){
       as.matrix %>% 
       DGEList(remove.zeros = TRUE) %>%
       edgeR::calcNormFactors(method = 'TMMwsp')
-    plota <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    plota <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
     
   }else{ 
     otu_tmm <- microbiome_data %>%
@@ -214,9 +238,11 @@ for(i in 1:length(agg_levels)){
       DGEList(remove.zeros = TRUE) %>%
       edgeR::calcNormFactors(method = 'TMMwsp')
     if(i == 2){
-      plotb <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+      plotb <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2)) +
+          scale_x_reverse() +
+          scale_y_reverse()
     }else if(i == 3){
-      plotc <- plot_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+      plotc <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
     }
   }
 }
