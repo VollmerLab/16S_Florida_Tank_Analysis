@@ -7,6 +7,7 @@ setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis
 #of the things that we added, how did they change
 #mds plot
 #add T0 to alpha?
+#make pcoa type plot for alpha div
 
 #### Packages ####
 library(phyloseq)
@@ -454,7 +455,7 @@ all_metrics_tp_full <- all_metrics_tp %>%
   mutate(possibly(make_aov_summary, otherwise = NULL)(model)) %>%
   ungroup 
 
-##assign(paste0("full_metric_model_", i), all_metrics_tp_full, globalenv())
+assign(paste0("full_metric_model_", i), all_metrics_tp_full, globalenv())
 
 all_metrics_plots <- all_metrics_tp_full %>%
   select(c(metric, plot)) %>%
@@ -480,7 +481,7 @@ all_metrics_sig_table <- timepoint_data %>%
   select(-model) %>%
   ungroup
 
-##assign(paste0("all_sig_metrics_", i), all_metrics_sig_table, globalenv())
+assign(paste0("all_sig_metrics_", i), all_metrics_sig_table, globalenv())
 
 temp_mat <- as.matrix(all_metrics_sig_table)
 
