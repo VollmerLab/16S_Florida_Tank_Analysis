@@ -8,6 +8,7 @@ setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis
 #mds plot
 #add T0 to alpha?
 #make pcoa type plot for alpha div
+#complex upset
 
 #### Packages ####
 library(phyloseq)
@@ -185,7 +186,7 @@ get_aov_p_values <- function(model){
 }
 
 #### Read in Data ####
-aggregation_level <- 'Genus' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
