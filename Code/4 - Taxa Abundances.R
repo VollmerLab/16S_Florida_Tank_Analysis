@@ -151,6 +151,17 @@ make_aov_summary <- function(model){
                 names_vary = 'slowest')
 }
 
+make_lmer_aov_summary <- function(model){
+  car::Anova(model) %>%
+    as_tibble(rownames = 'effect') %>%
+    janitor::clean_names() %>%
+    mutate(df = round(df, digits = 3), p = pr_chisq) %>%
+    dplyr::select(effect, df, chisq, p) %>%
+    pivot_wider(names_from = 'effect',
+                values_from = c('df', 'chisq', 'p'), 
+                names_vary = 'slowest')
+}
+
 plot_pcoa <- function(cpm_counts){
   filtered_pcoa <- t(cpm_counts) %>%
     vegdist(method = 'euclidean') %>%
@@ -250,7 +261,7 @@ plota + plotb + plotc
 
 #### Read in Data ####
 
-aggregation_level <- 'Family' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -273,7 +284,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -282,7 +293,7 @@ otu_tmm <- microbiome_data %>%
 #cpm is counts per million, can be used as a descriptive measure for the expression level of a gene
 cpm(otu_tmm, log = TRUE, prior.count = 2) %>% #prior.count is # to add to each value so not log(0)
   rowMeans %>%
-  quantile(0.05) #6.860956 
+  quantile(0.05) 
 
 cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   rowMeans %>% #get ave value for each group in aggregation level (ex: family)
@@ -313,19 +324,18 @@ mutate(asv_names = dimnames(cpm(otu_tmm, log = TRUE, prior.count = 2))[[1]]) %>%
   as_tibble(rownames = "asv_names") 
   
   
-#nesting data by taxon abundances
+#nesting by ASV
 taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
   full_join(metadata, by = "sample_id") %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
-  mutate(across(c(exposure, final_disease_state, time), factor)) %>% #making these into factors
-  #left_join(taxonomy_tibble, by = "asv_names") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
   nest_by(asv_names)
   
 
-#old
+#nesting data by taxon abundances (aggregated data)
 taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
@@ -335,8 +345,7 @@ taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>% #making these into factors
   nest_by(taxon)
 
-rickettsias <- taxon_abundances %>%
-  filter(Family == "Rickettsiaceae")
+
 
 
 
@@ -379,30 +388,24 @@ cluster_copy(cluster, c('find_unique_significant_terms'))
 
 all_models <- taxon_abundances %>%
   #partition(cluster) %>%
-  mutate(model = list(lmer(value ~ time * (exposure + final_disease_state) + (1 | genotype) + (1 | tank), 
-                            data = data))) #%>% #adds a column w anova results
+  mutate(model = list(lmer(value ~ time * (exposure + final_disease_state) + (1 | genotype) + 
+                             (1 | tank), data = data))) #%>% #adds a column w anova results
   collect()
 
-#ungroup(all_models) %>% slice(24) %>% pull(model) %>% pluck(1) %>% anova
-
-all_models$model[[1]] %>% find_unique_significant_terms(0.05)
-#make new df for taxa w column for anova model and column listing the significant factors
-
+#for aggregated samples
 aov_and_graphs <- all_models %>%
   ungroup %>%
   rowwise %>% #computes on a data frame one row at a time
-  partition(cluster) %>%
+  #partition(cluster) %>%
   mutate(terms = list(find_unique_significant_terms(model, 0.05))) %>%
-  collect %>%
+  #collect %>%
   unnest(terms, keep_empty = TRUE) %>%
-  rowwise 
-
-
-%>%
+  rowwise %>%
   mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
                                                                      as.formula(str_c('~', terms)), 
                                                                      0.05))) %>%
-  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)(em_out, data, terms))) %>%
+  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)
+                     (em_out, data, terms))) %>%
   group_by(asv_names, data, model) %>%
   reframe(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
                         list(NULL),
@@ -414,14 +417,38 @@ aov_and_graphs <- all_models %>%
                                      axis.text = element_text(colour = 'black', size = 12),
                                      axis.title = element_text(colour = 'black', size = 16))))) %>%
   rowwise %>% 
-  mutate(possibly(make_aov_summary, otherwise = NULL)(model)) %>%
+  mutate(possibly(make_lmer_aov_summary, otherwise = NULL)(model)) %>%
   ungroup
 
+#### Rickettsias ####
 
-aov_and_graphs %>%
-  filter(str_detect(taxon, '[Gg]eitlerinema')) %>%
-  pull(plot) %>%
-  pluck(1)
+asv_level_aov_graphs <- all_models %>%
+  ungroup %>%
+  rowwise %>% #computes on a data frame one row at a time
+  mutate(terms = list(find_unique_significant_terms(model, 0.05))) %>%
+  unnest(terms, keep_empty = TRUE) %>%
+  rowwise %>%
+  mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
+                                                                     as.formula(str_c('~', terms)), 
+                                                                     0.05))) %>%
+  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)
+                     (em_out, data, terms))) %>%
+  mutate(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
+                        list(NULL),
+                        list(wrap_plots(plot) & 
+                               labs(y = 'log2(CPM)') &
+                               plot_annotation(title = asv_names) & 
+                               theme_classic() &
+                               theme(panel.background = element_rect(colour = 'black', fill = NA),
+                                     axis.text = element_text(colour = 'black', size = 12),
+                                     axis.title = element_text(colour = 'black', size = 16))))) %>%
+  rowwise %>% 
+  mutate(possibly(make_lmer_aov_summary, otherwise = NULL)(model)) %>%
+  ungroup %>%
+  select(-c(em_out, terms))
+
+
+
 #how to check for scenarios that fulfill specific combos of significant conditions
 
 aov_and_graphs %>% 
@@ -431,4 +458,13 @@ aov_and_graphs %>%
   slice(2) %>%
   pull(model) %>%
   pluck(1)
+
+
+aov_and_graphs %>%
+  filter(str_detect(taxon, '[Gg]eitlerinema')) %>%
+  pull(plot) %>%
+  pluck(1)
+
+ungroup(all_models) %>% slice(24) %>% pull(model) %>% pluck(1) %>% anova
+
 
