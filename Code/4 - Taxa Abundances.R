@@ -19,6 +19,7 @@ library(ggdist)
 library(gghalves)
 library(patchwork)
 library(magrittr)
+library(ComplexUpset)
 library(tidyverse)
 
 select <- dplyr::select
@@ -448,6 +449,39 @@ asv_level_aov_graphs <- all_models %>%
   select(-c(em_out, terms))
 
 
+#write_rds(asv_level_aov_graphs, "asv_aov_and_plots.rds")
+
+
+asv_comp_upset <- asv_level_aov_graphs %>%
+  select(-c(contains("df"), contains("chisq"), plot, data, model)) %>%
+  full_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c(Kingdom, Phylum)) %>%
+  mutate(across(starts_with("p_"), ~p.adjust(.x, method = "fdr"))) 
+
+p_vals_cu <- asv_comp_upset %>%
+  select(c(asv_names, starts_with("p_"))) %>%
+  mutate(across(starts_with("p_"), ~. < 0.05))
+
+
+
+
+upset(mutate(asv_comp_upset, across(starts_with('p_'), ~. < 0.05)) %>%
+        filter(!if_all(starts_with('p_'), ~!.)), 
+      colnames(select(asv_comp_upset, starts_with('p_'))), 
+      
+      annotations = list(
+        # 2nd method - using ggplot
+        'Order'=(
+          ggplot(mapping=aes(fill=Order)) 
+          + geom_bar(stat = 'count', position = 'fill') 
+          + scale_y_continuous(labels = scales::percent_format())
+        ) +
+          ylab('Order') +
+          theme(legend.position = 'top')
+      ),
+      
+      name='asv_names', width_ratio=0.1, min_size = 1)
+
 
 #how to check for scenarios that fulfill specific combos of significant conditions
 
@@ -468,3 +502,78 @@ aov_and_graphs %>%
 ungroup(all_models) %>% slice(24) %>% pull(model) %>% pluck(1) %>% anova
 
 
+
+left_join(asv_level_aov_graphs, taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(Order == 'Rickettsiales') %>%
+  sample_n(5) %>%
+  pull(plot) %>%
+  wrap_plots()
+
+
+left_join(asv_level_aov_graphs, taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(Order == 'Rickettsiales') %>%
+  mutate(across(starts_with('p_'), ~. < 0.05)) %>%
+  summarise(across(starts_with('p_'), sum),
+            n = n())
+
+
+
+tmp <- left_join(asv_level_aov_graphs, taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(Order == 'Rickettsiales') %>%
+  dplyr::select(asv_names, model) %>%
+  rowwise(asv_names) %>%
+  reframe(emmeans(model, ~final_disease_state) %>%
+         as_tibble())
+
+
+tmp %>%
+  ggplot(aes(x = final_disease_state, y = log(emmean), group = asv_names)) +
+  geom_path() +
+  geom_point()
+
+
+left_join(asv_level_aov_graphs, taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(Order == 'Rickettsiales') %>%
+  dplyr::select(asv_names, data) %>%
+  unnest(data) %>%
+  group_by(asv_names, final_disease_state) %>%
+  summarise(value = mean(value),
+            .groups = 'drop') %>%
+  ggplot(aes(x = final_disease_state, y = value)) +
+  geom_jitter()
+
+
+
+
+rick_data <- left_join(asv_level_aov_graphs, taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(Order == 'Rickettsiales') %>%
+  dplyr::select(asv_names, data) %>%
+  unnest(data) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names))
+
+
+rick_model <- lmer(value ~ time * (exposure + final_disease_state) + 
+       (1 | genotype) + (1 | tank) + 
+       (1 | Genus) + (1 | Family),
+     data = rick_data)
+
+summary(rick_model)
+car::Anova(rick_model)
+
+emmeans(rick_model, ~exposure) %>%
+  as_tibble %>%
+  ggplot(aes(x = exposure, y = emmean, ymin = emmean - SE, ymax = emmean + SE, colour = exposure)) +
+  geom_pointrange(position = position_dodge(0.5))
+
+emmeans(rick_model, ~final_disease_state) %>%
+  contrast('pairwise')
+
+
+rick_data %>%
+  group_by(genotype, tank, time, exposure, final_disease_state) %>%
+  summarise(value = sum(value)) %>%
+  
+  lmer(value ~ time * (exposure + final_disease_state) + 
+         (1 | genotype) + (1 | tank),
+       data = .) %>%
+  summary()

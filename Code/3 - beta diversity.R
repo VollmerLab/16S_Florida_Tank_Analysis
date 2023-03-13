@@ -54,7 +54,7 @@ mb_data <- microbiome_data %>%
 otu_nmds <- metaMDS(mb_data, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
 #plot(otu_nmds)
 
-scores(otu_nmds)$sites %>%
+nmds_plot <- scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
@@ -64,6 +64,33 @@ scores(otu_nmds)$sites %>%
   
   geom_point() +
   theme_classic()
+
+
+env_dat <- t(mb_data) %>%
+  as.data.frame %>%
+  as_tibble(rownames = 'asv') %>%
+  left_join(as_tibble(as.data.frame(tax_table(microbiome_data)), rownames = 'asv'), 
+            by = 'asv') %>%
+  group_by(Order) %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  pivot_longer(cols = -Order) %>%
+  pivot_wider(names_from = 'Order',
+              values_from = 'value') %>%
+  column_to_rownames('name')
+ 
+env_model <- envfit(otu_nmds, env_dat)
+
+
+env_arrows <- env_model$vectors$arrows %>%
+  as_tibble(rownames = 'Order') %>%
+  mutate(p = env_model$vectors$pvals) %>%
+  filter(p < 0.05) 
+
+nmds_plot + 
+  geom_segment(data = env_arrows, aes(xend = 0, yend = 0, x = NMDS1 / 5, y = NMDS2 / 5),
+               inherit.aes = FALSE) +
+  geom_text(data = filter(env_arrows, str_detect(Order, 'Rick')), aes(x = NMDS1 / 5, y = NMDS2 / 5, label = Order),
+            inherit.aes = FALSE)
 
 scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
