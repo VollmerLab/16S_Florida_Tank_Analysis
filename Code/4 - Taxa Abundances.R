@@ -456,7 +456,7 @@ asv_comp_upset <- asv_level_aov_graphs %>%
   select(-c(contains("df"), contains("chisq"), plot, data, model)) %>%
   full_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c(Kingdom, Phylum)) %>%
-  mutate(across(starts_with("p_"), ~p.adjust(.x, method = "fdr"))) 
+  mutate(across(starts_with("p_"), ~p.adjust(.x, method = "fdr")))
 
 p_vals_cu <- asv_comp_upset %>%
   select(c(asv_names, starts_with("p_"))) %>%
