@@ -3,11 +3,9 @@ setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis
 
 #TODO:
 #what happens to things without genus and in general #look at documentation
-#collapse ASVs and plot NAs as gray
 #of the things that we added, how did they change
 #mds plot
-#add T0 to alpha?
-#make pcoa type plot for alpha div
+#T0 alpha
 #complex upset
 
 #### Packages ####
@@ -391,6 +389,34 @@ for(c in 5:6) {
   }
 }
 
+#### PCoA Style Plot ####
+
+pcoa_like_plot <- timepoint_data %>%
+  pivot_longer(cols = observed:rarity_rare_abundance,
+               names_to = 'metric',
+               values_to = 'value') %>%
+  mutate(time = readr::parse_number(time)) %>%
+  nest_by(metric) %>%
+  mutate(model = list(lmer(value ~ (exposure + final_disease_state) * time + 
+                             (1 | fragment_id), data = data)))  %>%
+  rowwise %>%
+  mutate(time_terms = list(find_unique_significant_terms(model, 0.05))) %>%
+  mutate(pcoa_style_exposure = "") %>%
+  mutate(pcoa_style_disease = "")
+
+for(i in 1:nrow(pcoa_like_plot)){
+  if(grepl("exposure\\*time", pcoa_like_plot$time_terms[i])){
+    pcoa_like_plot$pcoa_style_exposure[i] = list(ggplot(data = pcoa_like_plot$data[[i]]) +
+      geom_line(aes(x = time, y = value, col = exposure, pch = fragment_id)) +
+      labs(title = paste(pcoa_like_plot$metric[i], "by exposure", sep = " ")))
+  }
+  if(grepl("final_disease_state\\*time", pcoa_like_plot$time_terms[i])){
+    pcoa_like_plot$pcoa_style_disease[i] = list(ggplot(data = pcoa_like_plot$data[[i]]) +
+      geom_line(aes(x = time, y = value, col = final_disease_state, pch = fragment_id)) +
+      labs(title = paste(pcoa_like_plot$metric[i], "by final disease state", sep = " ")))
+  }
+}
+
 #### Multiple Aggregation Levels ####
 #read in data
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
@@ -695,7 +721,7 @@ r_alpha_models <- reduced_alpha_table %>%
 
 
 
-#### Shannon Diversity ####
+### Shannon Diversity ###
 
 #how diverse the species in a given community are
 
@@ -747,7 +773,7 @@ emmeans(r_alpha_models$model[[1]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[1])
 
-#### DBP Dominance ####
+### DBP Dominance ###
 
 #relative abundance of most abundant species, 0-1 & bigger #s means more dominant
 
@@ -786,7 +812,7 @@ emmeans(r_alpha_models$model[[2]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[2])
 
-#### Gini Dominance ####
+### Gini Dominance ###
 
 #how unevenly abundances are distributed, 0-1 & perfect equality is 0
 
@@ -826,7 +852,7 @@ emmeans(r_alpha_models$model[[3]], ~(exposure + final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[3])
 
-#### Bulla Evenness ####
+### Bulla Evenness ###
 
 #evenness w/ equal weight to all species, sensitive to rare species
 
@@ -837,7 +863,7 @@ anova(r_alpha_models$model[[4]])
 
       #not worth plotting (plot showed nothing)
 
-#### Camargo's Evenness ####
+### Camargo's Evenness ###
 
 #proportions of indivs between sites, 0-1 & 1 is even, 0 is patchy
 
@@ -861,7 +887,7 @@ emmeans(r_alpha_models$model[[5]], ~(final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[5])
 
-#### Observed Species Richness ####
+### Observed Species Richness ###
 
 #number of species observed
 
@@ -884,7 +910,7 @@ emmeans(r_alpha_models$model[[6]], ~(final_disease_state) * time,
             position = position_dodge(0.5), vjust = -1) +
   ylab(r_alpha_models$metric[6])
 
-#### Rare Abundance ####
+### Rare Abundance ###
 
 #relative proportion of rare species(i.e. not most abundant in all sites), 0-1
 
@@ -1058,20 +1084,76 @@ ggplot(data = timepoint_data) +
   geom_smooth(method = "lm", se = TRUE)
 
 
-#### ####
 
+#### Melted Phyloseq ####
 
+simple_microbiome_og <- psmelt(microbiome_data) 
 
+  ### Rickettsias
+  
+simple_microbiome <- simple_microbiome_og %>%
+  #filter(time %in% c('T3', 'T7')) %>%
+  filter(final_disease_state %in% c('D', 'H')) %>%
+  mutate(time = readr::parse_number(time)) %>%
+  select(-retain_sample)
+  
+simple_microbiome <- simple_microbiome %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+  
+rick <- simple_microbiome %>%
+  filter(Order == "Rickettsiales")
 
+ggplot(data = rick) +
+  geom_line(aes(x = time, y = Abundance, col = OTU)) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none")
 
+#each line is an asv within an individual
+ave_rick <- rick %>%
+  group_by(fragment_id, OTU, time, final_disease_state) %>%
+  summarize(ave_abun = mean(Abundance)) %>%
+  ungroup %>%
+  filter(ave_abun > 0)
 
+ggplot(data = ave_rick) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU, pch = fragment_id), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none") #+
+  ylim(0, 1000)
 
+#each line is an ASV
+  asv_rick <- rick %>%
+    group_by(OTU, time, final_disease_state) %>%
+    summarize(ave_abun = mean(Abundance)) %>%
+    ungroup %>%
+    filter(ave_abun > 0)  
+  
+ggplot(data = asv_rick) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none") #+
+  ylim(0, 400)
+  
+  test <- asv_rick %>%
+    filter(ave_abun > 10000) #ASV_1 is the very abundant one
+  #ASV_1 is ... Rickettsiales Fokiniaceae MD3-55 <NA>
+  
+  ### all abundances
 
+  simple_microbiome_og
 
-
-
-
-
-
-
-
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
