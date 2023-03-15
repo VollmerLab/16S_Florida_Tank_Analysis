@@ -2,8 +2,7 @@
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #TODO:
-#what happens to things without genus and in general #look at documentation
-#of the things that we added, how did they change
+#what happens to things without genus and in general #Removes ambiguous levels from the tax table
 #mds plot
 #T0 alpha
 #complex upset
@@ -19,6 +18,7 @@ library(car)
 library(emmeans)
 library(multcomp)
 library(strex)
+library(forcats)
 library(tidyverse)
 
 #### Functions ####
@@ -698,6 +698,189 @@ sig_metrics_final_T0 <- left_join(significant_metrics_all_aggs_T0, all_aggs_plot
 
 
 
+#### Melted Phyloseq ####
+
+simple_microbiome_og <- psmelt(microbiome_data) %>%
+  mutate(time = readr::parse_number(time)) %>%
+  select(-retain_sample)
+
+simple_microbiome <- simple_microbiome_og %>%
+  #filter(time %in% c('T3', 'T7')) %>%
+  filter(final_disease_state %in% c('D', 'H')) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+
+### Rickettsias
+
+rick <- simple_microbiome %>%
+  filter(Order == "Rickettsiales")
+
+ggplot(data = rick) +
+  geom_line(aes(x = time, y = Abundance, col = OTU)) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none")
+
+#each line is an asv within an individual
+ave_rick <- rick %>%
+  group_by(fragment_id, OTU, time, final_disease_state) %>%
+  summarize(ave_abun = mean(Abundance)) %>%
+  ungroup %>%
+  filter(ave_abun > 0)
+
+ggplot(data = ave_rick) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU, pch = fragment_id), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none") #+
+ylim(0, 1000)
+
+#each line is an ASV
+asv_rick <- rick %>%
+  group_by(OTU, time, final_disease_state) %>%
+  summarize(ave_abun = mean(Abundance)) %>%
+  ungroup %>%
+  filter(ave_abun > 0)  
+
+ggplot(data = asv_rick) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none") #+
+ylim(0, 400)
+
+test <- asv_rick %>%
+  filter(ave_abun > 10000) #ASV_1 is the very abundant one
+#ASV_1 is ... Rickettsiales Fokiniaceae MD3-55 <NA>
+
+### all abundances
+
+homogenates <- simple_microbiome_og %>% 
+  filter(tank == "HOMO") %>%
+  select(-disease_state)
+
+#selecting ASVs by value
+
+asv_homog <- homogenates %>%
+  group_by(OTU, final_disease_state) %>%
+  summarize(ave_abundance = mean(Abundance)) %>%
+  ungroup %>%
+  filter(ave_abundance > 0) %>%
+  group_by(final_disease_state) %>%
+  arrange((ave_abundance))
+
+ggplot(asv_homog) +
+  geom_col(aes(x = fct_reorder(OTU, ave_abundance), y = ave_abundance, 
+               fill = final_disease_state), position = "dodge") +
+  coord_flip()
+
+#selecting ASVs by rank
+top_homog_asvs <- asv_homog %>%
+  arrange(desc(ave_abundance)) %>%
+  group_by(final_disease_state) %>%
+  slice(1:10) %>% #keep only n most abundant ASVs for healthy and diseased
+  ungroup()
+
+ggplot(top_homog_asvs) +
+  geom_col(aes(x = fct_reorder(OTU, ave_abundance), y = ave_abundance, 
+               fill = final_disease_state), position = "dodge") +
+  coord_flip()
+
+top_homog_list <- unique(dplyr::pull(top_homog_asvs, OTU))
+
+### examine those ASVs in all the data
+
+what_changed <- simple_microbiome %>%
+  filter(tank != "HOMO") %>%
+  filter(time %in% c('3', '7')) %>%
+  filter(OTU %in% top_homog_list) 
+
+#each line is an asv
+what_changed_asv <- what_changed %>%
+  group_by(OTU, time, final_disease_state) %>%
+  summarize(ave_abun = mean(Abundance)) %>%
+  ungroup %>%
+  filter(ave_abun > 0)  
+
+ggplot(data = what_changed_asv) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) #+
+theme(legend.position = "none") #+
+ylim(0, 400)
+
+#each line is an asv in a fragment
+what_changed_indiv <- what_changed %>%
+  group_by(fragment_id, OTU, time, final_disease_state) %>%
+  summarize(ave_abun = mean(Abundance)) %>% #this isn't doing anything
+  ungroup %>%
+  filter(ave_abun > 0)
+
+ggplot(data = what_changed_indiv) +
+  geom_line(aes(x = time, y = ave_abun, col = OTU, pch = fragment_id), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none") #+
+ylim(0, 1000)
+
+
+### ANOVA    
+
+##without time
+what_changed_aov <- lmer(Abundance ~ final_disease_state*OTU + (1 | fragment_id), 
+                         data = what_changed)
+anova(what_changed_aov) #interaction is p val of 3.937e-06
+
+
+emmeans(what_changed_aov, ~final_disease_state*OTU, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = OTU, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
+#warning: D.f. calculations are disabled bc more than 3000 observations
+
+##with time
+what_changed_aov1 <- lmer(Abundance ~ time*final_disease_state*OTU + (1 | fragment_id), 
+                          data = what_changed)
+anova(what_changed_aov1) #interaction is p val of 0.004750
+
+
+emmeans(what_changed_aov1, ~time*final_disease_state*OTU, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = OTU, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = time, pch = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
+
+##Results:
+
+#sig diff between disease states within OTU
+#ASV 1 - Rickettsiales Fokiniaceae MD3-55 NA
+    #both decreased dramatically, H always higher than D, sig diff between D and H at T7 but not T3
+#ASV 3 - Enterobacterales Colwelliaceae Thalassotalea NA  !!!!! (cool)
+    #T7 D is sig diff from all else! both increased over time, H a little (not sig) and D a lot (sig)
+#ASV 7* - Rhodobacterales Rhodobacteraceae Thalassobius NA
+    #both increased over time, diseased more, nothing significant
+#ASV 2* - Spirochaetales Spirochaetaceae Spirochaeta 2 NA
+    #D and H decreased T3 to T7 but only H decreased significantly
+# *honorable mentions
+
+##Info about Enterobacterales Colwelliaceae Thalassotalea NA
+  # aerobic and chemo-organo-heterotrophic genus of bacteria from the family Colwelliaceae 
+    #which occur in the ocean and in sea ice
+  #Thalassomonas loyana can cause white plague disease in the coral Favia favus
+    #^shown to cause "a white-plague like disease reported from the Red Sea in 2005"
+
+
 #### Selected Metrics ####
 
 #richness - observed; dominance - dbp, gini; rarity - rare abundance
@@ -1085,75 +1268,11 @@ ggplot(data = timepoint_data) +
 
 
 
-#### Melted Phyloseq ####
 
-simple_microbiome_og <- psmelt(microbiome_data) 
-
-  ### Rickettsias
-  
-simple_microbiome <- simple_microbiome_og %>%
-  #filter(time %in% c('T3', 'T7')) %>%
-  filter(final_disease_state %in% c('D', 'H')) %>%
-  mutate(time = readr::parse_number(time)) %>%
-  select(-retain_sample)
-  
-simple_microbiome <- simple_microbiome %>%
-  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
-  
-rick <- simple_microbiome %>%
-  filter(Order == "Rickettsiales")
-
-ggplot(data = rick) +
-  geom_line(aes(x = time, y = Abundance, col = OTU)) +
-  facet_wrap(~final_disease_state) +
-  theme(legend.position = "none")
-
-#each line is an asv within an individual
-ave_rick <- rick %>%
-  group_by(fragment_id, OTU, time, final_disease_state) %>%
-  summarize(ave_abun = mean(Abundance)) %>%
-  ungroup %>%
-  filter(ave_abun > 0)
-
-ggplot(data = ave_rick) +
-  geom_line(aes(x = time, y = ave_abun, col = OTU, pch = fragment_id), alpha = 0.5) +
-  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
-  facet_wrap(~final_disease_state) +
-  theme(legend.position = "none") #+
-  ylim(0, 1000)
-
-#each line is an ASV
-  asv_rick <- rick %>%
-    group_by(OTU, time, final_disease_state) %>%
-    summarize(ave_abun = mean(Abundance)) %>%
-    ungroup %>%
-    filter(ave_abun > 0)  
-  
-ggplot(data = asv_rick) +
-  geom_line(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
-  geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
-  facet_wrap(~final_disease_state) +
-  theme(legend.position = "none") #+
-  ylim(0, 400)
-  
-  test <- asv_rick %>%
-    filter(ave_abun > 10000) #ASV_1 is the very abundant one
-  #ASV_1 is ... Rickettsiales Fokiniaceae MD3-55 <NA>
-  
-  ### all abundances
-
-  simple_microbiome_og
-
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+    
+    
+    
+    
+    
+    
   
