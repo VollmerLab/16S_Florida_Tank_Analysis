@@ -320,7 +320,7 @@ taxonomy_tibble <- tax_table(microbiome_data) %>%
   as.data.frame %>%
   as_tibble(rownames = "asv_names")
 
-
+#unnecessary:
 mutate(asv_names = dimnames(cpm(otu_tmm, log = TRUE, prior.count = 2))[[1]]) %>%
   as_tibble(rownames = "asv_names") 
   
@@ -347,7 +347,107 @@ taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   nest_by(taxon)
 
 
+#### What Changed ####
 
+#to get this, read in the data w/o filtering for T3 and T7
+all_timepoints <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state), factor)) %>%
+  mutate(time = readr::parse_number(time)) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names))
+
+homog_frags_asv <- all_timepoints %>%
+  filter(tank == "homogenate_fragment")
+
+homog_asv <- all_timepoints %>%
+  filter(tank == "HOMO") %>%
+  select(-disease_state) %>%
+  group_by(asv_names, final_disease_state) %>%
+  summarize(ave_abundance = mean(value)) %>%
+  ungroup %>%
+  group_by(final_disease_state) %>%
+  arrange((ave_abundance))
+
+field_frags_asv <- all_timepoints %>%
+  filter(exposure == "Field")
+
+clean_asv_data <- all_timepoints %>%
+  filter(!tank %in% c("homogenate_fragment", "HOMO")) %>%
+  filter(exposure != "Field")
+
+
+top_homog_asv <- homog_asv %>%
+  arrange(desc(ave_abundance)) %>%
+  group_by(final_disease_state) %>%
+  #filter(ave_abundance > 7.05) %>%
+  slice(1:20) %>% #keep only n most abundant ASVs for healthy and diseased
+  ungroup()
+
+top_homog_list <- unique(dplyr::pull(top_homog_asv, asv_names))
+
+ggplot(top_homog_asv) +
+  geom_col(aes(x = fct_reorder(asv_names, ave_abundance), y = ave_abundance, 
+               fill = final_disease_state), position = "dodge") +
+  coord_flip()
+
+
+homog_asv_changes <- clean_asv_data %>%
+  filter(asv_names %in% top_homog_list) 
+
+ave_homog_changes <- homog_asv_changes %>%
+  group_by(asv_names, time, final_disease_state) %>%
+  summarize(ave_abun = mean(value)) %>%
+  ungroup()
+
+ggplot(data = ave_homog_changes) +
+  geom_line(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none")
+
+
+homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
+                          data = homog_asv_changes)
+anova(homog_changes_aov)
+
+emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'link') %>%
+  contrast('pairwise', adjust = "fdr")
+
+emmeans(homog_changes_aov, ~final_disease_state * time | asv_names, type = 'link') %>%
+  contrast('pairwise', adjust = "fdr")
+
+tidy(anova(aov(y ~ x)))
+tidy(t.test(y ~ x)) #apply the t test to the homogenates and THEN look at those ASVs
+
+emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response') 
+
+emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'response')%>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
+
+emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = time, pch = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
 
 
 #### Comparing Models ####
@@ -376,8 +476,8 @@ bind_rows(
   rm = as_tibble(emmeans(rm_mod, ~time:final_disease_state, type = 'response')),
   .id = 'model'
 ) %>%
-  ggplot(aes(x = interaction(time, final_disease_state), y = emmean, ymin = lower.CL, ymax = upper.CL, 
-             colour = model)) +
+  ggplot(aes(x = interaction(time, final_disease_state), y = emmean, ymin = lower.CL, 
+             ymax = upper.CL, colour = model)) +
   geom_pointrange(position = position_dodge(0.5))
   
   
@@ -421,7 +521,7 @@ aov_and_graphs <- all_models %>%
   mutate(possibly(make_lmer_aov_summary, otherwise = NULL)(model)) %>%
   ungroup
 
-#### Rickettsias ####
+#### Rickettsias - less good attempt ####
 
 asv_level_aov_graphs <- all_models %>%
   ungroup %>%

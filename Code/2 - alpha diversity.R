@@ -698,7 +698,8 @@ sig_metrics_final_T0 <- left_join(significant_metrics_all_aggs_T0, all_aggs_plot
 
 
 
-#### Melted Phyloseq ####
+#### Melted Phyloseq - not TMMed, unusable ####
+psmelt(otu_tmm)
 
 simple_microbiome_og <- psmelt(microbiome_data) %>%
   mutate(time = readr::parse_number(time)) %>%
@@ -744,7 +745,7 @@ ggplot(data = asv_rick) +
   geom_line(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
   geom_point(aes(x = time, y = ave_abun, col = OTU), alpha = 0.5) +
   facet_wrap(~final_disease_state) +
-  theme(legend.position = "none") #+
+  theme(legend.position = "none") +
 ylim(0, 400)
 
 test <- asv_rick %>%
