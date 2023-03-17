@@ -254,8 +254,6 @@ emmeans(count_model_nb, ~final_disease_state * time, type = 'response') %>%
 #### Analyzing Alpha Table ####
 
 #all diversity metrics in table
-select(alpha_table, sample_id, observed, any_of(colnames(metadata)))
-
 all_metrics_tp <- timepoint_data %>%
   pivot_longer(cols = observed:rarity_rare_abundance,
                names_to = 'metric',

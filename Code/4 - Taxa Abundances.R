@@ -209,6 +209,16 @@ plot_agg_pcoa <- function(cpm_counts){
     theme_classic()
   
 }
+
+get_tidy_p_values <- function(model){
+  #for tidy(anova(aov(model))), extract the p-values only
+  p_vals <- model %>% 
+    dplyr::select(p.value) %>%
+    filter(!is.na(p.value)) %>%
+    pull()
+  
+  return(p_vals)
+}
 #### Patchwork PCoA Plot for ASVs, Genus, Family ####
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -296,6 +306,7 @@ cpm(otu_tmm, log = TRUE, prior.count = 2) %>% #prior.count is # to add to each v
   rowMeans %>%
   quantile(0.05) 
 
+
 cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   rowMeans %>% #get ave value for each group in aggregation level (ex: family)
   tibble(x = .) %>% #remove labels, only keep ave values
@@ -320,11 +331,6 @@ taxonomy_tibble <- tax_table(microbiome_data) %>%
   as.data.frame %>%
   as_tibble(rownames = "asv_names")
 
-#unnecessary:
-mutate(asv_names = dimnames(cpm(otu_tmm, log = TRUE, prior.count = 2))[[1]]) %>%
-  as_tibble(rownames = "asv_names") 
-  
-  
 #nesting by ASV
 taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
@@ -348,8 +354,8 @@ taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
 
 
 #### What Changed ####
-
 #to get this, read in the data w/o filtering for T3 and T7
+
 all_timepoints <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
@@ -365,12 +371,7 @@ homog_frags_asv <- all_timepoints %>%
 
 homog_asv <- all_timepoints %>%
   filter(tank == "HOMO") %>%
-  select(-disease_state) %>%
-  group_by(asv_names, final_disease_state) %>%
-  summarize(ave_abundance = mean(value)) %>%
-  ungroup %>%
-  group_by(final_disease_state) %>%
-  arrange((ave_abundance))
+  select(-disease_state)
 
 field_frags_asv <- all_timepoints %>%
   filter(exposure == "Field")
@@ -379,7 +380,93 @@ clean_asv_data <- all_timepoints %>%
   filter(!tank %in% c("homogenate_fragment", "HOMO")) %>%
   filter(exposure != "Field")
 
+#selecting significant ASVs
 
+#get p values comparing D to H in homogenate to determine interesting ASVs
+sig_homog_asv1 <- homog_asv %>% 
+  nest_by(asv_names) %>%
+  mutate(model = list(generics::tidy(anova(aov(value~final_disease_state, data = data))))) %>%
+  rowwise %>%
+  mutate(p_disease_state = get_tidy_p_values(model))
+
+sig_homog_asv1_1 <- sig_homog_asv1 %>% #109 asvs
+  filter(p_disease_state < 0.05)
+
+list_of_asvs <- sig_homog_asv1_1$asv_names
+
+#examine those ASVs in the T3-T7 data and keep ASVs w a significant interaction time*final_disease
+homog_asv_changes <- clean_asv_data %>%
+  filter(asv_names %in% list_of_asvs) %>%
+  nest_by(asv_names) %>%
+  mutate(model = list(generics::tidy(anova(lmer(value ~ time*final_disease_state - time 
+                                                - final_disease_state+ (1 | fragment_id), 
+                           data = data))))) %>%
+  mutate(p_interaction = get_tidy_p_values(model)) %>%
+  filter(p_interaction < 0.05)
+
+sig_interaction_asvs <- homog_asv_changes$asv_names
+
+#time series ASVs w sig interaction:
+interaction_asv_changes <- clean_asv_data %>%
+  filter(asv_names %in% sig_interaction_asvs)
+
+#aov model for time series ASVs w sig interaction
+homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
+                          data = interaction_asv_changes)
+anova(homog_changes_aov)
+
+emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'response')%>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = time, pch = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
+
+# T7 values D > H
+
+more_diseased <- interaction_asv_changes %>%
+  filter(time == 7) #%>%
+  #pivot_wider(names_from = final_disease_state, values_from = value) 
+
+#TODO keep working on pivot
+  
+
+
+ave_homog_changes <- homog_asv_changes %>%
+  group_by(asv_names, time, final_disease_state) %>%
+  summarize(ave_abun = mean(value)) %>%
+  ungroup()
+
+ggplot(data = ave_homog_changes) +
+  geom_line(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
+  geom_point(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
+  facet_wrap(~final_disease_state) +
+  theme(legend.position = "none")
+
+homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
+                          data = homog_asv_changes)
+
+anova(homog_changes_aov)
+
+emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response')%>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = time, pch = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  coord_flip()
+
+
+#old method
 top_homog_asv <- homog_asv %>%
   arrange(desc(ave_abundance)) %>%
   group_by(final_disease_state) %>%
