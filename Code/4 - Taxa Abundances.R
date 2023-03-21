@@ -415,6 +415,8 @@ homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | frag
                           data = interaction_asv_changes)
 anova(homog_changes_aov)
 
+#random effect of higher taxonomy types
+
 emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'response')%>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%

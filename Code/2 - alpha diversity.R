@@ -1150,6 +1150,24 @@ emmeans(r_alpha_models$model[[7]], ~(exposure + final_disease_state) * time,
 #### Alpha Diversity Index Notes ####
 
 #richness 
+all_metrics_tp %>%
+  filter(metric == 'chao1') %>%
+  select(data) %>%
+  unnest(data) %>%
+  
+  left_join(otu_table(microbiome_data) %>%
+              rowSums() %>%
+              enframe(name = 'sample_id',
+                      'n_reads'),
+            by = 'sample_id') %>%
+  filter(n_reads > 10^(3.5)) %>%
+  
+  ggplot(aes(x = n_reads, y = value, 
+             colour = exposure, shape = time)) +
+  geom_point() +
+  geom_smooth(method = 'lm')
+
+
 
 #observed is observed species richness
 #chao1 is nonparametric method for estimating the number of species in a community, 
