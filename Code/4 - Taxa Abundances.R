@@ -205,7 +205,7 @@ plot_agg_pcoa <- function(cpm_counts){
     geom_path() +
     labs(x = str_c('PCoA 1 (', scales::percent(percent_variance[1]), ')'),
          y = str_c('PCoA 2 (', scales::percent(percent_variance[2]), ')'),
-         title = aggregation_level) +
+         title = agg_title) +
     theme_classic()
   
 }
@@ -224,7 +224,7 @@ microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %
   subset_samples(time %in% c('T3', 'T7'))
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
-  select(-retain_sample) %>%
+  dplyr::select(-retain_sample) %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
          .after = sample_id)
 
@@ -236,8 +236,10 @@ for(i in 1:length(agg_levels)){
   if(aggregation_level != 'none'){
     microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
     taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+    agg_title <-  aggregation_level
   } else {
     taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+    agg_title <-  "ASV"
   }
   
   if(i == 1){
@@ -272,7 +274,7 @@ plota + plotb + plotc
 
 #### Read in Data ####
 
-aggregation_level <- 'none' #or none
+aggregation_level <- 'Family' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -295,7 +297,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -766,3 +768,55 @@ rick_data %>%
          (1 | genotype) + (1 | tank),
        data = .) %>%
   summary()
+
+#### Abundant Families ####
+
+taxonomy_tibble1 <- tax_table(microbiome_data) %>% 
+  as.data.frame %>%
+  as_tibble(rownames = "family_names")
+
+abundance_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "family_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  select(-c(sample_id, tank, genotype, disease_state)) %>%
+  inner_join(taxonomy_tibble1, by = join_by(family_names)) %>%
+  mutate(graph_category = paste(time, final_disease_state, sep = "_"))
+
+abundance_data$graph_category <- factor(abundance_data$graph_category, levels = c("T3_H", "T7_H", "T3_D", "T7_D"))
+  
+
+abundance_data_summed <- abundance_data %>%
+  group_by(graph_category, family_names) %>%
+  summarize(abundance = sum(value)) %>%
+  ungroup()
+
+ranks <- abundance_data_summed %>%
+  arrange(desc(abundance)) %>%
+  group_by(graph_category) %>%
+  slice(1:26)
+
+ggplot(ranks, aes(graph_category, abundance, fill = family_names, label = family_names)) +
+  geom_col(position = "fill") +
+  geom_text(size = 3, position = position_fill(vjust = 0.5)) +
+  theme_bw() +
+  theme(legend.position = "none")
+  
+
+top20 <- unique(ranks$family_names)
+
+abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top20, abundance_data_summed$family_names, "Other")
+
+ggplot(abundance_data_summed) +
+  geom_col(aes(graph_category, abundance, fill = family_names))
+  
+
+
+
+
+
+
+

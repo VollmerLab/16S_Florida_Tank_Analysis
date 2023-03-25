@@ -1,4 +1,83 @@
+#data to analyze differential abundances of disease-associated bacteria
+
+setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+
+#### Packages ####
 library(ggvenn)
+library(multcomp)
+library(phyloseq)
+library(microbiome)
+library(vegan)
+library(lme4)
+library(afex)
+library(emmeans)
+library(car)
+library(edgeR)
+library(metagMisc)
+library(ape)
+library(ggdist)
+library(gghalves)
+library(patchwork)
+library(magrittr)
+library(ComplexUpset)
+library(strex)
+library(forcats)
+library(tidyverse)
+
+#### Read in Data ####
+
+#convert phyloseq data to tibble (metadata + abundance + taxonomy)
+aggregation_level <- 'none' #or none
+
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
+metadata <- sample_data(microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  select(-retain_sample)
+
+if(aggregation_level != 'none'){
+  microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
+  taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+} else {
+  taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+}
+
+the_samples <- psmelt(microbiome_data) %>%
+  as_tibble() %>%
+  filter(Abundance > 0) %>%
+  left_join(otu_table(microbiome_data) %>% #add column for # of reads
+              rowSums() %>%
+              enframe(name = 'sample_id',
+                      'n_reads'),
+            by = c('Sample' = 'sample_id'))
+
+
+alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
+  as_tibble(rownames = 'sample_id') %>%
+  inner_join(metadata, by = 'sample_id') %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+
+#otu_tmm
+otu_tmm <- microbiome_data %>%
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  otu_table() %>% 
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  as.data.frame %>%
+  as.matrix %>% 
+  DGEList(remove.zeros = TRUE) %>%
+  edgeR::calcNormFactors(method = 'TMMwsp')
+
+#set up raw microbiome data
+raw_target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state), factor)) %>%
+  filter(time %in% c('T3', 'T7')) %>%
+  mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state))
+
+#### Analysis of Species Richness ####
 
 #setting up data frame including observed richness and # of reads
 richness_data <- left_join(select(alpha_table, sample_id, observed),
@@ -33,17 +112,6 @@ richness_data %>%
 
 #T3 has lowest richness but highest # of reads - strange
 
-
-#convert phyloseq data to tibble (metadata + abundance + taxonomy)
-the_samples <- psmelt(microbiome_data) %>%
-  as_tibble() %>%
-  filter(Abundance > 0) %>%
-  left_join(otu_table(microbiome_data) %>% #add column for # of reads
-              rowSums() %>%
-              enframe(name = 'sample_id',
-                      'n_reads'),
-            by = c('Sample' = 'sample_id'))
-
 #filter for # of reads and remove acerv fragments that got homogenized
 the_samples %>%
   filter(n_reads > 10000) %>%
@@ -72,7 +140,7 @@ the_samples %>%
   geom_boxplot() +
   geom_jitter()
   
-### Things in healthy/disease/field pool 
+#### Differential Abundance Analysis ####
 
 #abundances of each species in T0 pools(D or H) and field
 the_samples %>%
@@ -97,6 +165,10 @@ the_samples %>%
   mutate(across(-OTU, ~. > 0)) %>%
   ggvenn(c('D', 'H', 'T3', 'T7'))
 
+taxonomy_tibble <- tax_table(microbiome_data) %>% 
+  as.data.frame %>%
+  as_tibble(rownames = "asv_names")
+
 #same set up as venn but added in taxonomy table and saved to variable
 target_upset_otus <- the_samples %>%
   # filter(n_reads > 10000) %>%
@@ -112,66 +184,7 @@ target_upset_otus <- the_samples %>%
   left_join(taxonomy_tibble, by = c('OTU' = 'asv_names')) %>%
   select(-c(Kingdom, Phylum)) 
 
-
-target_upset_otus %>%
-  filter(T3 & T7)
-
-#make complex upset plot of likely suspects for primary pathogen and opportunistic pathogen
-upset(filter(target_upset_otus,
-             # T3 & T7,
-             (D & T7 & T3)), 
-      c('D', 'H', 'T3', 'T7'), 
-      annotations = list(
-        # 2nd method - using ggplot
-        'Order'=(
-          ggplot(mapping=aes(fill=Order)) 
-          + geom_bar(stat = 'count', position = 'fill') 
-          + scale_y_continuous(labels = scales::percent_format())
-        ) +
-          ylab('Order') +
-          theme(legend.position = 'top')
-      ),
-      name='asv_names', width_ratio=0.1, min_size = 1)
-
-
-#likely suspects
-target_otus <- filter(target_upset_otus,
-                      # T3 & T7,
-                      (D & T7 & T3))
-
-
-target_otus %>%
-  count(Order, Family) %>%
-  arrange(-n)
-
-#set up raw microbiome data
-raw_target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
-  t %>%
-  as_tibble(rownames = "sample_id") %>%
-  full_join(metadata, by = "sample_id") %>%
-  pivot_longer(cols = -any_of(colnames(metadata)), 
-               names_to = "asv_names", values_to = "value") %>%
-  mutate(across(c(exposure, final_disease_state), factor)) %>%
-  filter(time %in% c('T3', 'T7')) %>%
-  mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state))
-  
-#only keep ASVs in list of likely suspects and plot
-raw_target_data %>%
-  inner_join(target_otus,
-            by = c('asv_names' = 'OTU')) %>%
-  filter(time == 'T7') %>%
-  group_by(sample_id, final_disease_state, Order, Genus) %>%
-  filter(!is.na(Genus)) %>%
-  summarise(value = sum(value)) %>%
-  ungroup %>%
-  #dot plot
-  ggplot(aes(y = Genus, x = sample_id, size = value, colour = Order)) + 
-  geom_point() +
-  
-  # ggplot(aes(x = sample_id, y = value, fill = Order)) +
-  # geom_col() +
-  facet_wrap(~final_disease_state, scales = 'free_x') +
-  theme(axis.text.x = element_blank())
+#### All Bacteria ####
 
 #make repeated measures model for all asvs
 all_models <- raw_target_data %>%
@@ -180,15 +193,6 @@ all_models <- raw_target_data %>%
   slice(-971) %>% 
   rowwise(asv_names) %>%
   summarise(model = list(aov_4(value ~ time * (exposure + final_disease_state) + 
-                        (time | fragment_id),
-                      data = data)))
-
-#make repeated measures model for likely suspects
-subset_models <- raw_target_data %>%
-  inner_join(target_otus,
-             by = c('asv_names' = 'OTU')) %>%
-  nest_by(asv_names) %>%
-  mutate(model = list(aov_4(value ~ time * (exposure + final_disease_state) + 
                                  (time | fragment_id),
                                data = data)))
 
@@ -208,6 +212,57 @@ asv_comp_upset_all <- all_models %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c(Kingdom, Phylum)) %>%
   filter(!if_all(starts_with('p_'), ~!.)) #remove ASVs where all p vals are not significant
+
+
+#complex upset for all ASVs by interaction type
+all_upset <- upset(asv_comp_upset_all, 
+                   colnames(select(asv_comp_upset_all, starts_with('p_'))), 
+                   
+                   annotations = list(
+                     # 2nd method - using ggplot
+                     'Order'=(
+                       ggplot(mapping=aes(fill=Order)) 
+                       + geom_bar(stat = 'count', position = 'fill') 
+                       + scale_y_continuous(labels = scales::percent_format())
+                     ) +
+                       ylab('Order') +
+                       theme(legend.position = 'top')
+                   ),
+                   
+                   name='asv_names', width_ratio=0.1, min_size = 1)
+
+
+
+#### Likely Suspects ####
+
+#likely suspects
+target_otus <- filter(target_upset_otus,
+                      (D & T7 & T3))
+
+#make complex upset plot of likely suspects for primary pathogen and opportunistic pathogen
+upset(filter(target_upset_otus,
+             (D & T7 & T3)), 
+      c('D', 'H', 'T3', 'T7'), 
+      annotations = list(
+        # 2nd method - using ggplot
+        'Order'=(
+          ggplot(mapping=aes(fill=Order)) 
+          + geom_bar(stat = 'count', position = 'fill') 
+          + scale_y_continuous(labels = scales::percent_format())
+        ) +
+          ylab('Order') +
+          theme(legend.position = 'top')
+      ),
+      name='asv_names', width_ratio=0.1, min_size = 1)
+
+#make repeated measures model for likely suspects
+subset_models <- raw_target_data %>%
+  inner_join(target_otus,
+             by = c('asv_names' = 'OTU')) %>%
+  nest_by(asv_names) %>%
+  mutate(model = list(aov_4(value ~ time * (exposure + final_disease_state) + 
+                              (time | fragment_id),
+                            data = data)))
 
 #process data for performing complex upset - likely suspects
 asv_comp_upset_subset <- subset_models %>%
@@ -234,40 +289,23 @@ asv_comp_upset_subset <- subset_models %>%
   filter(!if_all(starts_with('p_'), ~!.)) %>%
   filter(p_final_disease_state | `p_final_disease_state:time`) #must have significant disease state term
 
-#complex upset for all ASVs
-all_upset <- upset(asv_comp_upset_all, 
-      colnames(select(asv_comp_upset_all, starts_with('p_'))), 
-      
-      annotations = list(
-        # 2nd method - using ggplot
-        'Order'=(
-          ggplot(mapping=aes(fill=Order)) 
-          + geom_bar(stat = 'count', position = 'fill') 
-          + scale_y_continuous(labels = scales::percent_format())
-        ) +
-          ylab('Order') +
-          theme(legend.position = 'top')
-      ),
-      
-      name='asv_names', width_ratio=0.1, min_size = 1)
-
 #complex upset for likely suspect ASVs that are more abundant in Diseased (not necessarily significantly)
 subset_upset_moreDisease <- upset(filter(asv_comp_upset_subset, d_v_h < 0) %>%
-                        select(-d_v_h),  #negative = more in disease final state, positive = more in healthy disease state
-      colnames(select(asv_comp_upset_subset, starts_with('p_'))), 
-      
-      annotations = list(
-        # 2nd method - using ggplot
-        'Genus'=(
-          ggplot(mapping=aes(fill=Genus)) 
-          + geom_bar(stat = 'count', position = 'fill') 
-          + scale_y_continuous(labels = scales::percent_format())
-        ) +
-          ylab('Order') +
-          theme(legend.position = 'top')
-      ),
-      
-      name='asv_names', width_ratio=0.1, min_size = 1)
+                                    select(-d_v_h),  #negative = more in disease final state, positive = more in healthy disease state
+                                  colnames(select(asv_comp_upset_subset, starts_with('p_'))), 
+                                  
+                                  annotations = list(
+                                    # 2nd method - using ggplot
+                                    'Genus'=(
+                                      ggplot(mapping=aes(fill=Genus)) 
+                                      + geom_bar(stat = 'count', position = 'fill') 
+                                      + scale_y_continuous(labels = scales::percent_format())
+                                    ) +
+                                      ylab('Order') +
+                                      theme(legend.position = 'top')
+                                  ),
+                                  
+                                  name='asv_names', width_ratio=0.1, min_size = 1)
 
 #complex upset for likely suspect ASVs that are more abundant in Healthy (not necessarily significantly)
 subset_upset_moreHealthy <- upset(filter(asv_comp_upset_subset, d_v_h >0) %>%
@@ -300,6 +338,91 @@ asv_comp_upset_subset %>%
   filter(!is.na(Genus)) %>%
   distinct
 
+### my analysis
+
+subset_models
+
+vl_suspects_list <- filter(asv_comp_upset_subset, d_v_h >0)$asv_names
+
+v_likely_suspects <- raw_target_data %>%
+  filter(asv_names %in% vl_suspects_list)
+
+vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | fragment_id), 
+                         data = v_likely_suspects)
+anova(vl_suspects_aov)
+
+emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects")
+
+#more in disease
+more_disease <- filter(asv_comp_upset_subset, d_v_h < 0)$asv_names
+
+v_likely_suspects_md <- v_likely_suspects %>%
+  filter(asv_names %in% more_disease)
+
+
+#TODO these don't match up at all but they should - something strange is happening
+
+vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | fragment_id), 
+                        data = v_likely_suspects)
+anova(vl_suspects_aov)
+
+emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects")
+
+
+
+
+#
+vl_suspects_aov <- aov_4(value ~ time * (exposure + final_disease_state) + 
+        (time | fragment_id), data = v_likely_suspects)
+
+
+#buffer
+#### Misc. Plots ####
+
+#only keep ASVs in list of likely suspects and plot
+raw_target_data %>%
+  inner_join(target_otus,
+            by = c('asv_names' = 'OTU')) %>%
+  filter(time == 'T7') %>%
+  group_by(sample_id, final_disease_state, Order, Genus) %>%
+  filter(!is.na(Genus)) %>%
+  summarise(value = sum(value)) %>%
+  ungroup %>%
+  #dot plot
+  #ggplot(aes(y = Genus, x = sample_id, size = value, colour = Order)) + 
+  #geom_point() +
+  
+   ggplot(aes(x = sample_id, y = value, fill = Order)) +
+   geom_col() +
+  facet_wrap(~final_disease_state, scales = 'free_x') +
+  theme(axis.text.x = element_blank())
+
 #dot plot that wasn't very helpful
 raw_target_data %>%
   inner_join(target_otus,
@@ -326,7 +449,7 @@ raw_target_data %>%
   theme(axis.text.x = element_blank())
 
 
-#genera that are more abundant in diseased in likely suspects list by final disease state, exposure, and time
+#WIP genera that are more abundant in diseased in likely suspects list by final disease state, exposure, and time
 raw_target_data %>% 
   left_join(tax_table(microbiome_data) %>%
               as.data.frame() %>%
@@ -350,3 +473,5 @@ raw_target_data %>%
                   position = position_dodge(0.5)) +
   facet_wrap(~Genus, scales = 'free_y')
   
+
+

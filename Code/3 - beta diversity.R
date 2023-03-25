@@ -26,7 +26,7 @@ aggregation_level <- 'none' #or none
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
-  select(-retain_sample)
+  dplyr::select(-retain_sample)
 
 if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
@@ -58,13 +58,12 @@ nmds_plot <- scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
-  ggplot(aes(x = NMDS1, y = NMDS2, colour = exposure, shape = time)) +
+  ggplot(aes(x = NMDS1, y = NMDS2, colour = final_disease_state, shape = time)) +
   geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
-             colour = 'gray50', size = 0.1, shape = 'circle') +
+             colour = 'gray60', size = 0.1, shape = 'circle') +
   
   geom_point() +
   theme_classic()
-
 
 env_dat <- t(mb_data) %>%
   as.data.frame %>%

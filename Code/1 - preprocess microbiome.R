@@ -16,6 +16,9 @@ microbiome_raw <- read_rds('../Data/ps_fl_tank.rds') %>%
                 Class != "Chloroplast" & 
                 Order != "Chloroplast")
 
+#filter for at least 1000 reads
+microbiome_raw <- prune_samples(sample_sums(microbiome_raw)>=1000, microbiome_raw)
+
 #### Process Data ####
 #Split into repeated measures portion and input portion
 homogenate_samples <- sample_data(microbiome_raw) %>%
@@ -47,9 +50,6 @@ processed_microbiome <- microbiome_raw
 sample_data(processed_microbiome) <- bind_rows(homogenate_samples, exposure_samples) %>%
   column_to_rownames('sample_id')
 processed_microbiome <- subset_samples(processed_microbiome, retain_sample)
-
-#filter for at least 1000 reads
-processed_microbiome <- prune_samples(sample_sums(processed_microbiome)>=1000, processed_microbiome)
 
 #### Output preprocessed microbiome as rds ####
 write_rds(processed_microbiome, '../intermediate_files/preprocess_microbiome.rds')
