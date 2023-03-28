@@ -1,9 +1,9 @@
 # 16S_Florida_Tank_Analysis
 
-##### Time Points 3 and 7
+### Time Points 3 and 7
 ![plot](./Figures/Top_26_Abundant_Families.png)
 
-##### Baits
+### Baits
 ![plot](./Figures/Baits_Most_Abundant_Families.png)
 
 ![plot](./Figures/Baits_Most_Abundant_Species.png)
@@ -20,9 +20,9 @@
 
 ![plot](./Figures/Very_Likely_Suspects_emmeans.png)
 
-##### significant for final_disease_state
+#### significant for final_disease_state
 ![plot](./Figures/VL_Suspects_emmeans_FDS.png)
 
-##### significant for final_disease_state:time interaction
+#### significant for final_disease_state:time interaction
 ![plot](./Figures/VL_Suspects_emmeans_interaction.png)
 
