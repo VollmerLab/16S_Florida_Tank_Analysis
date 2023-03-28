@@ -340,14 +340,14 @@ asv_comp_upset_subset %>%
 
 ### my analysis
 
-subset_models
+##more in disease - very likely suspects
 
-vl_suspects_list <- filter(asv_comp_upset_subset, d_v_h >0)$asv_names
+vl_suspects_list <- filter(asv_comp_upset_subset, d_v_h < 0)$asv_names # which ASVs are more in Disease
 
 v_likely_suspects <- raw_target_data %>%
-  filter(asv_names %in% vl_suspects_list)
+  filter(asv_names %in% vl_suspects_list) #only select asvs more in disease
 
-vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | fragment_id), 
+vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
                          data = v_likely_suspects)
 anova(vl_suspects_aov)
 
@@ -366,20 +366,17 @@ emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response
   coord_flip() +
   labs(title = "Very Likely Suspects")
 
-#more in disease
-more_disease <- filter(asv_comp_upset_subset, d_v_h < 0)$asv_names
 
-v_likely_suspects_md <- v_likely_suspects %>%
-  filter(asv_names %in% more_disease)
+#likely suspects
 
+likely_suspects <- raw_target_data %>%
+  filter(asv_names %in% asv_comp_upset_subset$asv_names)
 
-#TODO these don't match up at all but they should - something strange is happening
+l_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                        data = likely_suspects)
+anova(l_suspects_aov)
 
-vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | fragment_id), 
-                        data = v_likely_suspects)
-anova(vl_suspects_aov)
-
-emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+emmeans(l_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
   mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
@@ -392,14 +389,83 @@ emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response
             position = position_dodge(0.5), vjust = -1) +
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   coord_flip() +
-  labs(title = "Very Likely Suspects")
+  labs(title = "Likely Suspects")
+
+
+# most sig
+
+most_sig_diffs <- subset_models %>%
+  ungroup %>%
+  # slice(1:10) %>%
+  rowwise(asv_names) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param'),
+          d_v_h = emmeans(model, ~final_disease_state) %>%
+            as_tibble %>%
+            select(emmean) %>%
+            pull(1) %>%
+            diff) %>%
+  rename(p = `Pr(>F)`) %>%
+  group_by(param) %>%
+  mutate(p = p.adjust(p, 'fdr')) %>%
+  ungroup %>%
+  filter(param %in% c("final_disease_state", "final_disease_state:time"))
+
+##fds time interaction
+
+more_disease_fds_t <- most_sig_diffs %>% filter(param %in% c("final_disease_state:time")) %>% arrange(d_v_h) %>% 
+  filter(p < 0.05) %>% filter(d_v_h < 0)
+  
+fds_t_md <- raw_target_data %>%
+  filter(asv_names %in% more_disease_fds_t$asv_names)
+
+fds_t_md_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                       data = fds_t_md)
+anova(fds_t_md_aov)
+
+emmeans(fds_t_md_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects - Interaction Only")
+
+## final disease state only
+
+more_disease_fds <- most_sig_diffs %>% filter(param %in% c("final_disease_state")) %>% arrange(d_v_h) %>% 
+  filter(p < 0.05) %>% filter(d_v_h < 0)
+
+fds_md <- raw_target_data %>%
+  filter(asv_names %in% more_disease_fds$asv_names)
+
+fds_md_aov <- lmer(value ~ asv_names*final_disease_state + (1 | genotype) + (1 | tank), 
+                     data = fds_md)
+anova(fds_md_aov)
+
+emmeans(fds_md_aov, ~final_disease_state | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects - Final Disease Only")
 
 
 
 
-#
-vl_suspects_aov <- aov_4(value ~ time * (exposure + final_disease_state) + 
-        (time | fragment_id), data = v_likely_suspects)
 
 
 #buffer
