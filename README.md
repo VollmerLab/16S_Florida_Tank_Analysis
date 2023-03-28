@@ -1,12 +1,28 @@
 # 16S_Florida_Tank_Analysis
 
-#### 26 Most Abundant Families
+##### Time Points 3 and 7
 ![plot](./Figures/Top_26_Abundant_Families.png)
+
+##### Baits
+![plot](./Figures/Baits_Most_Abundant_Families.png)
+
+![plot](./Figures/Baits_Most_Abundant_Species.png)
 
 ### Likely Suspects
 *present in T3, T7, and Diseased bait*
 
-![plot](./Figures/Top_26_Abundant_Families.png)
+![plot](./Figures/Likely_Suspects_emmeans.png)
 
 ### Very Likely Suspects
-*present in T3, T7, and Diseased bait AND differs significantly for either final disease state or the interaction of final disease state and time*
+*present in T3, T7, and Diseased bait*   
+*AND differs significantly for either final disease state or the interaction of final disease state and time*  
+*AND more abundant in diseased than healthy*
+
+![plot](./Figures/Very_Likely_Suspects_emmeans.png)
+
+##### significant for final_disease_state
+![plot](./Figures/VL_Suspects_emmeans_FDS.png)
+
+##### significant for final_disease_state:time interaction
+![plot](./Figures/VL_Suspects_emmeans_interaction.png)
+
