@@ -354,167 +354,7 @@ taxon_abundances <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>% #making these into factors
   nest_by(taxon)
 
-
-#### What Changed ####
-#to get this, read in the data w/o filtering for T3 and T7
-
-all_timepoints <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
-  t %>%
-  as_tibble(rownames = "sample_id") %>%
-  full_join(metadata, by = "sample_id") %>%
-  pivot_longer(cols = -any_of(colnames(metadata)), 
-               names_to = "asv_names", values_to = "value") %>%
-  mutate(across(c(exposure, final_disease_state), factor)) %>%
-  mutate(time = readr::parse_number(time)) %>%
-  left_join(taxonomy_tibble, by = join_by(asv_names))
-
-homog_frags_asv <- all_timepoints %>%
-  filter(tank == "homogenate_fragment")
-
-homog_asv <- all_timepoints %>%
-  filter(tank == "HOMO") %>%
-  select(-disease_state)
-
-field_frags_asv <- all_timepoints %>%
-  filter(exposure == "Field")
-
-clean_asv_data <- all_timepoints %>%
-  filter(!tank %in% c("homogenate_fragment", "HOMO")) %>%
-  filter(exposure != "Field")
-
-#selecting significant ASVs
-
-#get p values comparing D to H in homogenate to determine interesting ASVs
-sig_homog_asv1 <- homog_asv %>% 
-  nest_by(asv_names) %>%
-  mutate(model = list(generics::tidy(anova(aov(value~final_disease_state, data = data))))) %>%
-  rowwise %>%
-  mutate(p_disease_state = get_tidy_p_values(model))
-
-sig_homog_asv1_1 <- sig_homog_asv1 %>% #109 asvs
-  filter(p_disease_state < 0.05)
-
-list_of_asvs <- sig_homog_asv1_1$asv_names
-
-#examine those ASVs in the T3-T7 data and keep ASVs w a significant interaction time*final_disease
-homog_asv_changes <- clean_asv_data %>%
-  filter(asv_names %in% list_of_asvs) %>%
-  nest_by(asv_names) %>%
-  mutate(model = list(generics::tidy(anova(lmer(value ~ time*final_disease_state - time 
-                                                - final_disease_state+ (1 | fragment_id), 
-                           data = data))))) %>%
-  mutate(p_interaction = get_tidy_p_values(model)) %>%
-  filter(p_interaction < 0.05)
-
-sig_interaction_asvs <- homog_asv_changes$asv_names
-
-#time series ASVs w sig interaction:
-interaction_asv_changes <- clean_asv_data %>%
-  filter(asv_names %in% sig_interaction_asvs)
-
-#aov model for time series ASVs w sig interaction
-homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
-                          data = interaction_asv_changes)
-anova(homog_changes_aov)
-
-#random effect of higher taxonomy types
-
-emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'response')%>%
-  cld(Letters = LETTERS, adjust = 'fdr') %>%
-  as_tibble() %>%
-  mutate(.group = str_trim(.group)) %>%
-  #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
-             colour = time, pch = final_disease_state)) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  geom_text(aes(y = (emmean + SE), label = .group),
-            position = position_dodge(0.5), vjust = -1) +
-  coord_flip()
-
-# T7 values D > H
-
-more_diseased <- interaction_asv_changes %>%
-  filter(time == 7) #%>%
-  #pivot_wider(names_from = final_disease_state, values_from = value) 
-
-#TODO keep working on pivot
-  
-
-
-ave_homog_changes <- homog_asv_changes %>%
-  group_by(asv_names, time, final_disease_state) %>%
-  summarize(ave_abun = mean(value)) %>%
-  ungroup()
-
-ggplot(data = ave_homog_changes) +
-  geom_line(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
-  geom_point(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
-  facet_wrap(~final_disease_state) +
-  theme(legend.position = "none")
-
-homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
-                          data = homog_asv_changes)
-
-anova(homog_changes_aov)
-
-emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response')%>%
-  cld(Letters = LETTERS) %>%
-  as_tibble() %>%
-  mutate(.group = str_trim(.group)) %>%
-  #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
-             colour = time, pch = final_disease_state)) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  geom_text(aes(y = (emmean + SE), label = .group),
-            position = position_dodge(0.5), vjust = -1) +
-  coord_flip()
-
-
-#old method
-top_homog_asv <- homog_asv %>%
-  arrange(desc(ave_abundance)) %>%
-  group_by(final_disease_state) %>%
-  #filter(ave_abundance > 7.05) %>%
-  slice(1:20) %>% #keep only n most abundant ASVs for healthy and diseased
-  ungroup()
-
-top_homog_list <- unique(dplyr::pull(top_homog_asv, asv_names))
-
-ggplot(top_homog_asv) +
-  geom_col(aes(x = fct_reorder(asv_names, ave_abundance), y = ave_abundance, 
-               fill = final_disease_state), position = "dodge") +
-  coord_flip()
-
-
-homog_asv_changes <- clean_asv_data %>%
-  filter(asv_names %in% top_homog_list) 
-
-ave_homog_changes <- homog_asv_changes %>%
-  group_by(asv_names, time, final_disease_state) %>%
-  summarize(ave_abun = mean(value)) %>%
-  ungroup()
-
-ggplot(data = ave_homog_changes) +
-  geom_line(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
-  geom_point(aes(x = time, y = ave_abun, col = asv_names), alpha = 0.5) +
-  facet_wrap(~final_disease_state) +
-  theme(legend.position = "none")
-
-
-homog_changes_aov <- lmer(value ~ time*final_disease_state*asv_names + (1 | fragment_id), 
-                          data = homog_asv_changes)
-anova(homog_changes_aov)
-
-emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'link') %>%
-  contrast('pairwise', adjust = "fdr")
-
-emmeans(homog_changes_aov, ~final_disease_state * time | asv_names, type = 'link') %>%
-  contrast('pairwise', adjust = "fdr")
-
-tidy(anova(aov(y ~ x)))
-tidy(t.test(y ~ x)) #apply the t test to the homogenates and THEN look at those ASVs
-
-emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response') 
+#EXAMPLE of emmeans within ASVs
 
 emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'response')%>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
@@ -527,19 +367,6 @@ emmeans(homog_changes_aov, ~time*final_disease_state | asv_names, type = 'respon
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   coord_flip()
-
-emmeans(homog_changes_aov, ~time*final_disease_state*asv_names, type = 'response') %>%
-  cld(Letters = LETTERS) %>%
-  as_tibble() %>%
-  mutate(.group = str_trim(.group)) %>%
-  #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
-             colour = time, pch = final_disease_state)) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  geom_text(aes(y = (emmean + SE), label = .group),
-            position = position_dodge(0.5), vjust = -1) +
-  coord_flip()
-
 
 #### Comparing Models ####
 taxon_abundances$taxon
@@ -612,7 +439,7 @@ aov_and_graphs <- all_models %>%
   mutate(possibly(make_lmer_aov_summary, otherwise = NULL)(model)) %>%
   ungroup
 
-#### Rickettsias - less good attempt ####
+#### Rickettsias - Jason's graphs ####
 
 asv_level_aov_graphs <- all_models %>%
   ungroup %>%
@@ -806,16 +633,106 @@ ggplot(ranks, aes(graph_category, abundance, fill = family_names, label = family
   theme(legend.position = "none")
   
 
-top20 <- unique(ranks$family_names)
+top26 <- unique(ranks$family_names)
 
-abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top20, abundance_data_summed$family_names, "Other")
+abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top26, abundance_data_summed$family_names, "Other")
 
 ggplot(abundance_data_summed) +
   geom_col(aes(graph_category, abundance, fill = family_names))
+
+
+#bait abundances
+
+aggregation_level <- 'Family' #or none
+
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
+  subset_samples(time %in% 'T0')
+metadata <- sample_data(microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  select(-retain_sample) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
+         .after = sample_id)
+
+if(aggregation_level != 'none'){
+  microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
+  taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+} else {
+  taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+}
+
+#species
+
+otu_tmm <- microbiome_data %>%
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  otu_table() %>% 
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  as.data.frame %>%
+  as.matrix %>% 
+  DGEList(remove.zeros = TRUE) %>%
+  edgeR::calcNormFactors(method = 'TMMwsp') #TMMwsp is for high prevalence of 0s
+
+bait_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  filter(tank == "HOMO") %>%
+  select(-c(disease_state, time, sample_id, tank)) %>%
+  group_by(final_disease_state, asv_names) %>%
+  summarize(abundance = sum(value)) %>%
+  ungroup() %>%
+  left_join(taxonomy_tibble1, by = join_by(asv_names)) %>%
+  arrange(desc(abundance)) %>%
+  group_by(final_disease_state) %>%
+  slice(1:30)
   
 
+ggplot(bait_data, aes(final_disease_state, abundance, fill = asv_names, label = paste(asv_names, "-", Genus, Species, sep = " "))) +
+  geom_col(position = "fill") +
+  geom_text(size = 3, position = position_fill(vjust = 0.5)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = "30 Most Abundant Species in Baits")
+
+#families
+
+otu_tmm_f <- microbiome_data %>%
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  otu_table() %>% 
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  as.data.frame %>%
+  as.matrix %>% 
+  DGEList(remove.zeros = TRUE) %>%
+  edgeR::calcNormFactors(method = 'TMMwsp') #TMMwsp is for high prevalence of 0s
 
 
+bait_data_f <- cpm(otu_tmm_f, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "family_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  filter(tank == "HOMO") %>%
+  select(-c(disease_state, time, sample_id, tank)) %>%
+  group_by(final_disease_state, family_names) %>%
+  summarize(abundance = sum(value)) %>%
+  ungroup() %>%
+  left_join(taxonomy_tibble1, by = join_by(family_names)) %>%
+  arrange(desc(abundance)) %>%
+  group_by(final_disease_state) %>%
+  slice(1:30)
+
+ggplot(bait_data_f, aes(final_disease_state, abundance, fill = family_names, label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +
+  geom_col(position = "fill") +
+  geom_text(size = 3, position = position_fill(vjust = 0.5)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = "30 Most Abundant Families in Baits")
+
+  
 
 
 

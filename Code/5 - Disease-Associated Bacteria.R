@@ -338,7 +338,7 @@ asv_comp_upset_subset %>%
   filter(!is.na(Genus)) %>%
   distinct
 
-### my analysis
+### emmeans analysis
 
 ##more in disease - very likely suspects
 
