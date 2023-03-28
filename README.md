@@ -9,7 +9,9 @@
 ![plot](./Figures/Likely_Suspects_emmeans.png)
 
 ### Very Likely Suspects
-*present in T3, T7, and Diseased bait AND differs significantly for either final disease state or the interaction of final disease state and time*
+*present in T3, T7, and Diseased bait 
+AND differs significantly for either final disease state or the interaction of final disease state and time 
+AND more abundant in diseased than healthy*
 
 ![plot](./Figures/Very_Likely_Suspects_emmeans.png)
 
