@@ -1,3 +1,3 @@
 # 16S_Florida_Tank_Analysis
 
-![plot](./Figures/Top 26 Abundant Families.png)
+![plot](./Figures/Top_26_Abundant_Families.png)
