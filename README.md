@@ -1,7 +1,12 @@
 # 16S_Florida_Tank_Analysis
 
-##### 26 Most Abundant Families
+##### Time Points 3 and 7
 ![plot](./Figures/Top_26_Abundant_Families.png)
+
+##### Baits
+![plot](./Figures/Baits_Most_Abundant_Families.png)
+
+![plot](./Figures/Baits_Most_Abundant_Species.png)
 
 ### Likely Suspects
 *present in T3, T7, and Diseased bait*
