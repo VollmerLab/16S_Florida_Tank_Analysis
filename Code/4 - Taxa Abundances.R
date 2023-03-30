@@ -20,6 +20,7 @@ library(gghalves)
 library(patchwork)
 library(magrittr)
 library(ComplexUpset)
+library(wesanderson)
 library(tidyverse)
 
 select <- dplyr::select
@@ -643,7 +644,7 @@ ggplot(abundance_data_summed) +
 
 #bait abundances
 
-aggregation_level <- 'Family' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% 'T0')
@@ -683,13 +684,14 @@ bait_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   group_by(final_disease_state, asv_names) %>%
   summarize(abundance = sum(value)) %>%
   ungroup() %>%
-  left_join(taxonomy_tibble1, by = join_by(asv_names)) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   arrange(desc(abundance)) %>%
   group_by(final_disease_state) %>%
-  slice(1:30)
+  slice(1:30) %>%
+  arrange(Family)
   
 
-ggplot(bait_data, aes(final_disease_state, abundance, fill = asv_names, label = paste(asv_names, "-", Genus, Species, sep = " "))) +
+ggplot(bait_data, aes(final_disease_state, abundance, fill = fct_reorder(asv_names, Family), label = paste(asv_names, "-", Family, Genus, Species, sep = " "))) +
   geom_col(position = "fill") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
