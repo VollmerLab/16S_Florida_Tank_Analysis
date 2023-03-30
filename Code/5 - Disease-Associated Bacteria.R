@@ -457,14 +457,15 @@ emmeans(fds_md_aov, ~final_disease_state | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
   mutate(.group = str_trim(.group)) %>%
+  left_join(more_disease_fds, by = join_by(asv_names)) %>%
   #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(asv_names, d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              colour = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
-  #scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
-  scale_color_manual(values = wes_palette("Zissou1", 2, type = "discrete")) +
+  scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
+  #scale_color_manual(values = wes_palette("Zissou1", 2, type = "discrete")) +
   coord_flip() +
   labs(title = "Very Likely Suspects - Final Disease Only")
 
