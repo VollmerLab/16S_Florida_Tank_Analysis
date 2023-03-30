@@ -727,7 +727,9 @@ bait_data_f <- cpm(otu_tmm_f, log = TRUE, prior.count = 2) %>%
   group_by(final_disease_state) %>%
   slice(1:30)
 
-ggplot(bait_data_f, aes(final_disease_state, abundance, fill = family_names, label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +
+bait_data_f$final_disease_state <- factor(bait_data_f$final_disease_state, levels = c("H", "D"))
+
+ggplot(bait_data_f, aes(final_disease_state, abundance, fill = fct_reorder(family_names, abundance, .desc = TRUE), label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +
   geom_col(position = "fill") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
