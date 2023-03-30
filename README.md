@@ -8,6 +8,8 @@
 
 ![plot](./Figures/Baits_Most_Abundant_Species.png)
 
+![plot](./Figures/ASVs_in_Baits.png)
+
 ### Likely Suspects
 *present in T3, T7, and Diseased bait*
 
