@@ -41,3 +41,18 @@ log2 fold difference, positive means more disease
 ![plot](./Figures/Logfold_VLS.png)
 
 
+### Random Effect Sizes
+
+*tank_model <- lmer(value ~ time + (1 | tank), data = filter(tank_data, final_disease_state == "D"))*
+
+#H: ~ time, tank is 0.0287, ~ tank, time is 0.08549
+#D: ~ time, tank is 0.006784, ~ tank, time is 0.002925
+random effects are larger on average in the healthy tanks
+
+*tank_exposure_model <- lmer(value ~ final_disease_state + (1 | tank) + (1 | time) + (1 | asv_names), 
+                   data = filter(tank_data, exposure == "H"))*
+
+![plot](./Figures/tank_model.png)
+#H: asv_names - 0.71949, tank - 0.02200, time - 0.07243 
+#D: asv_names - 0.744188, tank - 0.003628, time - 0.034126
+
