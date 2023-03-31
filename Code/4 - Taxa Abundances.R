@@ -770,7 +770,6 @@ log2_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
-  #filter(value > 7.04) %>%
   mutate(value = log2(value)) %>%
   filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
   group_by(time, final_disease_state, asv_names) %>%
@@ -794,7 +793,8 @@ ggplot(ls_log2_data) +
   geom_hline(yintercept = 0, col = "black") +
   geom_point(aes(x = asv_names, y = logfold, col = time)) +
   coord_flip() +
-  theme_bw()
+  theme_bw() +
+  labs(title = "Likely Suspects Logfold Change")
 
 vls_log2_data <- log2_data %>%
   filter(asv_names %in% v_likely_suspects_list)
@@ -803,14 +803,49 @@ ggplot(vls_log2_data) +
   geom_hline(yintercept = 0, col = "black") +
   geom_point(aes(x = asv_names, y = logfold, col = time)) +
   coord_flip() +
-  theme_bw()
-
-#TODO double check that method is okay for logfold change  
-
+  theme_bw() +
+  labs(title = "Very Likely Suspects Logfold Change")
 
 
+## boxplot version
 
+log2_data_eb <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  mutate(value = log2(value)) %>%
+  filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
+  group_by(time, asv_names, genotype) %>%
+  summarize(logfold = value[final_disease_state == "D"] - value[final_disease_state == "H"])
 
+#likely suspects
+ls_log2_data_eb <- log2_data_eb %>%
+  filter(asv_names %in% likely_suspects_list)
+
+ggplot(ls_log2_data_eb) +
+  geom_hline(yintercept = 0, col = "black") +
+  geom_boxplot(aes(x = asv_names, y = logfold, fill = time, col = time)) +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_manual(values = c("indianred1", "seagreen2", "deepskyblue1")) +
+  scale_color_manual(values = c("indianred4", "seagreen4", "royalblue2")) +
+  labs(title = "Likely Suspects Logfold Change")
+
+#very likely suspects
+vls_log2_data_eb <- log2_data_eb %>%
+  filter(asv_names %in% v_likely_suspects_list)
+
+ggplot(vls_log2_data_eb) +
+  geom_hline(yintercept = 0, col = "black") +
+  geom_boxplot(aes(x = asv_names, y = logfold, fill = time, col = time)) +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_manual(values = c("indianred1", "seagreen2", "deepskyblue1")) +
+  scale_color_manual(values = c("indianred4", "seagreen4", "royalblue2")) +
+  labs(title = "Very Likely Suspects Logfold Change")
 
 
 
