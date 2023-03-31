@@ -636,7 +636,8 @@ ggplot(ranks, aes(graph_category, abundance, fill = family_names, label = family
 
 top26 <- unique(ranks$family_names)
 
-abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top26, abundance_data_summed$family_names, "Other")
+abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top26, 
+                                             abundance_data_summed$family_names, "Other")
 
 ggplot(abundance_data_summed) +
   geom_col(aes(graph_category, abundance, fill = family_names))
@@ -691,7 +692,8 @@ bait_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   arrange(Family)
   
 
-ggplot(bait_data, aes(final_disease_state, abundance, fill = fct_reorder(asv_names, Family), label = paste(asv_names, "-", Family, Genus, Species, sep = " "))) +
+ggplot(bait_data, aes(final_disease_state, abundance, fill = fct_reorder(asv_names, Family), 
+                      label = paste(asv_names, "-", Family, Genus, Species, sep = " "))) +
   geom_col(position = "fill") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
@@ -729,7 +731,8 @@ bait_data_f <- cpm(otu_tmm_f, log = TRUE, prior.count = 2) %>%
 
 bait_data_f$final_disease_state <- factor(bait_data_f$final_disease_state, levels = c("H", "D"))
 
-ggplot(bait_data_f, aes(final_disease_state, abundance, fill = fct_reorder(family_names, abundance, .desc = TRUE), label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +
+ggplot(bait_data_f, aes(final_disease_state, abundance, fill = fct_reorder(family_names, abundance, .desc = TRUE), 
+                        label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +
   geom_col(position = "fill") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
@@ -762,6 +765,7 @@ upset(cu_bait_data, disease_states, name="Bait Type", width_ratio=0.1) +
 
   
 #### Logfold Changes ####
+"red" #get otu_tmm w/o filtering for T3 and T7 for this chunk:
 
 log2_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
@@ -846,6 +850,25 @@ ggplot(vls_log2_data_eb) +
   scale_fill_manual(values = c("indianred1", "seagreen2", "deepskyblue1")) +
   scale_color_manual(values = c("indianred4", "seagreen4", "royalblue2")) +
   labs(title = "Very Likely Suspects Logfold Change")
+
+
+#### Tank Effect ####
+
+tank_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  filter(time %in% c("T3", "T7")) %>%
+  mutate(across(c(exposure, final_disease_state, time), factor))
+
+test1 <- lmer(value ~ final_disease_state + (1 | time) + (1 | tank) + (1 | asv_names), data = tank_data)
+    #w/o ASVs -  tank = 0.01625, time = 0.05286 
+    #w/ ASVs - asv_names = 0.6951, tank = 0.0177, time = 0.0529 
+
+test1 <- lmer(value ~ final_disease_state + (1 | time) + (1 | tank) + (1 | asv_names), 
+              data = filter(tank_data, final_disease_state == "H"))
 
 
 
