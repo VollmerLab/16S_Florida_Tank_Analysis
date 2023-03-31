@@ -863,12 +863,30 @@ tank_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   filter(time %in% c("T3", "T7")) %>%
   mutate(across(c(exposure, final_disease_state, time), factor))
 
-test1 <- lmer(value ~ final_disease_state + (1 | time) + (1 | tank) + (1 | asv_names), data = tank_data)
+model1 <- lmer(value ~ final_disease_state + (1 | time) + (1 | tank) + (1 | asv_names), data = tank_data)
     #w/o ASVs -  tank = 0.01625, time = 0.05286 
     #w/ ASVs - asv_names = 0.6951, tank = 0.0177, time = 0.0529 
 
-test1 <- lmer(value ~ final_disease_state + (1 | time) + (1 | tank) + (1 | asv_names), 
-              data = filter(tank_data, final_disease_state == "H"))
+tank_model <- lmer(value ~ time + (1 | tank), 
+              data = filter(tank_data, final_disease_state == "D"))
+#H: ~ time, tank is 0.0287, ~ tank, time is 0.08549
+#D: ~ time, tank is 0.006784, ~ tank, time is 0.002925
 
 
+tank_exposure_model <- lmer(value ~ final_disease_state + (1 | tank) + (1 | time) + (1 | asv_names), 
+                   data = filter(tank_data, exposure == "H"))
+#H: asv_names - 0.71949, tank - 0.02200, time - 0.07243 
+#D: asv_names - 0.744188, tank - 0.003628, time - 0.034126
+
+emmeans(tank_exposure_model, ~final_disease_state, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = final_disease_state, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  labs(title = "Tank Effect Model")
 
