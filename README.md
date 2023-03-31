@@ -30,13 +30,14 @@
 ![plot](./Figures/VL_Suspects_emmeans_interaction.png)
 
 ### Logfold Changes in Bacterial Abundance
-removed normalized zeroes and datapoints where there weren't corresponding H and D values, log2 fold difference  
-positive means more disease
+log2 fold difference, positive means more disease
 
 ##### Likely Suspects
+![plot](./Figures/Logfold_box_LS.png)
 ![plot](./Figures/Logfold_LS.png)
 
 ##### Very Likely Suspects
+![plot](./Figures/Logfold_box_VLS.png)
 ![plot](./Figures/Logfold_VLS.png)
 
 
