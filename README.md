@@ -40,6 +40,10 @@ log2 fold difference, positive means more disease
 ![plot](./Figures/Logfold_box_VLS.png)
 ![plot](./Figures/Logfold_VLS.png)
 
+ASV 71: Francisellales Francisellaceae [Caedibacter] taeniospiralis group NA
+ASV 3: Enterobacterales Colwelliaceae Thalassotalea NA
+ASV 208: Pseudomonadales Saccharospirillaceae Thalassolituus NA
+
 
 ### Random Effect Sizes
 random effects are larger in the healthy tanks
