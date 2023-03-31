@@ -373,6 +373,12 @@ emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response
 likely_suspects <- raw_target_data %>%
   filter(asv_names %in% asv_comp_upset_subset$asv_names)
 
+likely_suspects_list <- unique(likely_suspects$asv_names)
+
+
+for_rds <- list(likely_suspects_list, vl_suspects_list)
+write_rds(for_rds, "likely_suspects_list.rds")
+
 l_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
                         data = likely_suspects)
 anova(l_suspects_aov)

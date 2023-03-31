@@ -275,7 +275,7 @@ plota + plotb + plotc
 
 #### Read in Data ####
 
-aggregation_level <- 'Family' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -298,7 +298,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -646,7 +646,7 @@ ggplot(abundance_data_summed) +
 
 aggregation_level <- 'none' #or none
 
-microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") #%>%
   subset_samples(time %in% 'T0')
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -737,6 +737,80 @@ ggplot(bait_data_f, aes(final_disease_state, abundance, fill = fct_reorder(famil
   labs(title = "30 Most Abundant Families in Baits")
 
   
+### Complex Upset for Baits
+
+cu_bait_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  filter(tank == "HOMO") %>%
+  select(-c(disease_state, time, sample_id, tank)) %>%
+  group_by(asv_names, final_disease_state) %>%
+  summarize(ave_val = mean(value)) %>%
+  rowwise() %>%
+  mutate(present = ifelse(ave_val > 7.04, TRUE, FALSE)) %>%
+  select(-ave_val) %>%
+  pivot_wider(names_from = final_disease_state, values_from = present)
+
+disease_states <- c("H", "D")
+
+upset(cu_bait_data, disease_states, name="Bait Type", width_ratio=0.1) +
+  labs(title = "ASVs in Baits")
+
+  
+#### Logfold Changes ####
+
+log2_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  filter(value > 7.04) %>%
+  mutate(value = log2(value)) %>%
+  filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
+  group_by(time, final_disease_state, asv_names) %>%
+  summarize(ave_val = mean(value)) %>%
+  ungroup() %>%
+  nest_by(time, asv_names) %>%
+  rowwise() %>%
+  filter(nrow(data) > 1) %>%
+  unnest(cols = c(data)) %>%
+  group_by(time, asv_names) %>%  
+  summarize(logfold = ave_val[final_disease_state == "D"] - ave_val[final_disease_state == "H"])
+
+from_rds <- read_rds("likely_suspects_list.rds")
+likely_suspects_list <- from_rds[[1]]
+v_likely_suspects_list <- from_rds[[2]]
+
+ls_log2_data <- log2_data %>%
+  filter(asv_names %in% likely_suspects_list)
+
+ggplot(ls_log2_data) +
+  geom_hline(yintercept = 0, col = "black") +
+  geom_point(aes(x = asv_names, y = logfold, col = time)) +
+  coord_flip() +
+  ylim(-0.57, 1) +
+  theme_bw()
+
+vls_log2_data <- log2_data %>%
+  filter(asv_names %in% v_likely_suspects_list)
+
+ggplot(vls_log2_data) +
+  geom_hline(yintercept = 0, col = "black") +
+  geom_point(aes(x = asv_names, y = logfold, col = time)) +
+  coord_flip() +
+  ylim(-0.25, 1) +
+  theme_bw()
+  
+
+
+
+
 
 
 
