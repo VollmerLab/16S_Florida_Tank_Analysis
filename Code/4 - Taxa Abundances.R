@@ -770,7 +770,7 @@ log2_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
-  filter(value > 7.04) %>%
+  #filter(value > 7.04) %>%
   mutate(value = log2(value)) %>%
   filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
   group_by(time, final_disease_state, asv_names) %>%
@@ -794,7 +794,6 @@ ggplot(ls_log2_data) +
   geom_hline(yintercept = 0, col = "black") +
   geom_point(aes(x = asv_names, y = logfold, col = time)) +
   coord_flip() +
-  ylim(-0.57, 1) +
   theme_bw()
 
 vls_log2_data <- log2_data %>%
@@ -804,9 +803,9 @@ ggplot(vls_log2_data) +
   geom_hline(yintercept = 0, col = "black") +
   geom_point(aes(x = asv_names, y = logfold, col = time)) +
   coord_flip() +
-  ylim(-0.25, 1) +
   theme_bw()
-  
+
+#TODO double check that method is okay for logfold change  
 
 
 
