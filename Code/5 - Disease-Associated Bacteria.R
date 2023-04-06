@@ -463,11 +463,13 @@ anova(fds_t_md_aov)
 emmeans(fds_t_md_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
   mutate(.group = str_trim(.group)) %>%
   left_join(more_disease_fds_t, by = join_by(asv_names)) %>%
+  filter(d_v_h < -0.40) %>%
   #rename(emmean = response) %>%
-  ggplot(aes(x = fct_reorder(asv_names, d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ") - ", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              colour = graph_color, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
@@ -475,8 +477,8 @@ emmeans(fds_t_md_aov, ~final_disease_state*time | asv_names, type = 'response') 
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   #scale_color_manual(values = wes_palette("Zissou1", 4, type = "discrete")) +
   coord_flip() +
-  labs(title = "Very Likely Suspects - Interaction Only")+
-  ylab("ASV Name")
+  labs(title = "Very Likely Suspects - Interaction Only") +
+  xlab("ASV Name")
 
 ## final disease state only
 
@@ -493,20 +495,52 @@ anova(fds_md_aov)
 emmeans(fds_md_aov, ~final_disease_state | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   mutate(.group = str_trim(.group)) %>%
   left_join(more_disease_fds, by = join_by(asv_names)) %>%
   #rename(emmean = response) %>%
-  ggplot(aes(x = fct_reorder(asv_names, d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              colour = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
-  geom_text(aes(y = (emmean + SE), label = .group),
-            position = position_dodge(0.5), vjust = -1) +
+  #geom_text(aes(y = (emmean + SE), label = .group),
+  #          position = position_dodge(0.5), vjust = -1) +
   scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
   #scale_color_manual(values = wes_palette("Zissou1", 2, type = "discrete")) +
   coord_flip() +
-  labs(title = "Very Likely Suspects - Final Disease Only")
+  labs(title = "Very Likely Suspects - Final Disease Only") +
+  xlab("ASV Name")
 
 
+## both final disease state and interaction
+
+more_both_fds <- most_sig_diffs %>% filter(p < 0.05) %>% nest_by(asv_names) %>% 
+  rowwise() %>% filter(nrow(data) == 2) %>% unnest(cols = c(data)) %>% arrange(d_v_h) %>% filter(d_v_h < 0)
+
+both_md <- raw_target_data %>%
+  filter(asv_names %in% more_both_fds$asv_names)
+
+both_md_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                   data = both_md)
+anova(both_md_aov)
+
+emmeans(both_md_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  left_join(more_disease_fds, by = join_by(asv_names), multiple = "all") %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  #scale_color_manual(values = wes_palette("Zissou1", 2, type = "discrete")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects - Both Final Disease State and FDS:time Interaction") +
+  xlab("ASV Name")
 
 
 
