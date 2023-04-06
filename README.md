@@ -1,12 +1,13 @@
 # 16S_Florida_Tank_Analysis
 
 ### Time Points 3 and 7
-![plot](./Figures/Top_26_Abundant_Families.png)
+26 most abundant families in each category (time + disease state)
+![plot](./Figures/red_abund_order.png)
+
+**DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
 
 ### Baits
-![plot](./Figures/Baits_Most_Abundant_Families.png)
-
-![plot](./Figures/Baits_Most_Abundant_Species.png)
+![plot](./Figures/most_abundant_species_in_baits.png)
 
 ![plot](./Figures/ASVs_in_Baits.png)
 \* based on whether the abundance exceeded the threshold of 7.03 (probably the normalized equivalent to 0), which is why some ASVs are present in neither
@@ -24,10 +25,13 @@
 ![plot](./Figures/Very_Likely_Suspects_emmeans.png)
 
 #### significant for final_disease_state
-![plot](./Figures/VL_Suspects_emmeans_FDS.png)
+![plot](./Figures/VLS_FDS_emmeans.png)
 
 #### significant for final_disease_state:time interaction
-![plot](./Figures/VL_Suspects_emmeans_interaction.png)
+![plot](./Figures/VLS_Interaction_emmeans.png)
+
+#### significant for BOTH final_disease_state:time interaction AND final_disease_state
+![plot](./Figures/VLS_both_emmeans.png)
 
 ### Logfold Changes in Bacterial Abundance
 log2 fold difference, positive means more disease
@@ -40,9 +44,6 @@ log2 fold difference, positive means more disease
 ![plot](./Figures/Logfold_box_VLS.png)
 ![plot](./Figures/Logfold_VLS.png)
 
-ASV 71: Francisellales Francisellaceae [Caedibacter] taeniospiralis group NA
-ASV 3: Enterobacterales Colwelliaceae Thalassotalea NA
-ASV 208: Pseudomonadales Saccharospirillaceae Thalassolituus NA
 
 
 ### Random Effect Sizes
