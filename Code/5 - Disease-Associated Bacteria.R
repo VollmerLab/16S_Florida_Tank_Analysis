@@ -352,20 +352,23 @@ vl_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genoty
                          data = v_likely_suspects)
 anova(vl_suspects_aov)
 
+
 emmeans(vl_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
   mutate(.group = str_trim(.group)) %>%
   #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = paste(Family, " ", Genus, "(", asv_names, ")", sep = ""), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              colour = graph_color, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   coord_flip() +
-  labs(title = "Very Likely Suspects")
+  labs(title = "Very Likely Suspects") +
+  xlab("ASV")
 
 
 #likely suspects
@@ -376,8 +379,8 @@ likely_suspects <- raw_target_data %>%
 likely_suspects_list <- unique(likely_suspects$asv_names)
 
 
-for_rds <- list(likely_suspects_list, vl_suspects_list)
-write_rds(for_rds, "likely_suspects_list.rds")
+#for_rds <- list(likely_suspects_list, vl_suspects_list)
+#write_rds(for_rds, "likely_suspects_list.rds")
 
 l_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
                         data = likely_suspects)
@@ -386,17 +389,45 @@ anova(l_suspects_aov)
 emmeans(l_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
   cld(Letters = LETTERS, adjust = 'fdr') %>%
   as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
   mutate(.group = str_trim(.group)) %>%
   #rename(emmean = response) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = paste(Family, " ", Genus, "(", asv_names, ")", sep = ""), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              colour = graph_color, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   coord_flip() +
-  labs(title = "Likely Suspects")
+  labs(title = "Likely Suspects") +
+  xlab("ASV")
+
+#LS not in VLS
+
+only_likely_suspects <- likely_suspects %>%
+  filter(!asv_names %in% vl_suspects_list)
+
+only_l_suspects_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                       data = only_likely_suspects)
+anova(only_l_suspects_aov)
+
+emmeans(only_l_suspects_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS, adjust = 'fdr') %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = paste(Family, " ", Genus, "(", asv_names, ")", sep = ""), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Only Likely Suspects not in Very Likely Suspects List") +
+  xlab("ASV")
 
 
 # most sig

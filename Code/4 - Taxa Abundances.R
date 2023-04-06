@@ -21,6 +21,8 @@ library(patchwork)
 library(magrittr)
 library(ComplexUpset)
 library(wesanderson)
+library(tidytext)
+library(strex)
 library(tidyverse)
 
 select <- dplyr::select
@@ -275,7 +277,7 @@ plota + plotb + plotc
 
 #### Read in Data ####
 
-aggregation_level <- 'none' #or none
+aggregation_level <- 'Family' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% c('T3', 'T7'))
@@ -298,7 +300,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -610,15 +612,17 @@ abundance_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "family_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
   select(-c(sample_id, tank, genotype, disease_state)) %>%
   inner_join(taxonomy_tibble1, by = join_by(family_names)) %>%
   mutate(graph_category = paste(time, final_disease_state, sep = "_"))
 
-abundance_data$graph_category <- factor(abundance_data$graph_category, levels = c("T3_H", "T7_H", "T3_D", "T7_D"))
+abundance_data$graph_category <- factor(abundance_data$graph_category, 
+                                        levels = c("T0_H", "T3_H", "T7_H", "T0_D", "T3_D", "T7_D"))
   
 
 abundance_data_summed <- abundance_data %>%
-  group_by(graph_category, family_names) %>%
+  group_by(graph_category, family_names, final_disease_state) %>%
   summarize(abundance = sum(value)) %>%
   ungroup()
 
@@ -627,27 +631,34 @@ ranks <- abundance_data_summed %>%
   group_by(graph_category) %>%
   slice(1:26)
 
-ggplot(ranks, aes(graph_category, abundance, fill = family_names, label = family_names)) +
-  geom_col(position = "fill") +
+total_ranks <- ranks %>%
+  summarize(totals = sum(abundance))
+
+ranks <- ranks %>%
+  full_join(total_ranks, by = join_by(graph_category)) %>%
+  mutate(rel_abund = 100*abundance/totals) %>%
+  mutate(family_names = factor(family_names))
+  
+ggplot(ranks, aes(graph_category, abundance, fill = fct_reorder(family_names, rel_abund, .desc = TRUE), label = 
+                    paste(family_names, paste(round(rel_abund, digits = 2), "%", sep = ""), sep = " - "))) +
+  geom_col(position = "fill", col = "black") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
-  theme(legend.position = "none")
-  
+  theme(legend.position = "none") +
+  labs(title = "Relative Abundances of 26 Most Abundant Families Per Sample - correct order") +
+  ylab("Relative Abundance") +
+  xlab("Sample") +
+  scale_x_discrete(labels = c("Healthy Homogenate", "Healthy T3", "Healthy T7", 
+                              "Diseased Homogenate", "Diseased T3", "Diseased T7"))
 
-top26 <- unique(ranks$family_names)
-
-abundance_data_summed$family_names <- ifelse(abundance_data_summed$family_names %in% top26, 
-                                             abundance_data_summed$family_names, "Other")
-
-ggplot(abundance_data_summed) +
-  geom_col(aes(graph_category, abundance, fill = family_names))
+#fill = fct_reorder(reorder_within(graph_category, family_names, rel_abund), rel_abund, .desc = TRUE)
 
 
 #bait abundances
 
 aggregation_level <- 'none' #or none
 
-microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") #%>%
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
   subset_samples(time %in% 'T0')
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -688,17 +699,48 @@ bait_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   arrange(desc(abundance)) %>%
   group_by(final_disease_state) %>%
-  slice(1:30) %>%
-  arrange(Family)
-  
+  slice(1:30)
 
-ggplot(bait_data, aes(final_disease_state, abundance, fill = fct_reorder(asv_names, Family), 
-                      label = paste(asv_names, "-", Family, Genus, Species, sep = " "))) +
-  geom_col(position = "fill") +
+bait_totals <- bait_data %>%
+  summarize(totals = sum(abundance))
+
+family_totals <- bait_data %>%
+  group_by(final_disease_state, Family) %>%
+  summarize(fam_totals = sum(abundance)) %>%
+  arrange(desc(fam_totals))
+
+all_bait_data <- bait_data %>%
+  full_join(bait_totals, by = join_by(final_disease_state)) %>%
+  full_join(family_totals, by = join_by(final_disease_state, Family)) %>%
+  ungroup() %>%
+  group_by(final_disease_state) %>%
+  mutate(fam_order = 10*rank(desc(fam_totals))) %>%
+  group_by(final_disease_state, Family) %>%
+  mutate(spec_order = rank(desc(abundance))) %>%
+  mutate(test = as.character(log(spec_order+1)/3)) %>%
+  mutate(test1 = str_after_last(test, "\\.")) %>%
+  mutate(overall_order = as.numeric(paste(fam_order, test1, sep = "."))) %>%
+  mutate(rel_abund = 100*abundance/totals)
+
+
+
+
+H_plot <- ggplot((all_bait_data %>% filter(final_disease_state == "H")), aes(final_disease_state, abundance, fill = fct_reorder(asv_names, overall_order), 
+                      label = paste(Family, Genus, Species, paste("(", asv_names, ")", " - ", round(rel_abund, digits = 2),"%", sep = ""),  sep = " "))) +
+  geom_col(position = "fill", col = "black") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
   theme(legend.position = "none") +
-  labs(title = "30 Most Abundant Species in Baits")
+  labs(title = "30 Most Abundant Species in H")
+D_plot <- ggplot((all_bait_data %>% filter(final_disease_state == "D")), aes(final_disease_state, abundance, fill = fct_reorder(asv_names, overall_order), 
+                      label = paste(Family, Genus, Species, paste("(", asv_names, ")", " - ", round(rel_abund, digits = 2),"%", sep = ""),  sep = " "))) +
+  geom_col(position = "fill", col = "black") +
+  geom_text(size = 3, position = position_fill(vjust = 0.5)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(title = "30 Most Abundant Species in D")
+
+H_plot + D_plot
 
 #families
 
