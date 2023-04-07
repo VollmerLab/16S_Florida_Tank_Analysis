@@ -10,9 +10,13 @@
 
 ### Homogenates
 **DISCLAIMER:** the colors are not the same for ASVs between columns (same problem)  
+
+Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)  
+
+
 ![plot](./Figures/most_abundant_species_in_baits.png)
 
-Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)
+
 
 ![plot](./Figures/ASVs_in_Baits.png)
 \* based on whether the abundance exceeded the threshold of 7.03 (probably the normalized equivalent to 0), which is why some ASVs are present in neither
