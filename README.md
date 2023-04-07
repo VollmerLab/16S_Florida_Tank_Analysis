@@ -49,13 +49,14 @@ The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy de
 ![plot](./Figures/VLS_both_emmeans.png)
 
 ### Logfold Changes in Bacterial Abundance
-positive logfold change means more disease
+-positive logfold change means more disease
+-filtered based on which ASVs were more abundant in diseased homogenate than healthy homogenate (T0) with the caveat that either the T3 or T7 value had to be a positive logfold change (more in diseased than healthy) 
+-faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
 
-filtered based on which ASVs were more abundant in diseased homogenate than healthy homogenate (T0) with the caveat that either the T3 or T7 value had to be a positive logfold change (more in diseased than healthy) 
-
-faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
+model used: log_emmeans_aov <- lmer(log_value ~time * final_disease_state * asv_names + (1 | tank) + (1 | genotype), data = log_emmeans_data)
 
 **Note:** I think it would make more sense as T0 (yellow), T3 (orange), T7 (red) but here's the color scheme you wanted:
+
 ![plot](./Figures/Logfold_LS_emmeans.png)
 
 ![plot](./Figures/Logfold_VLS_emmeans.png)
