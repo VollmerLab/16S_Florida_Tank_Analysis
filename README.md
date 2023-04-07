@@ -50,14 +50,10 @@ The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy de
 ### Logfold Changes in Bacterial Abundance
 log2 fold difference, positive means more disease
 
-##### Likely Suspects
-![plot](./Figures/Logfold_box_LS.png)
-![plot](./Figures/Logfold_LS.png)
+faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
 
-##### Very Likely Suspects
-![plot](./Figures/Logfold_box_VLS.png)
-![plot](./Figures/Logfold_VLS.png)
-
+![plot](./Figures/Logfold_LS_emmeans.png)
+![plot](./Figures/Logfold_VLS_emmeans.png)
 
 
 ### Random Effect Sizes
