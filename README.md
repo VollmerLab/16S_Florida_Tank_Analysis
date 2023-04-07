@@ -9,7 +9,7 @@
 
 
 ### Homogenates
-**DISCLAIMER:** the colors are not the same for families between columns (same problem)  
+**DISCLAIMER:** the colors are not the same for ASVs between columns (same problem)  
 ![plot](./Figures/most_abundant_species_in_baits.png)
 
 Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)
