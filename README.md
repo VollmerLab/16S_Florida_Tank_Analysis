@@ -41,7 +41,8 @@ Selected 30 most abundant species per homogenate type, then calculated abundance
 #### significant for final_disease_state:time interaction
 ![plot](./Figures/VLS_Interaction_emmeans.png)
 
-*removed the 4 that didn't make sense but I checked their d_v_h value and it WAS negative for all 4*
+*removed the 4 that didn't make sense but I checked their d_v_h value and it WAS negative for all 4*  
+The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy despite our filter is because our disease vs. healthy parameter is based on T0.  ASV 5 was more abundant in diseased at T0 but more in healthy in T3 and T7
 
 #### significant for BOTH final_disease_state:time interaction AND final_disease_state
 ![plot](./Figures/VLS_both_emmeans.png)
