@@ -816,7 +816,7 @@ log2_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
-  mutate(value = log2(value)) %>%
+  #mutate(value = log2(value)) %>%
   filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
   group_by(time, final_disease_state, asv_names) %>%
   summarize(ave_val = mean(value)) %>%
@@ -1050,6 +1050,36 @@ logfold_emmeans_contrasts_37 %>%
   xlab("ASV Name") +
   scale_alpha_discrete(range = c(0.6,1), guide = "none")
 
+
+## TEST
+
+log2_data$value <- log(log2_data$value)
+
+test <- log2_data %>% left_join(taxonomy_tibble) %>% filter(Genus %in% "Pseudoalteromonas")
+
+test_pseudo_aov <- lmer(value ~time*final_disease_state*asv_names + (1 | tank) + (1 | genotype), 
+                          data = test)
+
+test_pseudo <- emmeans(test_pseudo_aov, ~final_disease_state | time*asv_names) %>%
+  contrast('pairwise', adjust = 'fdr')
+
+test_pseudo %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  group_by(asv_names) %>%
+  mutate(whats_more = ifelse(estimate[time == "T7"] > estimate[time == "T3"], "More in T7", "More in T3")) %>%
+  mutate(estimate_val = estimate[time == "T0"]) %>%
+  arrange(asv_names) %>%
+  ungroup() %>%
+  ggplot(aes(x = fct_reorder(paste(Genus, " ", Species, "(", asv_names, ")", sep = ""), estimate_val), y = estimate, ymin = estimate - SE, ymax = estimate + SE,
+             colour = time, pch = time)) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  coord_flip() +
+  facet_grid(rows = vars(whats_more), scales = "free", space = "free") +
+  scale_color_manual(values = c("firebrick1", "goldenrod1", "darkorange1")) +
+  labs(title = "Pseudoalteromonas") +
+  xlab("ASV")
 
 #### Tank Effect ####
 
