@@ -75,7 +75,7 @@ model used (T0): lmer(log_value ~final_disease_state * asv_names + (1 | genotype
 
 
 ### Pseudoalteromonas
-After skimming the paper you sent about antibacterial activity against SCTLD, I checked really quickly to see if any of the Pseudoalteromonas in our data set were associated w healthy individuals
+After skimming the paper you sent about antibacterial activity against SCTLD, I checked really quickly to see if any of the Pseudoalteromonas in our data set were associated w healthy individuals, sorted by T0 logfold change.  *Pseudoalteromonas shioyasakiensis* is interesting in this regard
 
 ![plot](./Figures/Pseudoalteromonas.png)
 
