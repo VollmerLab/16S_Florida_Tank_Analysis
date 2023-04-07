@@ -55,6 +55,7 @@ filtered based on which ASVs were more abundant in diseased homogenate than heal
 
 faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
 
+**Note:** I think it would make more sense as T0 (yellow), T3 (orange), T7 (red) but here's the color scheme you wanted:
 ![plot](./Figures/Logfold_LS_emmeans.png)
 
 ![plot](./Figures/Logfold_VLS_emmeans.png)
