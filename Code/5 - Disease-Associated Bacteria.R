@@ -536,6 +536,7 @@ emmeans(both_md_aov, ~final_disease_state*time | asv_names, type = 'response') %
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
+  geom_text(aes(y = 11, label = d_v_h)) +
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   #scale_color_manual(values = wes_palette("Zissou1", 2, type = "discrete")) +
   coord_flip() +

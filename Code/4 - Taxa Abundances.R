@@ -893,6 +893,61 @@ ggplot(vls_log2_data_eb) +
   scale_color_manual(values = c("indianred4", "seagreen4", "royalblue2")) +
   labs(title = "Very Likely Suspects Logfold Change")
 
+### logfold emmeans
+
+log_emmeans_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  filter(time %in% c("T3", "T7") | (time == "T0" & tank == "HOMO")) %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  select(value, time, final_disease_state, asv_names, tank, genotype) %>%
+  filter(asv_names %in% likely_suspects_list) %>%
+  mutate(log_value = log(value))
+
+log_emmeans_aov <- lmer(log_value ~time*final_disease_state*asv_names + (1 | tank) + (1 | genotype), 
+                        data = log_emmeans_data)
+
+logfold_emmeans_contrasts <- emmeans(log_emmeans_aov, ~final_disease_state | asv_names*time) %>%
+  contrast('pairwise', adjust = 'fdr')
+
+logfold_emmeans_contrasts %>%
+  as_tibble() %>%
+  filter(time == "T0") %>%
+  filter(estimate > 0) %>%
+  {.$asv_names ->> more_in_disease_logfold}
+
+
+logfold_emmeans_contrasts %>%
+  as_tibble() %>%
+  filter(asv_names %in% more_in_disease_logfold) %>%
+  group_by(asv_names) %>%
+  mutate(whats_more = ifelse(estimate[time == "T7"] > estimate[time == "T3"], "More in T7", "More in T3")) %>%
+  filter(estimate[time == "T7"] > 0 | estimate[time == "T3"] > 0) %>%
+  mutate(growth = estimate[time == "T7"] - estimate[time == "T3"]) %>%
+  arrange(asv_names) %>%
+  ungroup() %>%
+  mutate(alpha_val = ifelse(time == "T0", "less","more")) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), growth), y = estimate, 
+             ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  labs(title = "Likely Suspects Logfold Change") +
+  coord_flip() +
+  facet_grid(rows = vars(whats_more), scales = "free", space = "free") +
+  scale_color_manual(values = c("firebrick1", "goldenrod1", "darkorange1")) +
+  xlab("ASV Name")
+  #scale_alpha_discrete(range = c(0.7,1))
+  
+#VLS
+
+log_emmeans_data %>%
+  filter(asv_names %in% v_likely_suspects_list)
+
+
 
 #### Tank Effect ####
 
