@@ -1,13 +1,18 @@
 # 16S_Florida_Tank_Analysis
 
-### Time Points 3 and 7
-26 most abundant families in each category (time + disease state)
+### Time Points 3 and 7 
+
+26 most abundant families in each category (time + disease state)  
+**DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
 ![plot](./Figures/rel_abund_order.png)
 
-**DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
 
-### Baits
+
+### Homogenates
+**DISCLAIMER:** the colors are not the same for families between columns (same problem)  
 ![plot](./Figures/most_abundant_species_in_baits.png)
+
+Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)
 
 ![plot](./Figures/ASVs_in_Baits.png)
 \* based on whether the abundance exceeded the threshold of 7.03 (probably the normalized equivalent to 0), which is why some ASVs are present in neither
@@ -24,11 +29,15 @@
 
 ![plot](./Figures/Very_Likely_Suspects_emmeans.png)
 
+### Next 3 graphs ranked in order of difference between diseased and healthy:  
+
 #### significant for final_disease_state
 ![plot](./Figures/VLS_FDS_emmeans.png)
 
 #### significant for final_disease_state:time interaction
 ![plot](./Figures/VLS_Interaction_emmeans.png)
+
+*removed the 4 that didn't make sense but I checked their d_v_h value and it WAS negative for all 4*
 
 #### significant for BOTH final_disease_state:time interaction AND final_disease_state
 ![plot](./Figures/VLS_both_emmeans.png)
@@ -56,8 +65,10 @@ random effects are larger in the healthy tanks
 
 *tank_exposure_model <- lmer(value ~ final_disease_state + (1 | tank) + (1 | time) + (1 | asv_names), 
                    data = filter(tank_data, exposure == "H"))*  
-
-![plot](./Figures/tank_model.png)  
+                   
 #H: asv_names - 0.71949, tank - 0.02200, time - 0.07243   
 #D: asv_names - 0.744188, tank - 0.003628, time - 0.034126  
+
+![plot](./Figures/tank_model.png)  
+
 
