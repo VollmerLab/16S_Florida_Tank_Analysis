@@ -1,5 +1,17 @@
-# 16S_Florida_Tank_Analysis
+# 16S Florida Tank Analysis
+### 3/17 Meeting Figures
 
+![plot](./Figures/Venn.png)
+
+![plot](./Figures/Upset1.png)
+
+![plot](./Figures/Upset2.png)
+
+![plot](./Figures/Upset3.png)
+
+![plot](./Figures/Upset4.png)
+
+## New Analysis
 ### Family Abundances
 
 **DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
