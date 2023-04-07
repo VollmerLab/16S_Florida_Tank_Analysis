@@ -74,6 +74,11 @@ model used (T0): lmer(log_value ~final_disease_state * asv_names + (1 | genotype
 ![plot](./Figures/Logfold_VLS_emmeans_combined.png)
 
 
+### Pseudoalteromonas
+After skimming the paper you sent about antibacterial activity against SCTLD, I checked really quickly to see if any of the Pseudoalteromonas in our data set were associated w healthy individuals, sorted by T0 logfold change.  *Pseudoalteromonas shioyasakiensis* is interesting in this regard
+
+![plot](./Figures/Pseudoalteromonas.png)
+
 ### Random Effect Sizes
 random effects are larger in the healthy tanks
 
