@@ -4,15 +4,19 @@
 ![plot](./Figures/Venn.png)
 
 ##### All ASVs
+
 ![plot](./Figures/Upset1.png)
 
 ##### Likely Suspects
+
 ![plot](./Figures/Upset2.png)
 
 ##### Very Likely Suspects (more in Disease)
+
 ![plot](./Figures/Upset3.png)
 
 ##### Very Likely Suspects (more in Healthy)
+
 ![plot](./Figures/Upset4.png)
 
 ## New Analysis
