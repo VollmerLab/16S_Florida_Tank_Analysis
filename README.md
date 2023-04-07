@@ -53,6 +53,8 @@ The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy de
 - filtered based on which ASVs were more abundant in diseased homogenate than healthy homogenate (T0) with the caveat that either the T3 or T7 value had to be a positive logfold change (more in diseased than healthy) 
 - faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
 
+#### One lmer model for all time steps
+
 model used: log_emmeans_aov <- lmer(log_value ~time * final_disease_state * asv_names + (1 | tank) + (1 | genotype), data = log_emmeans_data)
 
 **Note:** I think it would make more sense as T0 (yellow), T3 (orange), T7 (red) but here's the color scheme you wanted:
@@ -60,6 +62,16 @@ model used: log_emmeans_aov <- lmer(log_value ~time * final_disease_state * asv_
 ![plot](./Figures/Logfold_LS_emmeans.png)
 
 ![plot](./Figures/Logfold_VLS_emmeans.png)
+
+#### Two separate models (aov_4 for T3,T7 and lmer for T0)
+
+model used (T3 + T7): aov_4(log_value ~time * final_disease_state * asv_names + (1 + time | frag_ASV_id), data = log_emmeans_data_37)
+
+model used (T0): lmer(log_value ~final_disease_state * asv_names + (1 | genotype), data = log_emmeans_data_0)
+
+![plot](./Figures/Logfold_LS_emmeans_combined.png)
+
+![plot](./Figures/Logfold_VLS_emmeans_combined.png)
 
 
 ### Random Effect Sizes
