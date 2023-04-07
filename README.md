@@ -1,8 +1,6 @@
 # 16S_Florida_Tank_Analysis
 
-### Time Points 3 and 7 
-
-26 most abundant families in each category (time + disease state)  
+### Family Abundances
 
 **DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
 
