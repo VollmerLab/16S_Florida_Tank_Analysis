@@ -991,8 +991,7 @@ log_emmeans_data_37 <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
                names_to = "asv_names", values_to = "value") %>%
   filter(time %in% c("T3", "T7")) %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
-  #select(value, time, final_disease_state, asv_names, tank, genotype) %>%
-  filter(asv_names %in% likely_suspects_list) %>%
+  filter(asv_names %in% v_likely_suspects_list) %>% #v_likely_suspects_list or likely_suspects_list
   mutate(log_value = log(value)) %>%
   mutate(frag_ASV_id = paste(fragment_id, asv_names, sep = "_")) %>%
   select(-c(sample_id, disease_state))
@@ -1006,7 +1005,7 @@ log_emmeans_data_0 <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   filter(time == "T0" & tank == "HOMO") %>%
   mutate(across(c(exposure, final_disease_state, time), factor)) %>%
   select(value, time, final_disease_state, asv_names, tank, genotype) %>%
-  filter(asv_names %in% likely_suspects_list) %>%
+  filter(asv_names %in% v_likely_suspects_list) %>% #v_likely_suspects_list or likely_suspects_list
   mutate(log_value = log(value))
 
 log_emmeans_aov_0 <- lmer(log_value ~final_disease_state*asv_names + (1 | genotype), 
@@ -1044,12 +1043,12 @@ logfold_emmeans_contrasts_37 %>%
              ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time, alpha = alpha_val)) +
   geom_hline(yintercept = 0) +
   geom_pointrange(position = position_dodge(0.5)) +
-  labs(title = "Likely Suspects Logfold Change") +
+  labs(title = "Very Likely Suspects Logfold Change - Combined Models") +
   coord_flip() +
   facet_grid(rows = vars(whats_more), scales = "free", space = "free") +
   scale_color_manual(values = c("firebrick1", "goldenrod1", "darkorange1")) +
   xlab("ASV Name") +
-  scale_alpha_discrete(range = c(0.6,1))
+  scale_alpha_discrete(range = c(0.6,1), guide = "none")
 
 
 #### Tank Effect ####
