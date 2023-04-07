@@ -49,9 +49,9 @@ The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy de
 ![plot](./Figures/VLS_both_emmeans.png)
 
 ### Logfold Changes in Bacterial Abundance
-log2 fold difference, positive means more disease
+positive logfold change means more disease
 
-filtered based on which ASVs were more abundant in diseased than healthy in the homogenates (T0) with the caveat that either the T3 or T7 value had to be a positive logfold change (more in disease than healthy) 
+filtered based on which ASVs were more abundant in diseased homogenate than healthy homogenate (T0) with the caveat that either the T3 or T7 value had to be a positive logfold change (more in diseased than healthy) 
 
 faceted by whether T3 or T7 was more abundant in disease, ordered within facets by the difference between T7 and T3 values
 
