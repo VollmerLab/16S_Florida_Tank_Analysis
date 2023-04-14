@@ -639,13 +639,20 @@ ranks <- ranks %>%
   mutate(rel_abund = 100*abundance/totals) %>%
   mutate(family_names = factor(family_names))
   
-ggplot(ranks, aes(graph_category, abundance, fill = fct_reorder(family_names, rel_abund, .desc = TRUE), label = 
-                    paste(family_names, paste(round(rel_abund, digits = 2), "%", sep = ""), sep = " - "))) +
+ranks %>%
+  mutate(family_sort = fct_reorder(reorder_within(graph_category, family_names, rel_abund), rel_abund, .desc = TRUE)) 
+
+
+?reorder_within
+
+ggplot(ranks, aes(graph_category, abundance, group = reorder_within(family_names, rel_abund, graph_category) %>% fct_rev(), 
+                  label = paste(family_names, paste(round(rel_abund, digits = 2), "%", sep = ""), sep = " - "),
+                  fill = family_names)) +
   geom_col(position = "fill", col = "black") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
   theme(legend.position = "none") +
-  labs(title = "Relative Abundances of 26 Most Abundant Families Per Sample - correct order") +
+  labs(title = "Relative Abundances of 26 Most Abundant Families Per Sample") +
   ylab("Relative Abundance") +
   xlab("Sample") +
   scale_x_discrete(labels = c("Healthy Homogenate", "Healthy T3", "Healthy T7", 
