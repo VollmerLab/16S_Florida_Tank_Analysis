@@ -22,14 +22,9 @@
 ## New Analysis
 ### Family Abundances
 
-**DISCLAIMER:** the colors are not the same for families between columns, I could not get it to get the colors AND order right no matter what I tried (will need Jason's help to fix it if he knows how)  
-
 ![plot](./Figures/rel_abund_order.png)
 
-
-
-### Homogenates
-**DISCLAIMER:** the colors are not the same for ASVs between columns (same problem)  
+### Homogenates 
 
 Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)  
 
