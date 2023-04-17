@@ -642,9 +642,16 @@ ranks <- ranks %>%
 ranks %>%
   mutate(family_sort = fct_reorder(reorder_within(graph_category, family_names, rel_abund), rel_abund, .desc = TRUE)) 
 
+num_of_fams <- length(unique(ranks$family_names))
+getPalette <- colorRampPalette(brewer.pal(8, "Viridis"))
 
-?reorder_within
+library(RColorBrewer)
+n <- 60
+qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+pie(rep(1,num_of_fams), col=sample(col_vector, num_of_fams))
 
+set.seed(1245)
 ggplot(ranks, aes(graph_category, abundance, group = reorder_within(family_names, rel_abund, graph_category) %>% fct_rev(), 
                   label = paste(family_names, paste(round(rel_abund, digits = 2), "%", sep = ""), sep = " - "),
                   fill = family_names)) +
@@ -656,7 +663,11 @@ ggplot(ranks, aes(graph_category, abundance, group = reorder_within(family_names
   ylab("Relative Abundance") +
   xlab("Sample") +
   scale_x_discrete(labels = c("Healthy Homogenate", "Healthy T3", "Healthy T7", 
-                              "Diseased Homogenate", "Diseased T3", "Diseased T7"))
+                              "Diseased Homogenate", "Diseased T3", "Diseased T7")) +
+  scale_fill_manual(values = sample(col_vector, num_of_fams))
+
+
+
 
 #fill = fct_reorder(reorder_within(graph_category, family_names, rel_abund), rel_abund, .desc = TRUE)
 
@@ -729,25 +740,19 @@ all_bait_data <- bait_data %>%
   mutate(overall_order = as.numeric(paste(fam_order, test1, sep = "."))) %>%
   mutate(rel_abund = 100*abundance/totals)
 
+num_of_asvs <- length(unique(all_bait_data$asv_names))
 
-
-
-H_plot <- ggplot((all_bait_data %>% filter(final_disease_state == "H")), aes(final_disease_state, abundance, fill = fct_reorder(asv_names, overall_order), 
-                      label = paste(Family, Genus, Species, paste("(", asv_names, ")", " - ", round(rel_abund, digits = 2),"%", sep = ""),  sep = " "))) +
+set.seed(032897)
+ggplot(all_bait_data, aes(final_disease_state, abundance, fill = asv_names, group = reorder_within(asv_names, rel_abund, final_disease_state) %>% fct_rev(), 
+        label = paste(Family, Genus, Species, paste("(", asv_names, ")", " - ", round(rel_abund, digits = 2),"%", 
+                                                    sep = ""),  sep = " "))) +
   geom_col(position = "fill", col = "black") +
   geom_text(size = 3, position = position_fill(vjust = 0.5)) +
   theme_bw() +
   theme(legend.position = "none") +
-  labs(title = "30 Most Abundant Species in H")
-D_plot <- ggplot((all_bait_data %>% filter(final_disease_state == "D")), aes(final_disease_state, abundance, fill = fct_reorder(asv_names, overall_order), 
-                      label = paste(Family, Genus, Species, paste("(", asv_names, ")", " - ", round(rel_abund, digits = 2),"%", sep = ""),  sep = " "))) +
-  geom_col(position = "fill", col = "black") +
-  geom_text(size = 3, position = position_fill(vjust = 0.5)) +
-  theme_bw() +
-  theme(legend.position = "none") +
-  labs(title = "30 Most Abundant Species in D")
+  labs(title = "30 Most Abundant Species") +
+  scale_fill_manual(values = sample(col_vector, num_of_asvs))
 
-H_plot + D_plot
 
 #families
 
@@ -779,6 +784,7 @@ bait_data_f <- cpm(otu_tmm_f, log = TRUE, prior.count = 2) %>%
   slice(1:30)
 
 bait_data_f$final_disease_state <- factor(bait_data_f$final_disease_state, levels = c("H", "D"))
+
 
 ggplot(bait_data_f, aes(final_disease_state, abundance, fill = fct_reorder(family_names, abundance, .desc = TRUE), 
                         label = paste(family_names, round(abundance, digits = 1), sep = " - "))) +

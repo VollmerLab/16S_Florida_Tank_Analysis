@@ -23,6 +23,9 @@ library(ComplexUpset)
 library(strex)
 library(forcats)
 library(wesanderson)
+library(msa)
+library(Biostrings)
+library(phangorn)
 library(tidyverse)
 
 #### Read in Data ####
@@ -39,7 +42,9 @@ if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
 } else {
+  #sequences <- taxa_names(microbiome_data)
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+  #names(sequences) <- taxa_names(microbiome_data)
 }
 
 the_samples <- psmelt(microbiome_data) %>%
@@ -271,7 +276,7 @@ asv_comp_upset_subset <- subset_models %>%
   # slice(1:10) %>%
   rowwise(asv_names) %>%
   reframe(as_tibble(model$anova_table, rownames = 'param'),
-          d_v_h = emmeans(model, ~final_disease_state) %>%
+          d_v_h =  emmeans(model, ~final_disease_state) %>%
             as_tibble %>%
             select(emmean) %>%
             pull(1) %>%
@@ -339,7 +344,7 @@ asv_comp_upset_subset %>%
   filter(!is.na(Genus)) %>%
   distinct
 
-### emmeans analysis
+#### emmeans analysis ####
 
 ##more in disease - very likely suspects
 
@@ -442,19 +447,183 @@ most_sig_diffs <- subset_models %>%
             select(emmean) %>%
             pull(1) %>%
             diff) %>%
-  rename(p = `Pr(>F)`) %>%
+  dplyr::rename(p = `Pr(>F)`) %>%
   group_by(param) %>%
   mutate(p = p.adjust(p, 'fdr')) %>%
   ungroup %>%
   filter(param %in% c("final_disease_state", "final_disease_state:time"))
 
+#likely suspects
+
+interaction_types <- most_sig_diffs %>%
+  filter(p < 0.05) %>%
+  nest_by(asv_names) %>%
+  rowwise() %>%
+  mutate(type = ifelse(nrow(data) == 2, "both", NA)) %>%
+  unnest(cols = c(data)) %>%
+  mutate(type = ifelse(is.na(type), param, type)) %>%
+  mutate(d_v_h_sign = ifelse(d_v_h < 0, "More in Disease", "More in Healthy")) %>%
+  select(asv_names, type, d_v_h, d_v_h_sign)
+
+both_list <- interaction_types %>%
+  filter(type == "both") %>%
+  .$asv_names %>%
+  unique()
+
+
+## likely suspects - all together in one model
+all_types <- raw_target_data %>%
+  filter(asv_names %in% interaction_types$asv_names)
+
+all_types_model <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+     data = all_types)
+
+emmeans(all_types_model, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ") - ", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Likely Suspects") +
+  xlab("ASV Name") +
+  facet_wrap(~type, scales = "free", nrow = 3)
+
+
+suspect_group <- raw_target_data %>%
+  filter(asv_names %in% vl_suspects_list)
+  
+### FDS
+
+fds_facet <- suspect_group %>%
+  filter(asv_names %in% interaction_types$asv_names[interaction_types$type == "final_disease_state"])
+
+fds_facet_aov <- lmer(value ~ asv_names*final_disease_state + (1 | genotype) + (1 | tank), 
+                        data = fds_facet)
+
+fds_facet_graph <- emmeans(fds_facet_aov, ~final_disease_state | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Final Disease State") +
+  xlab("ASV Name")
+
+### FDS:time
+
+fds_t_facet <- suspect_group %>%
+  filter(asv_names %in% interaction_types$asv_names[interaction_types$type == "final_disease_state:time"])
+
+fds_t_facet_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                        data = fds_t_facet)
+
+fds_t_facet_graph <- emmeans(fds_t_facet_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Final Disease State:Time") +
+  xlab("ASV Name")
+
+### both
+
+both_facet <- suspect_group %>%
+  filter(asv_names %in% interaction_types$asv_names[interaction_types$type == "both"])
+
+both_facet_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                        data = both_facet)
+
+both_facet_graph <- emmeans(both_facet_aov, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Both FDS and FDS:Time") +
+  xlab("ASV Name")
+
+#all together
+
+fds_facet_graph / fds_t_facet_graph / both_facet_graph + plot_annotation(title = "Very Likely Suspects")
+
+
+
+## very likely suspects - all together in one model
+vls_all_types <- raw_target_data %>%
+  filter(asv_names %in% interaction_types$asv_names) %>%
+  filter(asv_names %in% vl_suspects_list)
+
+vls_all_types_model <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
+                        data = vls_all_types)
+
+emmeans(vls_all_types_model, ~final_disease_state*time | asv_names, type = 'response') %>%
+  cld(Letters = LETTERS) %>%
+  as_tibble() %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
+  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+  mutate(.group = str_trim(.group)) %>%
+  #rename(emmean = response) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ") - ", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             colour = graph_color, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  labs(title = "Very Likely Suspects") +
+  xlab("ASV Name") +
+  facet_wrap(~type, scales = "free", nrow = 3)
+
+
+
+
+
+#### previous attempt ####
 ##fds time interaction
 
 more_disease_fds_t <- most_sig_diffs %>% filter(param %in% c("final_disease_state:time")) %>% arrange(d_v_h) %>% 
   filter(p < 0.05) %>% filter(d_v_h < 0)
   
 fds_t_md <- raw_target_data %>%
-  filter(asv_names %in% more_disease_fds_t$asv_names)
+  filter(asv_names %in% more_disease_fds_t$asv_names) %>%
+  filter(!asv_names %in% both_list)
 
 fds_t_md_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
                        data = fds_t_md)
@@ -486,7 +655,8 @@ more_disease_fds <- most_sig_diffs %>% filter(param %in% c("final_disease_state"
   filter(p < 0.05) %>% filter(d_v_h < 0)
 
 fds_md <- raw_target_data %>%
-  filter(asv_names %in% more_disease_fds$asv_names)
+  filter(asv_names %in% more_disease_fds$asv_names) %>%
+  filter(!asv_names %in% both_list)
 
 fds_md_aov <- lmer(value ~ asv_names*final_disease_state + (1 | genotype) + (1 | tank), 
                      data = fds_md)
@@ -517,7 +687,7 @@ more_both_fds <- most_sig_diffs %>% filter(p < 0.05) %>% nest_by(asv_names) %>%
   rowwise() %>% filter(nrow(data) == 2) %>% unnest(cols = c(data)) %>% arrange(d_v_h) %>% filter(d_v_h < 0)
 
 both_md <- raw_target_data %>%
-  filter(asv_names %in% more_both_fds$asv_names)
+  filter(asv_names %in% both_list)
 
 both_md_aov <- lmer(value ~ asv_names*final_disease_state*time + (1 | genotype) + (1 | tank), 
                    data = both_md)
@@ -619,3 +789,37 @@ raw_target_data %>%
   
 
 
+
+#### Trees ####
+
+
+tmp <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
+  left_join(taxonomy_tibble, by = 'asv_names') %>%
+  nest(data = c(Genus, Species, asv_names, sequence))
+
+tmp %>%
+  rowwise %>%
+  mutate(n_asv = nrow(data)) %>%
+  ungroup %>%
+  arrange(n_asv) %>%
+  filter(n_asv > 10)
+
+tmp_dat <- tmp %>%
+  filter(Family == 'Omnitrophaceae') %>%
+  select(data) %>%
+  unnest(data) %$%
+  set_names(sequence, asv_names) %>%
+  DNAStringSet()
+
+?msa
+msa_out <- msa(tmp_dat)
+msa_phy <- msaConvert(msa_out, 'phangorn::phyDat')
+
+
+
+mt <- modelTest(msa_phy)
+ml_tree <- pml_bb(mt)
+boot_ml <- bootstrap.pml(ml_tree, bs = 100, optNni = TRUE,
+                         control = pml.control(trace = 1))
+plotBS(midpoint(ml_tree$tree))
+plotBS(midpoint(ml_tree$tree), boot_ml)
