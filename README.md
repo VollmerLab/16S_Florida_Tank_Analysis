@@ -39,29 +39,14 @@ Selected 30 most abundant species per homogenate type, then calculated abundance
 ### Likely Suspects
 *present in T3, T7, and Diseased bait*
 
-![plot](./Figures/Likely_Suspects_emmeans.png)
+![plot](./Figures/LS_interactions_faceted.png)
 
 ### Very Likely Suspects
 *present in T3, T7, and Diseased bait*   
 *AND differs significantly for either final disease state or the interaction of final disease state and time*  
 *AND more abundant in diseased than healthy*
 
-![plot](./Figures/Very_Likely_Suspects_emmeans.png)
-
-### Next 3 graphs ranked in order of difference between diseased and healthy: 
-y-axis is Family and Genus (species is NA for most ASVs)
-
-#### significant for final_disease_state
-![plot](./Figures/VLS_FDS_emmeans.png)
-
-#### significant for final_disease_state:time interaction
-![plot](./Figures/VLS_Interaction_emmeans.png)
-
-*removed the 4 that didn't make sense but I checked their d_v_h value and it WAS negative for all 4*  
-The reason ASV 5 was acting weirdly and seemed to be more abundant in Healthy despite our filter is because our disease vs. healthy parameter is based on T0.  ASV 5 was more abundant in diseased at T0 but more in healthy at T3 and T7
-
-#### significant for BOTH final_disease_state:time interaction AND final_disease_state
-![plot](./Figures/VLS_both_emmeans.png)
+![plot](./Figures/VLS_interactions_faceted.png)
 
 ## Logfold Changes in Bacterial Abundance
 - positive logfold change means more disease
