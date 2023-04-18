@@ -25,9 +25,6 @@ Of the total number of ASVs present in all of the data within each family, what 
 
 ### Homogenates 
 
-Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)  
-
-
 ![plot](./Figures/most_abundant_species_in_baits.png)
 
 
