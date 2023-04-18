@@ -1051,7 +1051,7 @@ logfold_emmeans_contrasts_37 %>%
   arrange(asv_names) %>%
   ungroup() %>%
   mutate(time = factor(time, levels = c("T0", "T3", "T7"))) %>%
-  mutate(alpha_val = ifelse(time == "T0", "less","more")) %>%
+  #mutate(alpha_val = ifelse(time == "T0", "less","more")) %>%
   left_join(interaction_types, by = join_by(asv_names), multiple = "all") %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), growth), y = estimate, 

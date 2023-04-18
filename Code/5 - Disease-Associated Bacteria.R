@@ -463,6 +463,7 @@ interaction_types <- most_sig_diffs %>%
   unnest(cols = c(data)) %>%
   mutate(type = ifelse(is.na(type), param, type)) %>%
   mutate(d_v_h_sign = ifelse(d_v_h < 0, "More in Disease", "More in Healthy")) %>%
+  #select(asv_names, type)
   select(asv_names, type, d_v_h, d_v_h_sign)
 
 both_list <- interaction_types %>%
@@ -580,7 +581,8 @@ both_facet_graph <- emmeans(both_facet_aov, ~final_disease_state*time | asv_name
 
 #all together
 
-fds_facet_graph / fds_t_facet_graph / both_facet_graph + plot_annotation(title = "Very Likely Suspects")
+fds_facet_graph / fds_t_facet_graph / both_facet_graph + plot_annotation(title = "Very Likely Suspects") + 
+  plot_layout(heights = c(1, 2, 3))
 
 
 
@@ -792,17 +794,61 @@ raw_target_data %>%
 
 #### Trees ####
 
+# interesting families
+likely_families <- likely_suspects_list %>% 
+  as_tibble() %>% 
+  reframe(asv_names = value) %>% 
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  .$Family %>%
+  unique() %>%
+  sort()
 
+very_likely_families <- vl_suspects_list %>% 
+  as_tibble() %>% 
+  reframe(asv_names = value) %>% 
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  .$Family %>%
+  unique() %>%
+  sort()
+
+#tree stuff
 tmp <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
-  nest(data = c(Genus, Species, asv_names, sequence))
+  rowwise() %>%
+  mutate(asv_names = ifelse(asv_names %in% vl_suspects_list, paste("**", asv_names, sep = ""), asv_names)) %>%
+  mutate(asv_names = ifelse(asv_names %in% likely_suspects_list, paste("*", asv_names, sep = ""), asv_names)) %>%
+  nest(data = c(Genus, Species, asv_names, sequence)) %>%
+  filter(Family %in% likely_families) %>%
+  mutate(likelihood = ifelse(Family %in% very_likely_families, "very likely", "likely"))
 
-tmp %>%
-  rowwise %>%
-  mutate(n_asv = nrow(data)) %>%
-  ungroup %>%
-  arrange(n_asv) %>%
-  filter(n_asv > 10)
+current_fam <- tmp %>% filter(Family %in% c("Thiomicrospiraceae", "Arenicellaceae"))
+
+make_tree <- function(current_fam){
+  prelim_tree <- current_fam %>%
+    select(data) %>%
+    unnest(data) %$%
+    set_names(sequence, asv_names) %>%
+    DNAStringSet() %>%
+    msa() %>%
+    msaConvert(., 'phangorn::phyDat') %>%
+    modelTest() %>% 
+    pml_bb()
+  
+  bootstrapping <- bootstrap.pml(prelim_tree, bs = 100, optNni = TRUE,
+                                 control = pml.control(trace = 1))
+  tree_plot <- plotBS(midpoint(prelim_tree$tree), bootstrapping)
+  
+  return(tree_plot)
+}
+  
+make_tree(current_fam)
+
+plot_list <- current_fam %>%
+  rowwise() %>%
+  mutate(plots = list(make_tree(.)))
+
+  
+  #Jason's tutorial
 
 tmp_dat <- tmp %>%
   filter(Family == 'Omnitrophaceae') %>%
@@ -823,3 +869,6 @@ boot_ml <- bootstrap.pml(ml_tree, bs = 100, optNni = TRUE,
                          control = pml.control(trace = 1))
 plotBS(midpoint(ml_tree$tree))
 plotBS(midpoint(ml_tree$tree), boot_ml)
+
+
+
