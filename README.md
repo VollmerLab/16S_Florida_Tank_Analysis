@@ -12,7 +12,13 @@
 
 ![plot](./Figures/LS_complex_upset.png)
 
-## New Analysis
+#### Relative Representation of Families of Interest
+Of the total number of ASVs present in all of the data within each family, what proportion of those are found in the Likely or Very Likely Suspect Lists?  
+
+![plot](./Figures/LS_spec_props.png)
+
+![plot](./Figures/VLS_spec_props.png)
+
 ### Family Abundances
 
 ![plot](./Figures/rel_abund_order.png)
