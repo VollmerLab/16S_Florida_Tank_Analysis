@@ -32,10 +32,6 @@ Selected 30 most abundant species per homogenate type, then calculated abundance
 ![plot](./Figures/most_abundant_species_in_baits.png)
 
 
-
-![plot](./Figures/ASVs_in_Baits.png)
-\* based on whether the abundance exceeded the threshold of 7.03 (probably the normalized equivalent to 0), which is why some ASVs are present in neither
-
 ### Likely Suspects
 *present in T3, T7, and Diseased bait*
 
