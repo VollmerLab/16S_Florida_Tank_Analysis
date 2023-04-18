@@ -46,16 +46,15 @@ Of the total number of ASVs present in all of the data within each family, what 
 - faceted by significant terms, alpha indicates whether T3 or T7 was more abundant in disease (translucent means T3 > T7 so likely not what we want)
 - ordered within facets by the difference between T7 and T3 values
 
-
-### Two separate models (aov_4 for T3,T7 and lmer for T0)
+##### Two separate models (aov_4 for T3,T7 and lmer for T0)
 
 model used (T3 + T7): aov_4(log_value ~time * final_disease_state * asv_names + (1 + time | frag_ASV_id), data = log_emmeans_data_37)
 
 model used (T0): lmer(log_value ~final_disease_state * asv_names + (1 | genotype), data = log_emmeans_data_0)
 
-![plot](./Figures/Logfold_LS_logfold_faceted.png)
+![plot](./Figures/LS_logfold_faceted.png)
 
-![plot](./Figures/Logfold_VLS_logfold_faceted.png)
+![plot](./Figures/VLS_logfold_faceted.png)
 
 
 ### Pseudoalteromonas
