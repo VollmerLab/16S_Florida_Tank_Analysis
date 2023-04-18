@@ -12,15 +12,18 @@
 
 ![plot](./Figures/LS_complex_upset.png)
 
-## New Analysis
+#### Relative Representation of Families of Interest
+Of the total number of ASVs present in all of the data within each family, what proportion of those are found in the Likely or Very Likely Suspect Lists?  
+
+![plot](./Figures/LS_spec_props.png)
+
+![plot](./Figures/VLS_spec_props.png)
+
 ### Family Abundances
 
 ![plot](./Figures/rel_abund_order.png)
 
 ### Homogenates 
-
-Selected 30 most abundant species per homogenate type, then calculated abundance of each family, ranked by family abundance (within each family, ranked by species abundance)  
-
 
 ![plot](./Figures/most_abundant_species_in_baits.png)
 
@@ -43,16 +46,15 @@ Selected 30 most abundant species per homogenate type, then calculated abundance
 - faceted by significant terms, alpha indicates whether T3 or T7 was more abundant in disease (translucent means T3 > T7 so likely not what we want)
 - ordered within facets by the difference between T7 and T3 values
 
-
-### Two separate models (aov_4 for T3,T7 and lmer for T0)
+##### Two separate models (aov_4 for T3,T7 and lmer for T0)
 
 model used (T3 + T7): aov_4(log_value ~time * final_disease_state * asv_names + (1 + time | frag_ASV_id), data = log_emmeans_data_37)
 
 model used (T0): lmer(log_value ~final_disease_state * asv_names + (1 | genotype), data = log_emmeans_data_0)
 
-![plot](./Figures/Logfold_LS_logfold_faceted.png)
+![plot](./Figures/LS_logfold_faceted.png)
 
-![plot](./Figures/Logfold_VLS_logfold_faceted.png)
+![plot](./Figures/VLS_logfold_faceted.png)
 
 
 ### Pseudoalteromonas
@@ -73,7 +75,5 @@ random effects are larger in the healthy tanks
                    
 #H: asv_names - 0.71949, tank - 0.02200, time - 0.07243   
 #D: asv_names - 0.744188, tank - 0.003628, time - 0.034126  
-
-![plot](./Figures/tank_model.png)  
 
 
