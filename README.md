@@ -32,7 +32,7 @@ Of the total number of ASVs present in all of the data within each family, what 
 *present in T3, T7, and Diseased bait*
 
 **note:** the significant terms were determined based on the initial repeated measures model run for each ASV:  
-    aov_4(value ~ time * (exposure + final_disease_state) + (time | fragment_id), data = data)
+    aov_4(value ~ time * (exposure + final_disease_state) + (time | fragment_id), data = data)  
 the ASVs for each grouping of significant terms then had its own lmer model run on it which was plugged into emmeans.  The two ASVs that are grouped as being significant for FDS but don't have different significance letters were likely significant for the first model(within each ASV) but not for the second model (run on all ASVs with ASV name as a factor)
 
 ![plot](./Figures/LS_interactions_faceted.png)
