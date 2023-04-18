@@ -1066,8 +1066,9 @@ logfold_emmeans_contrasts_37 %>%
   scale_alpha_discrete(range = c(0.4, 1), guide = "none")
 
 
-## TEST
+## Pseudoalteromonas
 
+#not reproducible - fix if relevant
 log2_data$value <- log(log2_data$value)
 
 test <- log2_data %>% left_join(taxonomy_tibble) %>% filter(Genus %in% "Pseudoalteromonas")
@@ -1133,4 +1134,19 @@ emmeans(tank_exposure_model, ~final_disease_state, type = 'response') %>%
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   labs(title = "Tank Effect Model")
+
+
+## new comp term
+
+t7_dvh <- logfold_emmeans_contrasts_37 %>%
+  as_tibble() %>%
+  filter(time == "T7") %>%
+  reframe(asv_names, dvh = estimate)
+
+
+
+
+
+
+
 

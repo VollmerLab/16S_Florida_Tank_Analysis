@@ -350,6 +350,14 @@ asv_comp_upset_subset %>%
 
 vl_suspects_list <- filter(asv_comp_upset_subset, d_v_h < 0)$asv_names # which ASVs are more in Disease
 
+vl_suspects_list_2 <- asv_comp_upset_subset %>% 
+  left_join(t7_dvh, by = join_by(asv_names)) %>%
+  filter(dvh < 0) %>%
+  .$asv_names #this new list based on differences at T7 is more limited 
+      #but still includes 4 of the objectively least interesting ASVs in the LS set :/
+
+intersect(vl_suspects_list, vl_suspects_list_2) #"ASV_1618" "ASV_3292" "ASV_41"   "ASV_5"    "ASV_852" 
+
 v_likely_suspects <- raw_target_data %>%
   filter(asv_names %in% vl_suspects_list) #only select asvs more in disease
 
