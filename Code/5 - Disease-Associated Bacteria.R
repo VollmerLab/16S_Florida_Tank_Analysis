@@ -872,3 +872,105 @@ plotBS(midpoint(ml_tree$tree), boot_ml)
 
 
 
+#### complex upsets LS ####
+
+ls_cu_model <- raw_target_data %>%
+  nest_by(asv_names) %>%
+  ungroup %>%
+  dplyr::slice(-971) %>%
+  filter(asv_names %in% likely_suspects_list) %>%
+  rowwise(asv_names) %>%
+  summarise(model = list(aov_4(value ~ time * (exposure + final_disease_state) + 
+                                 (time | fragment_id),
+                               data = data)))
+
+#process data for performing complex upset - all ASVs
+ls_comp_upset <- ls_cu_model %>%
+  ungroup %>%
+  # slice(1:10) %>%
+  rowwise(asv_names) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param') %>%
+            select(param, `Pr(>F)`)) %>%
+  dplyr::rename(p = `Pr(>F)`) %>%
+  group_by(param) %>% #param = term or interaction
+  mutate(p = p.adjust(p, 'fdr')) %>%
+  ungroup %>%
+  mutate(p = p < 0.05) %>% #give true/false
+  pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_') %>% #pivot each term into its own column
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c(Kingdom, Phylum)) %>%
+  filter(!if_all(starts_with('p_'), ~!.)) #remove ASVs where all p vals are not significant
+
+ls_complex_upset <- upset(ls_comp_upset, 
+                   colnames(dplyr::select(ls_comp_upset, starts_with('p_'))), 
+                   
+                   annotations = list(
+                     # 2nd method - using ggplot
+                     'Order'=(
+                       ggplot(mapping=aes(fill=Order)) 
+                       + geom_bar(stat = 'count', position = 'fill') 
+                       + scale_y_continuous(labels = scales::percent_format())
+                     ) +
+                       ylab('Order') +
+                       theme(legend.position = 'top')
+                   ),
+                   
+                   name='asv_names', width_ratio=0.1, min_size = 1) + plot_annotation(title = "Likely Suspects")
+
+
+
+#### relative abund of LS ####
+
+#LS
+LS_spec_dat <- likely_suspects_list %>% 
+  as_tibble() %>% 
+  reframe(asv_names = value) %>% 
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  group_by(Family) %>%
+  summarize(count = n())
+
+#VLS
+VLS_spec_dat <- vl_suspects_list %>% 
+  as_tibble() %>% 
+  reframe(asv_names = value) %>% 
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  group_by(Family) %>%
+  summarize(count = n())
+
+#totals
+
+all_dat <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state, time), factor)) %>%
+  select(-c(disease_state, time, sample_id, tank)) %>%
+  .$asv_names %>%
+  unique() %>%
+  as_tibble() %>% 
+  reframe(asv_names = value) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  group_by(Family) %>%
+  summarize(count = n()) %>%
+  filter(Family %in% LS_spec_dat$Family) #change for LS vs. VLS
+
+#proportions
+
+
+ls_prop_dat <- LS_spec_dat %>% 
+  left_join(all_dat, by = join_by(Family)) %>%
+  mutate(prop = count.x/count.y)
+
+ggplot(ls_prop_dat) +
+  geom_col(aes(Family, prop, fill = Family)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  coord_flip() +
+  ylab("Proportion of Family Members") +
+  labs(title = "Likely Suspects")
+
+
+
+
