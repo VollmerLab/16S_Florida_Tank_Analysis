@@ -1,5 +1,4 @@
 # 16S Florida Tank Analysis
-### 3/17 Meeting Figures
 
 ![plot](./Figures/Venn.png)
 
@@ -11,13 +10,7 @@
 
 ![plot](./Figures/Upset2.png)
 
-##### Very Likely Suspects (more in Disease)
-
-![plot](./Figures/Upset3.png)
-
-##### Very Likely Suspects (more in Healthy)
-
-![plot](./Figures/Upset4.png)
+![plot](./Figures/LS_complex_upset.png)
 
 ## New Analysis
 ### Family Abundances
