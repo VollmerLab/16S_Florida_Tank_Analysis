@@ -76,6 +76,4 @@ random effects are larger in the healthy tanks
 #H: asv_names - 0.71949, tank - 0.02200, time - 0.07243   
 #D: asv_names - 0.744188, tank - 0.003628, time - 0.034126  
 
-![plot](./Figures/tank_model.png)  
-
 
