@@ -81,3 +81,9 @@ random effects are larger in the healthy tanks
 #D: asv_names - 0.744188, tank - 0.003628, time - 0.034126  
 
 
+### Population Dynamics Project (WIP)
+
+![plot](./Figures/PD_proj_1_wl.png)
+![plot](./Figures/PD_proj_2_wl.png)
+
+
