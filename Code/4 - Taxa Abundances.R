@@ -622,14 +622,14 @@ abundance_data$graph_category <- factor(abundance_data$graph_category,
   
 
 abundance_data_summed <- abundance_data %>%
-  group_by(graph_category, family_names, final_disease_state) %>%
+  group_by(graph_category, family_names) %>%
   summarize(abundance = sum(value)) %>%
   ungroup()
 
 ranks <- abundance_data_summed %>%
   arrange(desc(abundance)) %>%
   group_by(graph_category) %>%
-  slice(1:26)
+  dplyr::slice(1:26)
 
 total_ranks <- ranks %>%
   summarize(totals = sum(abundance))

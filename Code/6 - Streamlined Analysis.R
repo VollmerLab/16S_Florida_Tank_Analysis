@@ -27,33 +27,33 @@ library(wesanderson)
 library(msa)
 library(Biostrings)
 library(phangorn)
+library(formattable)
+library(htmltools)
+library(webshot)
 library(tidyverse)
 
 select <- dplyr::select
 
 #### Functions ####
-find_unique_significant_terms_mixed <- function(model, alpha){
-  significant_terms <- model$anova_table %>%
-    as_tibble(rownames = 'param') %>%
-    #janitor::clean_names() %>%
-    filter(`Pr(>F)` < alpha) %>%
-    pull(param)
-  
-  unique_values <- outer(significant_terms, significant_terms, str_count) %>%
-    colSums() %>%
-    equals(1)
-  
-  str_replace(significant_terms[unique_values], ':', '*')
-}
 
 make_emmean_model <- function(model, form, alpha){
   emmeans(model, specs = form, type = 'response') %>%
     cld(Letters = LETTERS, reversed = TRUE, alpha = alpha) 
 }
 
+export_formattable <- function(f, file, width = "100%", height = NULL, 
+                               background = "white", delay = 0.2){
+  w <- as.htmlwidget(f, width = width, height = height)
+  path <- html_print(w, background = background, viewer = NULL)
+  url <- paste0("file:///", gsub("\\\\", "/", normalizePath(path)))
+  webshot(url,
+          file = file,
+          selector = ".formattable_widget",
+          delay = delay)
+}
+
 #### Read in Data ####
 
-#convert phyloseq data to tibble (metadata + abundance + taxonomy)
 aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
@@ -65,9 +65,7 @@ if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
 } else {
-  #sequences <- taxa_names(microbiome_data)
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
-  #names(sequences) <- taxa_names(microbiome_data)
 }
 
 #otu_tmm
@@ -92,7 +90,7 @@ model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id))
 
-#target microbiome data - zeroes removed and each ASV must be in 10+% of individuals
+#target microbiome data - zeroes considered and each ASV must be in 10+% of individuals
 target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
@@ -362,57 +360,190 @@ vls_plot_1 / vls_plot_2 / vls_plot_3 + plot_layout(heights = c(4, 7, 16)) +
 
 #### Relative Abundances ####
 
+"green"
+#TODO set the taxonomic level for the plots here:
+tax_level <- "Family"
+
 ls_asv_list <- ls_model_w_terms %>% .$asv_names %>% unique()
 vls_asv_list <- ls_model_w_terms %>% filter(d_v_h < 0) %>% .$asv_names %>% unique()
 
 #ASVs in whole dataset
-relabun_tot <- taxonomy_tibble %>% nest_by(Order) %>% mutate(total_asvs = nrow(data)) %>% select(-data)
+relabun_tot <- taxonomy_tibble %>% nest_by(!!! rlang::syms(tax_level)) %>% mutate(total_asvs = nrow(data)) %>% select(-data)
 
 #ASVs in LS list
-relabun_ls <-taxonomy_tibble %>% filter(asv_names %in% ls_asv_list) %>% nest_by(Order) %>% 
+relabun_ls <-taxonomy_tibble %>% filter(asv_names %in% ls_asv_list) %>% nest_by(!!! rlang::syms(tax_level)) %>% 
   mutate(ls_asvs = nrow(data)) %>% select(-data)
 
 #ASVs in VLS list
-relabun_vls <-taxonomy_tibble %>% filter(asv_names %in% vls_asv_list) %>% nest_by(Order) %>% 
+relabun_vls <-taxonomy_tibble %>% filter(asv_names %in% vls_asv_list) %>% nest_by(!!! rlang::syms(tax_level)) %>% 
   mutate(vls_asvs = nrow(data)) %>% select(-data)
 
-relative_abundance_order <- relabun_ls %>% left_join(relabun_tot) %>% full_join(relabun_vls) %>%
-  reframe(Order, ls = 100*ls_asvs/total_asvs, vls = 100*vls_asvs/total_asvs, total = total_asvs) %>%
-  mutate(vls = ifelse(is.na(vls), 0, vls), Order = as_factor(Order)) %>%
+relative_abundance_taxon <- relabun_ls %>% left_join(relabun_tot) %>% full_join(relabun_vls) %>%
+  reframe(ls = 100*ls_asvs/total_asvs, vls = 100*vls_asvs/total_asvs, total = total_asvs) %>%
+  mutate(vls = ifelse(is.na(vls), 0, vls)) %>%
   pivot_longer(c(ls, vls), names_to = "list", values_to = "percent")
 
-order_ranks <- relative_abundance_order %>% filter(list == "ls") %>% 
+relabun_ranks <- relative_abundance_taxon %>% filter(list == "ls") %>% 
   mutate(graph_order = (rank(percent))/(nrow(.) + 1)) %>% select(-c(total, list, percent))
 
-order_graph <- relative_abundance_order %>% left_join(order_ranks, by = join_by(Order)) %>%
-  ggplot(aes(x = fct_reorder(Order, graph_order), y = percent, fill = list, 
-             label = paste(ifelse(percent == 0, "NA", round(percent, 2)), "% (of ", total, ")", sep = ""))) +
+relabun_graph <- relative_abundance_taxon %>% left_join(relabun_ranks) %>%
+  ggplot(aes(x = fct_reorder((!!! rlang::syms(tax_level)), graph_order), y = percent, fill = list, 
+        label = ifelse(percent == 0, "", paste(round(percent, 2), "% (of ", total, ")", sep = "")))) +
     geom_col(position = "dodge") +
     geom_text(size = 3, position = position_dodge(width = 0.9), hjust = -0.05) +
     coord_flip() +
-    xlab("Order") +
-    ylab("Percent of Total ASVs in Each Order") +
-    scale_fill_discrete(name = "Suspect Type", labels = c("Likely", "Very Likely")) +
-    ylim(0, 5)
-
-order_graph
+    xlab(tax_level) +
+    ylab(paste("Percent of Total ASVs in Each ", tax_level, sep = "")) +
+    scale_fill_manual(values = c("orange", "firebrick1"), name = "Suspect Type", labels = c("Likely", "Very Likely")) +
+    ylim(0, 5.8) +
+    theme_linedraw()
   
 #complimentary comp upset
-upset(subset_asv_comp_upset,
+taxon_comp_upset <- upset(subset_asv_comp_upset,
       colnames(select(subset_asv_comp_upset, starts_with('p_') & contains("final"))), 
       annotations = list(
         # 2nd method - using ggplot
         'Genus'=(
-          ggplot(mapping=aes(fill=Order)) 
+          ggplot(mapping=aes(fill=(!!! rlang::syms(tax_level)))) 
           + geom_bar(stat = 'count', position = 'fill')
           + scale_y_continuous(labels = scales::percent_format())
         ) +
-          ylab('Order') +
+          ylab(tax_level) +
           theme(legend.position = 'top')
       ),
       name='asv_names', width_ratio=0.1, min_size = 1, min_degree = 1) +
   ggtitle("Likely Suspects")
+
+layout <- '
+AABB#
+AABB#
+'
+wrap_plots(A = relabun_graph, B = taxon_comp_upset, design = layout)
+
   
-#TODO combine these graphs to make one figure and repeat for families (make redoable by setting agg level variable)
   
-  
+
+#### Most Abundant ASVs ####
+
+#what's most abundant in the homogenates
+bait_high_abun <- model_data %>% 
+  filter(time == "T0") %>%
+  group_by(asv_names, final_disease_state) %>%
+  summarize(tot_abun = sum(value)) %>%
+  ungroup() %>%
+  group_by(final_disease_state) %>%
+  arrange(desc(tot_abun)) %>%
+  dplyr::slice(1:10) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  mutate(asv_names = parse_number(asv_names), tot_abun = round(tot_abun, 2), 
+         Species = paste(Species, " (", asv_names, ")", sep = "")) %>%
+  select(Order, Family, Genus, Species, final_disease_state, tot_abun) %>%
+  ungroup() %>%
+  pivot_wider(names_from = final_disease_state, values_from = tot_abun)
+
+baits_most_abun <- formattable(bait_high_abun,
+            align = c("l", "l", "l", "l", "c", "c", "c"), list(
+              Order = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+              Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+              Genus = formatter("span", style = ~ style(color = "gray")),
+              Species = formatter("span", style = ~ style(color = "gray")),
+              D = color_tile("#FFC5C5", "#FF6767"),
+              H = color_tile("#BFFFE9", "#43FFC0")
+            ))
+
+export_formattable(baits_most_abun,"most_abun_baits.png")
+
+"red"
+## Family level - MUST AGGREGATE DATA BY FAMILY TO GET THESE RESULTS
+"red"
+
+family_chart <- model_data %>% 
+  rename(asv_names = "Family") %>%
+  mutate(category = factor(paste(time, final_disease_state, sep = "_"),
+                          levels = c("T0_H", "T3_H", "T7_H", "T0_D", "T3_D", "T7_D")), .before = time) %>%
+  group_by(category, Family) %>%
+  summarize(abundance = sum(value)) %>%
+  ungroup() %>%
+  arrange(desc(abundance)) %>%
+  group_by(category) %>%
+  dplyr::slice(1:20) %>%
+  mutate(fam_rank = rank(-abundance)) %>%
+  select(-abundance) %>%
+  pivot_wider(names_from = category, values_from = fam_rank)
+
+repeated_fams <- family_chart %>% mutate_at(vars(-c(Family)), ~ifelse(is.na(.), 0, 1)) %>% group_by(Family) %>%
+  summarize(count = sum(c(T0_H, T3_H, T7_H, T0_D, T3_D, T7_D))) %>% filter(count > 1) %>% .$Family
+
+family_chart %>% 
+  filter(Family %in% repeated_fams) %>%
+  formattable(align = c("l", "c", "c", "c", "c", "c", "c"), list(
+    Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    T0_D = color_tile("#FF3A3A", "#FFE1E1"),
+    T3_D = color_tile("#FF3A3A", "#FFE1E1"),
+    T7_D = color_tile("#FF3A3A", "#FFE1E1"),
+    T0_H = color_tile("#00B276", "#DAFFF2"),
+    T3_H = color_tile("#00B276", "#DAFFF2"),
+    T7_H = color_tile("#00B276", "#DAFFF2")
+  )) %>%
+  export_formattable("most_abun_timepoints.png")
+
+#### Logfold Changes ####
+
+#same model but run on the log of the data
+log_ls_model <- model_data %>% 
+  filter(time != 'T0') %>%
+  inner_join(target_upset_data) %>%
+  nest_by(asv_names) %>%
+  # mutate(model = list(mixed(value ~time * (final_disease_state + exposure) + 
+  #                        (0 + dummy(time, c('T3', 'T7')) | fragment_id), data = data, method = 'KR',
+  #                        control = variancePartition:::vpcontrol)))
+  mutate(model = list(mixed(log(value) ~time * (final_disease_state + exposure) + 
+                              (1 | fragment_id), data = data, method = 'KR',
+                            control = variancePartition:::vpcontrol)))
+
+logfold_data <- log_ls_model %>%
+  ungroup() %>%
+  inner_join((ls_model_w_terms %>% select(asv_names, terms)), by = join_by(asv_names), multiple = "all") %>%
+  rowwise() %>%
+  mutate(test = list(emmeans(model, ~final_disease_state | time) %>%
+                       contrast('pairwise', adjust = 'fdr') %>% as_tibble())) %>%
+  select(-c(data, model)) %>%
+  unnest(test) %>%
+  distinct() %>% 
+  group_by(asv_names) %>% 
+  mutate(diff = estimate[time == "T7"] - estimate[time == "T3"]) %>%
+  ungroup() %>%
+  mutate(terms = factor(terms, levels = c("final_disease_state", "time:final_disease_state", "both"),
+                           labels = c("FDS", "FDS:Time", "Both"))) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names))
+
+
+logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder(paste(Family, " ", Genus, " (", parse_number(asv_names), ")", sep = ""), diff), y = estimate, 
+             ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  scale_color_manual(values = c("darkorange1", "firebrick1")) +
+  coord_flip() +
+  xlab("") +
+  labs(title = "Logfold Changes - More in T7") +
+  facet_grid(rows = vars(terms), scales = "free", space = "free") +
+  theme_bw()
+
+logfold_t3_more <- ggplot(logfold_data %>% filter(diff < 0), aes(x = fct_reorder(paste(Family, " ", Genus, " (", parse_number(asv_names), ")", sep = ""), -diff), y = estimate, 
+                                              ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  scale_color_manual(values = c("darkorange1", "firebrick1")) +
+  coord_flip() +
+  xlab("ASV") +
+  labs(title = "Logfold Changes - More in T3") +
+  facet_grid(rows = vars(terms), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none")
+
+logfold_t3_more | logfold_t7_more
+
+
+#TODO add pcoa code to this doc.  upload all to github w comments.  trees w jason
+
+
