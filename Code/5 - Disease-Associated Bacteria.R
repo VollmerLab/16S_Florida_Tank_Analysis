@@ -982,3 +982,24 @@ ggplot(ls_prop_dat) +
 
 
 
+#keeping just in case
+
+
+
+ls_model_w_terms <- ls_model %>%
+  rowwise %>% 
+  mutate(terms = list(find_unique_significant_terms_mixed(model, 0.05))) %>%
+  rowwise(everything()) %>%
+  summarise(enframe(terms) %>%
+              mutate(name = TRUE) %>%
+              pivot_wider(names_from = 'value',
+                          values_from = 'name'),
+            .groups = 'drop') %>%
+  mutate(across(where(is.logical), ~if_else(is.na(.), FALSE, .)))
+
+ls_model_w_terms_edit <- ls_model_w_terms %>%
+  select(-c(time, exposure, `time*exposure`)) %>%
+  mutate(both = ifelse(final_disease_state & `time*final_disease_state`, TRUE, FALSE))
+
+
+

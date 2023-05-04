@@ -122,7 +122,7 @@ taxonomy_tibble <- tax_table(microbiome_data) %>%
   as_tibble(rownames = "asv_names")
 
 
-#### Rowwise Model ####
+#### Model ####
 
 ls_model <- model_data %>% 
   filter(time != 'T0') %>%
@@ -134,18 +134,32 @@ ls_model <- model_data %>%
   mutate(model = list(mixed(value ~time * (final_disease_state + exposure) + 
                               (1 | fragment_id), data = data, method = 'KR',
                             control = variancePartition:::vpcontrol)))
-  
 
-ls_model_w_terms <- ls_model %>%
-  rowwise %>% 
-  mutate(terms = list(find_unique_significant_terms_mixed(model, 0.05))) %>%
-  rowwise(everything()) %>%
-  summarise(enframe(terms) %>%
-           mutate(name = TRUE) %>%
-           pivot_wider(names_from = 'value',
-                       values_from = 'name'),
-           .groups = 'drop') %>%
-  mutate(across(where(is.logical), ~if_else(is.na(.), FALSE, .)))
+#model summary for all interaction types for our subsetted data
+ls_model_full <- ls_model %>%
+  ungroup %>%
+  rowwise(asv_names) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param'),
+          d_v_h = emmeans(model, ~final_disease_state) %>%
+            as_tibble %>%
+            select(emmean) %>%
+            pull(1) %>%
+            diff) %>%
+  dplyr::rename(p = `Pr(>F)`) %>%
+  group_by(param) %>%
+  mutate(p = p.adjust(p, 'fdr')) %>%
+  ungroup
+
+#model w summary and showing significance for FDS, FDS:time, or both
+ls_model_w_terms <- ls_model_full %>%
+  filter(p < 0.05) %>%
+  filter(param %in% c("final_disease_state", "time:final_disease_state")) %>%
+  nest_by(asv_names) %>%
+  rowwise() %>%
+  mutate(terms = ifelse(nrow(data) < 2, NA, "both")) %>%
+  unnest(data) %>%
+  mutate(terms = ifelse(is.na(terms), param, terms)) %>%
+  left_join(ls_model, by = join_by(asv_names))
 
 #### Prep for Comp Upsets ####
 
@@ -220,7 +234,7 @@ upset(filter(subset_asv_comp_upset, d_v_h < 0) %>%
       annotations = list(
         # 2nd method - using ggplot
         'Genus'=(
-          ggplot(mapping=aes(fill=Genus)) 
+          ggplot(mapping=aes(fill=Order)) 
           + geom_bar(stat = 'count', position = 'fill') 
           + scale_y_continuous(labels = scales::percent_format())
         ) +
@@ -264,68 +278,141 @@ target_data %>%
   ggvenn(c('D', 'H', 'T3', 'T7'))
 
 
+##EMMEANS for VLS
 
-#FIXME combine these pipes, fix the graph
-test <- ls_model_w_terms %>%
-  filter(final_disease_state) %>%
+#VLS FDS only
+vls_plot_1 <- ls_model_w_terms %>%
+  filter(terms == "final_disease_state", d_v_h < 0) %>%
   ungroup() %>%
-  dplyr::slice(1:2) %>%
   rowwise() %>%
-  mutate(test = list(make_emmean_model(model, as.formula("~final_disease_state"), 0.05)))
-
-ttt <- test %>%
+  mutate(test = list(make_emmean_model(model, as.formula("~final_disease_state"), 0.05))) %>%
   group_by(asv_names) %>%
   reframe(test =  as_tibble(test, .name_repair = "unique")) %>%
   unnest(cols = c(test)) %>%
   unnest(cols = `...1`) %>%
   mutate(.group = str_trim(.group)) %>%
-  ggplot(aes(x = asv_names, y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c("Kingdom", "Phylum")) %>%
+  left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
-  #scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
-  coord_flip()
+  scale_color_manual(values = c("firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  xlab("ASV") +
+  labs(title = "Final Disease State Only")
 
-
-
-
-
-#### emmeans - currently bad ####
-
-emm_dat <- model_data %>%
-  inner_join(target_upset_data, by = c("asv_names")) %>%
-  mutate(frag_ASV_id = paste(fragment_id, asv_names, sep = "_"))
-
-#FIXME which data to include in this emmeans model
-
-emm_aov <- aov_4(value ~time*final_disease_state*asv_names + (1 + time | frag_ASV_id), 
-      data = emm_dat)
-
-fds_only_list <- emmeans(emm_aov, ~final_disease_state | asv_names) %>%
-  contrast('pairwise', adjust = 'fdr') %>%
-  as_tibble() %>%
-  filter(p.value < 0.05) %>%
-  .$asv_names
-
-
-emmeans(emm_aov, ~final_disease_state | asv_names, type = 'response') %>%
-  cld(Letters = LETTERS, adjust = 'fdr') %>%
-  as_tibble() %>%
-  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
-  mutate(graph_color = paste(time, final_disease_state, sep = "_")) %>%
+#VLS interaction only
+vls_plot_2 <- ls_model_w_terms %>%
+  filter(terms == "time:final_disease_state", d_v_h < 0) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
+  group_by(asv_names) %>%
+  reframe(test =  as_tibble(test, .name_repair = "unique")) %>%
+  unnest(cols = c(test)) %>%
+  unnest(cols = `...1`) %>%
   mutate(.group = str_trim(.group)) %>%
-  #rename(emmean = response) %>%
-  ggplot(aes(x = paste(Family, " ", Genus, "(", asv_names, ")", sep = ""), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
-             colour = graph_color, pch = time)) +
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c("Kingdom", "Phylum")) %>%
+  left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             col = time:final_disease_state, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
             position = position_dodge(0.5), vjust = -1) +
   scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
   coord_flip() +
-  labs(title = "Very Likely Suspects") +
-  xlab("ASV")
+  xlab("ASV") +
+  labs(title = "Final Disease State:Time Interaction Only")
+
+
+#Both FDS and FDS:time
+vls_plot_3 <- ls_model_w_terms %>%
+  filter(terms == "both", param == "time:final_disease_state", d_v_h < 0) %>%
+  ungroup() %>%
+  rowwise() %>%
+  mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
+  group_by(asv_names) %>%
+  reframe(test =  as_tibble(test, .name_repair = "unique")) %>%
+  unnest(cols = c(test)) %>%
+  unnest(cols = `...1`) %>%
+  mutate(.group = str_trim(.group)) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c("Kingdom", "Phylum")) %>%
+  left_join((select(ls_model_w_terms, c(asv_names, d_v_h)) %>% distinct(asv_names, d_v_h)), by = join_by(asv_names)) %>%
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+             col = time:final_disease_state, pch = time)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  geom_text(aes(y = (emmean + SE), label = .group),
+            position = position_dodge(0.5), vjust = -1) +
+  scale_color_manual(values = c("hotpink1", "deepskyblue", "firebrick1", "dodgerblue3")) +
+  coord_flip() +
+  xlab("ASV") +
+  labs(title = "Both FDS and FDS:Time")
+
+vls_plot_1 / vls_plot_2 / vls_plot_3 + plot_layout(heights = c(4, 7, 16)) + 
+  plot_annotation(title = "Very Likely Suspects") & theme_linedraw() & 
+  theme(text = element_text('sans'), plot.title = element_text(size = 16))
 
 
 
 
+#### Relative Abundances ####
+
+ls_asv_list <- ls_model_w_terms %>% .$asv_names %>% unique()
+vls_asv_list <- ls_model_w_terms %>% filter(d_v_h < 0) %>% .$asv_names %>% unique()
+
+#ASVs in whole dataset
+relabun_tot <- taxonomy_tibble %>% nest_by(Order) %>% mutate(total_asvs = nrow(data)) %>% select(-data)
+
+#ASVs in LS list
+relabun_ls <-taxonomy_tibble %>% filter(asv_names %in% ls_asv_list) %>% nest_by(Order) %>% 
+  mutate(ls_asvs = nrow(data)) %>% select(-data)
+
+#ASVs in VLS list
+relabun_vls <-taxonomy_tibble %>% filter(asv_names %in% vls_asv_list) %>% nest_by(Order) %>% 
+  mutate(vls_asvs = nrow(data)) %>% select(-data)
+
+relative_abundance_order <- relabun_ls %>% left_join(relabun_tot) %>% full_join(relabun_vls) %>%
+  reframe(Order, ls = 100*ls_asvs/total_asvs, vls = 100*vls_asvs/total_asvs, total = total_asvs) %>%
+  mutate(vls = ifelse(is.na(vls), 0, vls), Order = as_factor(Order)) %>%
+  pivot_longer(c(ls, vls), names_to = "list", values_to = "percent")
+
+order_ranks <- relative_abundance_order %>% filter(list == "ls") %>% 
+  mutate(graph_order = (rank(percent))/(nrow(.) + 1)) %>% select(-c(total, list, percent))
+
+order_graph <- relative_abundance_order %>% left_join(order_ranks, by = join_by(Order)) %>%
+  ggplot(aes(x = fct_reorder(Order, graph_order), y = percent, fill = list, 
+             label = paste(ifelse(percent == 0, "NA", round(percent, 2)), "% (of ", total, ")", sep = ""))) +
+    geom_col(position = "dodge") +
+    geom_text(size = 3, position = position_dodge(width = 0.9), hjust = -0.05) +
+    coord_flip() +
+    xlab("Order") +
+    ylab("Percent of Total ASVs in Each Order") +
+    scale_fill_discrete(name = "Suspect Type", labels = c("Likely", "Very Likely")) +
+    ylim(0, 5)
+
+order_graph
+  
+#complimentary comp upset
+upset(subset_asv_comp_upset,
+      colnames(select(subset_asv_comp_upset, starts_with('p_') & contains("final"))), 
+      annotations = list(
+        # 2nd method - using ggplot
+        'Genus'=(
+          ggplot(mapping=aes(fill=Order)) 
+          + geom_bar(stat = 'count', position = 'fill')
+          + scale_y_continuous(labels = scales::percent_format())
+        ) +
+          ylab('Order') +
+          theme(legend.position = 'top')
+      ),
+      name='asv_names', width_ratio=0.1, min_size = 1, min_degree = 1) +
+  ggtitle("Likely Suspects")
+  
+#TODO combine these graphs to make one figure and repeat for families (make redoable by setting agg level variable)
+  
+  
