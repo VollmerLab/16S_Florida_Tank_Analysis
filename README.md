@@ -1,15 +1,28 @@
 # 16S Florida Tank Analysis
 
+### Filters
+- minimum 10,000 reads  
+- 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
+- each ASV must be present in at least 10% of individuals
+- Analyzing data for Timepoints 3 and 7
+- Must be present in the Diseased Homogenate, T3 and T7 samples
 
+### Remaining ASVs:
 ![plot](./Figures/Venn.png)
 
-##### All ASVs
+##### Sections of interest are 220 and 85 for a total of 305 ASVs
 
 ![plot](./Figures/complex_upset_full_subset.png)
 
-##### Likely Suspects
+##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
+##### Only 116 remain if you remove ASVs that are only significant for time
 
-![plot](./Figures/complex_upset_more_disease.png)
+#### More Abundant in Disease:
+##### (57 ASVs when you don't consider time only)
+
+![plot](./Figures/complex_upset_more_disease.png)  
+
+#### More Abundant in Healthy:
 
 ![plot](./Figures/complex_upset_more_healthy.png)
 
