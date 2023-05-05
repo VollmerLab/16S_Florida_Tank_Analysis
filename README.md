@@ -1,7 +1,7 @@
 # 16S Florida Tank Analysis
 
 ### Filters
-- minimum 10,000 reads  
+- minimum 1,000 reads  
 - 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
 - each ASV must be present in at least 10% of individuals
 - Analyzing data for Timepoints 3 and 7
