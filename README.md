@@ -8,13 +8,14 @@
 - Must be present in the Diseased Homogenate, T3 and T7 samples
 
 ### Remaining ASVs:
+##### Sections of interest are 220 and 85 for a total of 305 ASVs
 ![plot](./Figures/Venn.png)
 
-##### Sections of interest are 220 and 85 for a total of 305 ASVs
+
+##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
 
 ![plot](./Figures/comp_upset_full_subset.png)
 
-##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
 
 #### More Abundant in Disease:
 ##### (57 ASVs when you don't consider time only)
