@@ -59,7 +59,7 @@ Main Takeaway: very little overlap, the most abundant ASVs trend higher in abund
 
 
 ### Likely Suspects
-*present in T3, T7, and Diseased bait*
+*present in T3, T7, and Diseased bait*  
 *AND differs significantly for either final disease state or the interaction of final disease state and time*  
 
 ### Very Likely Suspects
