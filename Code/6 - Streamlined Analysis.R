@@ -498,18 +498,8 @@ family_chart %>%
 #### Logfold Changes ####
 
 #same model but run on the log of the data
-log_ls_model <- model_data %>% 
-  filter(time != 'T0') %>%
-  inner_join(target_upset_data) %>%
-  nest_by(asv_names) %>%
-  # mutate(model = list(mixed(value ~time * (final_disease_state + exposure) + 
-  #                        (0 + dummy(time, c('T3', 'T7')) | fragment_id), data = data, method = 'KR',
-  #                        control = variancePartition:::vpcontrol)))
-  mutate(model = list(mixed(log(value) ~time * (final_disease_state + exposure) + 
-                              (1 | fragment_id), data = data, method = 'KR',
-                            control = variancePartition:::vpcontrol)))
 
-logfold_data <- log_ls_model %>%
+logfold_data <- ls_model %>%
   ungroup() %>%
   inner_join((ls_model_w_terms %>% select(asv_names, terms)), by = join_by(asv_names), multiple = "all") %>%
   rowwise() %>%

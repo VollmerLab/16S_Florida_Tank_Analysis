@@ -74,22 +74,29 @@ very_likely_families <- vl_suspects_list %>%
   unique() %>%
   sort()
 
+likely_families <- filter(subset_asv_comp_upset, d_v_h < 0) %>% .$Family %>% unique()
+
+
 #tree stuff
 tmp <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
   rowwise() %>%
-  mutate(asv_names = ifelse(asv_names %in% vl_suspects_list, paste("**", asv_names, sep = ""), asv_names)) %>%
-  mutate(asv_names = ifelse(asv_names %in% likely_suspects_list, paste("*", asv_names, sep = ""), asv_names)) %>%
+  #mutate(asv_names = ifelse(asv_names %in% vl_suspects_list, paste("**", asv_names, sep = ""), asv_names)) %>%
+  #mutate(asv_names = ifelse(asv_names %in% likely_suspects_list, paste("*", asv_names, sep = ""), asv_names)) %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
   filter(Family %in% likely_families) %>%
-  mutate(likelihood = ifelse(Family %in% very_likely_families, "very likely", "likely"))
+  rowwise %>%
+  mutate(n_asv = nrow(data)) %>%
+  ungroup
+  #mutate(likelihood = ifelse(Family %in% very_likely_families, "very likely", "likely")) 
 
-current_fam <- tmp %>% filter(Family %in% c("Thiomicrospiraceae", "Arenicellaceae"))
+tmp %>%
+  arrange(n_asv)
+current_fam <- tmp %>% filter(Order %in% c("Campylobacterales", "Myxococcales")) %>%
+  filter(n_asv < 30)
 
-make_tree <- function(current_fam){
-  prelim_tree <- current_fam %>%
-    select(data) %>%
-    unnest(data) %$%
+make_tree <- function(asv_data, nboot = 100, make_plot = FALSE){
+  prelim_tree <- asv_data %$%
     set_names(sequence, asv_names) %>%
     DNAStringSet() %>%
     msa() %>%
@@ -97,19 +104,66 @@ make_tree <- function(current_fam){
     modelTest() %>% 
     pml_bb()
   
-  bootstrapping <- bootstrap.pml(prelim_tree, bs = 100, optNni = TRUE,
-                                 control = pml.control(trace = 1))
-  tree_plot <- plotBS(midpoint(prelim_tree$tree), bootstrapping)
+  if(!(is.na(nboot) | is.null(nboot))){
+    bootstrapping <- bootstrap.pml(prelim_tree, bs = nboot, optNni = TRUE,
+                                   control = pml.control(trace = 1))
+  } else {
+    bootstrapping <- NULL
+  }
   
-  return(tree_plot)
+  if(make_plot){
+    if(!(is.na(nboot) | is.null(nboot))){
+      plot(midpoint(prelim_tree$tree))
+    } else {
+      plotBS(midpoint(prelim_tree$tree), bootstrapping)
+    }
+  }
+  return(list(prelim_tree = prelim_tree, bootstraps = bootstrapping))
+}
+# asv_data <- current_fam$data[[1]]
+# make_tree(current_fam$data[[1]], nboot = NA, make_plot = TRUE)
+
+make_tree_plot <- function(tree_output, metadata){
+  plotBS(midpoint(tree_output$prelim_tree$tree), tree_output$bootstraps) %>%
+    as.treedata() %>%
+    as_tibble %>%
+    mutate(tip.label = str_extract(label, 'ASV_[0-9]+'),
+           boot_support = str_extract(label, '^[0-9]+$') %>% as.integer) %>%
+    left_join(metadata,
+              by = c('tip.label' = 'ASV_name')) %>%
+    # filter(!str_detect(label, 'ASV'))
+    as.treedata() %>%
+    ggtree(ladderize = TRUE, layout = 'rectangular') +
+    geom_text(aes(label = tip.label, colour = INTERESTING), hjust = 0) +
+    geom_text(aes(label = boot_support), hjust = 0)
 }
 
-make_tree(current_fam)
+library(treedataverse)
+library(multidplyr)
+cluster <- new_cluster(parallel::detectCores() - 1)
+cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
+cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
 
 plot_list <- current_fam %>%
+  left_join(metadata = ) %>%
   rowwise() %>%
-  mutate(plots = list(make_tree(.)))
+  # partition(cluster) %>%
+  mutate(forest = list(make_tree(data, nboot = 10, make_plot = FALSE)),
+         tree_plot = list(make_tree_plot(forest, metadata))) %>%
+  # collect %>%
+  identity()
 
+
+
+
+tree_output<- plot_list$forest[[1]]
+
+
+plot_list$forest[[1]]$prelim_tree$tree %>%
+  as.treedata() %>% 
+  # as_tibble
+  ggtree() +
+  geom_text(aes(x = branch, label = label))
 
 #Jason's tutorial
 
