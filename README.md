@@ -18,10 +18,12 @@
 
 
 #### More Abundant in Disease:
+###### 25 are significant for final disease state or final disease state:time
 
 ![plot](./Figures/comp_upset_more_disease.png)  
 
 #### More Abundant in Healthy:
+###### 32 are significant for final disease state or final disease state:time
 
 ![plot](./Figures/comp_upset_more_healthy.png)
 
