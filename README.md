@@ -33,6 +33,8 @@
 #### Relative Representation of Families of Interest
 Of the total number of ASVs present in all of the data within each Order/Family, what percent of those are found in the Likely or Very Likely Suspect Lists?  
 
+Of the 116 remaining, 57 are significant for final disease state or final disease state:time (more abundant in either healthy or diseased)
+
 ![plot](./Figures/rel_abun_by_order.png)
 
 ![plot](./Figures/rel_abun_by_family.png)
