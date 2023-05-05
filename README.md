@@ -12,22 +12,27 @@
 
 ##### Sections of interest are 220 and 85 for a total of 305 ASVs
 
-![plot](./Figures/complex_upset_full_subset.png)
+![plot](./Figures/comp_upset_full_subset.png)
 
 ##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
-##### Only 116 remain if you remove ASVs that are only significant for time
 
 #### More Abundant in Disease:
 ##### (57 ASVs when you don't consider time only)
 
-![plot](./Figures/complex_upset_more_disease.png)  
+![plot](./Figures/comp_upset_more_disease.png)  
 
 #### More Abundant in Healthy:
 
-![plot](./Figures/complex_upset_more_healthy.png)
+![plot](./Figures/comp_upset_more_healthy.png)
+
+#### Without ASVs that are only significant for time:
+##### Only 116 remain if you remove ASVs that are only significant for time
+##### 57 are more abundant in Disease
+
+![plot](./Figures/comp_upset_timeless.png)
 
 #### Relative Representation of Families of Interest
-Of the total number of ASVs present in all of the data within each family, what proportion of those are found in the Likely or Very Likely Suspect Lists?  
+Of the total number of ASVs present in all of the data within each Order/Family, what percent of those are found in the Likely or Very Likely Suspect Lists?  
 
 ![plot](./Figures/rel_abun_by_order.png)
 
