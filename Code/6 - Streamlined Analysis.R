@@ -79,9 +79,36 @@ my_color_tile <- function(health_state) {
   )
 }
 
+my_color_tile_baits <- function(health_state) {
+  col_choices_red <- c(rep("white", 62), colorRampPalette(c("#FF9292","#FA0A0A"))(24))
+  col_choices_green <- c(rep("white", 67), colorRampPalette(c("#8EFFD9", "#00A76F"))(28))
+  
+  return_col <- function(y) 
+    if(health_state == "Diseased"){
+      map_chr(y,function(x) case_when(x > 62  ~ col_choices_red[x],
+                                      x < 62  ~ "#FFF1F1"
+      ))
+    } else if(health_state == "Healthy"){
+      map_chr(y,function(x) case_when(x > 66  ~ col_choices_green[x],
+                                      x < 66  ~ "#DDFFF3",
+      ))  
+    }
+  
+  formatter("span", 
+            style = function(y) style(
+              display = "block",
+              padding = "0 4px",
+              "border-radius" = "4px",
+              "color" = ifelse( return_col(y) %in% c("#006837","#1A9850","#66BD63"),
+                                csscolor("white"), csscolor("black")),
+              "background-color" = return_col(y)
+            )
+  )
+}
+#
 #### Read in Data ####
 
-aggregation_level <- 'Family' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -99,7 +126,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -461,7 +488,7 @@ wrap_plots(A = relabun_graph, B = taxon_comp_upset, design = layout)
 #### Most Abundant ASVs ####
 
 #what's most abundant in the homogenates
-bait_high_abun <- model_data %>% 
+top_ten <- model_data %>% 
   filter(time == "T0") %>%
   group_by(asv_names, final_disease_state) %>%
   summarize(tot_abun = sum(value)) %>%
@@ -469,24 +496,35 @@ bait_high_abun <- model_data %>%
   group_by(final_disease_state) %>%
   arrange(desc(tot_abun)) %>%
   dplyr::slice(1:10) %>%
+  .$asv_names %>% unique()
+
+model_data %>% 
+  filter(time == "T0") %>%
+  group_by(asv_names, final_disease_state) %>%
+  summarize(tot_abun = sum(value)) %>%
+  ungroup() %>%
+  group_by(final_disease_state) %>%
+  arrange(desc(tot_abun)) %>%
+  filter(asv_names %in% top_ten) %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   mutate(asv_names = parse_number(asv_names), tot_abun = round(tot_abun, 2), 
-         Species = paste(Species, " (", asv_names, ")", sep = "")) %>%
-  select(Order, Family, Genus, Species, final_disease_state, tot_abun) %>%
+         Genus = paste(Genus, " (", asv_names, ")", sep = "")) %>%
+  select(Order, Family, Genus, final_disease_state, tot_abun) %>%
   ungroup() %>%
-  pivot_wider(names_from = final_disease_state, values_from = tot_abun)
-
-baits_most_abun <- formattable(bait_high_abun,
-            align = c("l", "l", "l", "l", "c", "c", "c"), list(
+  pivot_wider(names_from = final_disease_state, values_from = tot_abun) %>%
+  rowwise() %>%
+  mutate(asv_order = as.numeric(gsub("\\(([^()]+)\\)", "\\1", str_extract_all(Genus, "\\(([^()]+)\\)")[[1]]))) %>%
+  arrange(asv_order) %>%
+  select(-asv_order) %>%
+  formattable(align = c("l", "l", "l", "l", "c", "c", "c"), list(
               Order = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
               Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
               Genus = formatter("span", style = ~ style(color = "gray")),
               Species = formatter("span", style = ~ style(color = "gray")),
-              D = color_tile("#FFC5C5", "#FF6767"),
-              H = color_tile("#BFFFE9", "#43FFC0")
-            ))
-
-export_formattable(baits_most_abun,"most_abun_baits.png")
+              area(col = 5) ~ my_color_tile_baits("Diseased"),
+              area(col = 4) ~ my_color_tile_baits("Healthy")
+            )) %>%
+  export_formattable("../Figures/most_abun_baits.png")
 
 "red"
 ## Family level - MUST AGGREGATE DATA BY FAMILY TO GET THESE RESULTS
