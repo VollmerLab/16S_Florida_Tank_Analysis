@@ -16,9 +16,9 @@
 #### Relative Representation of Families of Interest
 Of the total number of ASVs present in all of the data within each family, what proportion of those are found in the Likely or Very Likely Suspect Lists?  
 
-![plot](./Figures/rel_abund_by_order.png)
+![plot](./Figures/rel_abun_by_order.png)
 
-![plot](./Figures/rel_abund_by_family.png)
+![plot](./Figures/rel_abun_by_family.png)
 
 ### Highest Abundances 
 
