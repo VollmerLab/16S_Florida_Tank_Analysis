@@ -18,7 +18,6 @@
 
 
 #### More Abundant in Disease:
-##### (57 ASVs when you don't consider time only)
 
 ![plot](./Figures/comp_upset_more_disease.png)  
 
@@ -26,9 +25,8 @@
 
 ![plot](./Figures/comp_upset_more_healthy.png)
 
-#### Without ASVs that are only significant for time:
-##### Only 116 remain if you remove ASVs that are only significant for time
-##### 57 are more abundant in Disease
+#### If you remove ASVs that are only significant for time:
+##### Only 116 remain, 57 are more abundant in Disease
 
 ![plot](./Figures/comp_upset_timeless.png)
 
