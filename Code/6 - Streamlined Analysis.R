@@ -208,8 +208,8 @@ upset(subset_asv_comp_upset,
         colnames(select(subset_asv_comp_upset, starts_with('p_'))), 
         annotations = list(
           # 2nd method - using ggplot
-          'Genus'=(
-            ggplot(mapping=aes(fill=Genus)) 
+          'Order'=(
+            ggplot(mapping=aes(fill=Order)) 
             + geom_bar(stat = 'count', position = 'fill')
             + scale_y_continuous(labels = scales::percent_format())
           ) +
