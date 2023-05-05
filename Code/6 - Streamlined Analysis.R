@@ -52,9 +52,36 @@ export_formattable <- function(f, file, width = "100%", height = NULL,
           delay = delay)
 }
 
+my_color_tile <- function(health_state) {
+  col_choices_red <- colorRampPalette(c("#FF3A3A", "#FFE1E1"))(20)
+  col_choices_green <- colorRampPalette(c("#00B276", "#DAFFF2"))(20)
+  
+  return_col <- function(y) 
+    if(health_state == "Diseased"){
+      map_chr(y,function(x) case_when(x > 20  ~ "#FFF1F1",
+                                      x > 0  ~ col_choices_red[x],
+      ))
+    } else if(health_state == "Healthy"){
+      map_chr(y,function(x) case_when(x > 20  ~ "#F3FFFB",
+                                      x > 0  ~ col_choices_green[x],
+      ))  
+    }
+  
+  formatter("span", 
+            style = function(y) style(
+              display = "block",
+              padding = "0 4px",
+              "border-radius" = "4px",
+              "color" = ifelse( return_col(y) %in% c("#006837","#1A9850","#66BD63"),
+                                csscolor("white"), csscolor("black")),
+              "background-color" = return_col(y)
+            )
+  )
+}
+
 #### Read in Data ####
 
-aggregation_level <- 'none' #or none
+aggregation_level <- 'Family' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -72,7 +99,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -466,9 +493,32 @@ export_formattable(baits_most_abun,"most_abun_baits.png")
 "red"
 
 family_chart <- model_data %>% 
-  rename(asv_names = "Family") %>%
+  dplyr::rename("Family" = asv_names) %>%
   mutate(category = factor(paste(time, final_disease_state, sep = "_"),
                           levels = c("T0_H", "T3_H", "T7_H", "T0_D", "T3_D", "T7_D")), .before = time) %>%
+  group_by(category, Family) %>%
+  summarize(abundance = sum(value)) %>%
+  ungroup() %>%
+  arrange(desc(abundance)) %>%
+  group_by(category) %>%
+  mutate(fam_rank = rank(-abundance, ties.method= "max"))
+
+kept_fams <- family_chart %>%
+  dplyr::slice(1:20) %>%
+  .$Family %>%
+  unique()
+
+family_chart_1 <- family_chart %>%
+  filter(Family %in% kept_fams) %>%
+  select(-abundance) %>%
+  pivot_wider(names_from = category, values_from = fam_rank) %>%
+  select(Family, T0_H, T3_H, T7_H, T0_D, T3_D, T7_D)
+
+
+repeated_fams <- model_data %>% 
+  rename("Family" = asv_names) %>%
+  mutate(category = factor(paste(time, final_disease_state, sep = "_"),
+                           levels = c("T0_H", "T3_H", "T7_H", "T0_D", "T3_D", "T7_D")), .before = time) %>%
   group_by(category, Family) %>%
   summarize(abundance = sum(value)) %>%
   ungroup() %>%
@@ -477,24 +527,20 @@ family_chart <- model_data %>%
   dplyr::slice(1:20) %>%
   mutate(fam_rank = rank(-abundance)) %>%
   select(-abundance) %>%
-  pivot_wider(names_from = category, values_from = fam_rank)
+  pivot_wider(names_from = category, values_from = fam_rank) %>% 
+  mutate_at(vars(-c(Family)), ~ifelse(is.na(.), 0, 1)) %>% group_by(Family) %>%
+  summarize(count = sum(c(T0_H, T3_H, T7_H, T0_D, T3_D, T7_D))) %>% 
+  filter(count > 1) %>% .$Family
 
-repeated_fams <- family_chart %>% mutate_at(vars(-c(Family)), ~ifelse(is.na(.), 0, 1)) %>% group_by(Family) %>%
-  summarize(count = sum(c(T0_H, T3_H, T7_H, T0_D, T3_D, T7_D))) %>% filter(count > 1) %>% .$Family
-
-family_chart %>% 
+family_chart_1 %>% 
   filter(Family %in% repeated_fams) %>%
   formattable(align = c("l", "c", "c", "c", "c", "c", "c"), list(
     Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
-    T0_D = color_tile("#FF3A3A", "#FFE1E1"),
-    T3_D = color_tile("#FF3A3A", "#FFE1E1"),
-    T7_D = color_tile("#FF3A3A", "#FFE1E1"),
-    T0_H = color_tile("#00B276", "#DAFFF2"),
-    T3_H = color_tile("#00B276", "#DAFFF2"),
-    T7_H = color_tile("#00B276", "#DAFFF2")
+    area(col = 2:4) ~ my_color_tile("Healthy"),
+    area(col = 5:7) ~ my_color_tile("Diseased")
   )) %>%
   export_formattable("most_abun_timepoints.png")
-
+  
 #### Logfold Changes ####
 
 #same model but run on the log of the data
@@ -542,6 +588,6 @@ logfold_t3_more <- ggplot(logfold_data %>% filter(diff < 0), aes(x = fct_reorder
 logfold_t3_more | logfold_t7_more
 
 
-#TODO add pcoa code to this doc.  upload all to github w comments.  trees w jason
+#TODO add pcoa code to this doc
 
 
