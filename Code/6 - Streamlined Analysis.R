@@ -539,7 +539,7 @@ family_chart_1 %>%
     area(col = 2:4) ~ my_color_tile("Healthy"),
     area(col = 5:7) ~ my_color_tile("Diseased")
   )) %>%
-  export_formattable("most_abun_timepoints.png")
+  export_formattable("../Figures/most_abun_timepoints.png")
   
 #### Logfold Changes ####
 
