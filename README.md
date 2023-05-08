@@ -74,6 +74,9 @@ Main Takeaway: very little overlap, the most abundant ASVs trend higher in abund
 
 ![plot](./Figures/logfold_changes.png)
 
+### Potential Link between Rickettsiales and Disease
+
+![plot](./Figures/rickettsiales_corr.png)
 
 ### PCoA and NMDS
 
