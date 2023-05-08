@@ -26,6 +26,8 @@ library(wesanderson)
 library(msa)
 library(Biostrings)
 library(phangorn)
+library(treedataverse)
+library(multidplyr)
 library(tidyverse)
 
 select <- dplyr::select
@@ -49,6 +51,32 @@ if(aggregation_level != 'none'){
   names(sequences) <- taxa_names(microbiome_data)
 }
 
+otu_tmm <- microbiome_data %>%
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  otu_table() %>% 
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  as.data.frame %>%
+  as.matrix %>% 
+  DGEList(remove.zeros = TRUE) %>%
+  edgeR::calcNormFactors(method = 'TMMwsp')
+
+#raw model data - contains all 0 values
+full_metadata <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  mutate(across(c(exposure, final_disease_state), factor)) %>%
+  filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
+  #mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
+  #mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id)) %>%
+  select(-c(value, disease_state))
+
+taxonomy_tibble <- tax_table(microbiome_data) %>% 
+  as.data.frame %>%
+  as_tibble(rownames = "asv_names")
+
 
 
 #### Trees ####
@@ -56,44 +84,24 @@ if(aggregation_level != 'none'){
 "red"
 #TODO work in progress, adjust based on new model
 
-
-# interesting families
-likely_families <- likely_suspects_list %>% 
-  as_tibble() %>% 
-  reframe(asv_names = value) %>% 
-  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
-  .$Family %>%
-  unique() %>%
-  sort()
-
-very_likely_families <- vl_suspects_list %>% 
-  as_tibble() %>% 
-  reframe(asv_names = value) %>% 
-  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
-  .$Family %>%
-  unique() %>%
-  sort()
-
-likely_families <- filter(subset_asv_comp_upset, d_v_h < 0) %>% .$Family %>% unique()
+import_fams <- read_rds("../intermediate_files/families_of_interest.rds")
+likely_families <- import_fams[[1]]
+very_likely_families <- import_fams[[2]]
 
 
 #tree stuff
 tmp <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
   rowwise() %>%
-  #mutate(asv_names = ifelse(asv_names %in% vl_suspects_list, paste("**", asv_names, sep = ""), asv_names)) %>%
-  #mutate(asv_names = ifelse(asv_names %in% likely_suspects_list, paste("*", asv_names, sep = ""), asv_names)) %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
   filter(Family %in% likely_families) %>%
   rowwise %>%
   mutate(n_asv = nrow(data)) %>%
   ungroup
-  #mutate(likelihood = ifelse(Family %in% very_likely_families, "very likely", "likely")) 
 
 tmp %>%
   arrange(n_asv)
-current_fam <- tmp %>% filter(Order %in% c("Campylobacterales", "Myxococcales")) %>%
-  filter(n_asv < 30)
+current_fam <- tmp %>% filter(Family %in% c("Arenicellaceae", "A4b"))
 
 make_tree <- function(asv_data, nboot = 100, make_plot = FALSE){
   prelim_tree <- asv_data %$%
@@ -130,28 +138,34 @@ make_tree_plot <- function(tree_output, metadata){
     mutate(tip.label = str_extract(label, 'ASV_[0-9]+'),
            boot_support = str_extract(label, '^[0-9]+$') %>% as.integer) %>%
     left_join(metadata,
-              by = c('tip.label' = 'ASV_name')) %>%
+              by = c('tip.label' = 'asv_names')) %>%
     # filter(!str_detect(label, 'ASV'))
     as.treedata() %>%
     ggtree(ladderize = TRUE, layout = 'rectangular') +
-    geom_text(aes(label = tip.label, colour = INTERESTING), hjust = 0) +
+    geom_text(aes(label = tip.label, colour = "red"), hjust = 0) +
     geom_text(aes(label = boot_support), hjust = 0)
 }
 
-library(treedataverse)
-library(multidplyr)
 cluster <- new_cluster(parallel::detectCores() - 1)
 cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
 cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
 
 plot_list <- current_fam %>%
-  left_join(metadata = ) %>%
+  unnest(data) %>%
+  left_join(full_metadata, by = join_by(asv_names), multiple = "all") %>%
   rowwise() %>%
+  nest(data = c(Genus, Species, asv_names, sequence)) %>%
   # partition(cluster) %>%
   mutate(forest = list(make_tree(data, nboot = 10, make_plot = FALSE)),
          tree_plot = list(make_tree_plot(forest, metadata))) %>%
   # collect %>%
   identity()
+
+
+
+
+
+
 
 
 
@@ -165,7 +179,7 @@ plot_list$forest[[1]]$prelim_tree$tree %>%
   ggtree() +
   geom_text(aes(x = branch, label = label))
 
-#Jason's tutorial
+#### Jason's tutorial ####
 
 tmp_dat <- tmp %>%
   filter(Family == 'Omnitrophaceae') %>%
@@ -186,4 +200,9 @@ boot_ml <- bootstrap.pml(ml_tree, bs = 100, optNni = TRUE,
                          control = pml.control(trace = 1))
 plotBS(midpoint(ml_tree$tree))
 plotBS(midpoint(ml_tree$tree), boot_ml)
+
+
+#### ####
+
+
 

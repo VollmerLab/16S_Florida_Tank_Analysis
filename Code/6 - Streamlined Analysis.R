@@ -108,7 +108,7 @@ my_color_tile_baits <- function(health_state) {
 #
 #### Read in Data ####
 
-aggregation_level <- 'none' #or none
+aggregation_level <- 'Family' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -126,7 +126,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -324,7 +324,16 @@ BB
 '
 wrap_plots(A = cu_disease, B = cu_healthy, design = layout)
 
+likely_families <-  subset_asv_comp_upset %>%
+  filter(p_final_disease_state | `p_time:final_disease_state`) %>%
+  .$Family %>% unique()
 
+very_likely_families <-  subset_asv_comp_upset %>%
+  filter(p_final_disease_state | `p_time:final_disease_state`, d_v_h < 0) %>%
+  .$Family %>% unique()
+
+write_rds(list(likely_families, very_likely_families), "../intermediate_files/families_of_interest.rds")
+  
 #### Graphing ####
 
 #venn diagram
@@ -627,5 +636,6 @@ logfold_t3_more | logfold_t7_more
 
 
 #TODO add pcoa code to this doc
+
 
 
