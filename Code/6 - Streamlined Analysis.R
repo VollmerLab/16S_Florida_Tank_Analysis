@@ -108,7 +108,7 @@ my_color_tile_baits <- function(health_state) {
 #
 #### Read in Data ####
 
-aggregation_level <- 'Family' #or none
+aggregation_level <- 'none' #or none
 
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
@@ -126,7 +126,7 @@ if(aggregation_level != 'none'){
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
-  #t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+  t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
   as.matrix %>% 
   DGEList(remove.zeros = TRUE) %>%
@@ -143,6 +143,8 @@ model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id))
+
+write_csv(model_data, "../intermediate_files/pre_model_data.csv")
 
 #target microbiome data - zeroes considered and each ASV must be in 10+% of individuals
 target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
@@ -237,6 +239,16 @@ subset_asv_comp_upset <- ls_model %>% #reduces from 305 to 249 bc 56 are signifi
   #select(-p_time) %>% #TODO decide whether to include time in upsets here
   filter(!if_all(starts_with('p_'), ~!.))
   #filter(p_final_disease_state | `p_final_disease_state:time`)
+
+likely_asvs <- subset_asv_comp_upset %>%
+  filter(p_final_disease_state | `p_time:final_disease_state`) %>%
+  .$asv_names %>% unique()
+
+v_likely_asvs <- likely_asvs %>%
+  filter(d_v_h < 0) %>%
+  .$asv_names %>% unique()
+
+write_rds(list(likely_asvs, v_likely_asvs), "../intermediate_files/important_asvs.rds")
 
 
 #### Complex Upsets ####
