@@ -144,7 +144,7 @@ model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id))
 
-write_csv(model_data, "../intermediate_files/pre_model_data.csv")
+#write_csv((model_data %>% inner_join(target_upset_data)), "../intermediate_files/pre_model_data.csv")
 
 #target microbiome data - zeroes considered and each ASV must be in 10+% of individuals
 target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
