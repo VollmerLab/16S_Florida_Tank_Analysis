@@ -25,6 +25,7 @@
 ![plot](./Figures/comp_upset_vls.png)
 
 #### Significant ASV Counts by Family
+removed any families where the only significant term in the whole family is time
 ![plot](./Figures/signifs_by_family.png)
 
 #### Differences in exposure and final disease state
