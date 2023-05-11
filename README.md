@@ -24,6 +24,9 @@
 ##### only ASVs that are significantly more abundant in D than H:
 ![plot](./Figures/comp_upset_vls.png)
 
+#### Significant ASV Counts by Family
+![plot](./Figures/signifs_by_family.png)
+
 #### Differences in exposure and final disease state
 ![plot](./Figures/fds_exp_diffs.png)
 
