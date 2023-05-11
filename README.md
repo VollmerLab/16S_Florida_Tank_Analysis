@@ -21,16 +21,10 @@
 
 ![plot](./Figures/comp_upset_ls.png)
 
-##### only ASVs that are significantly more abundant in D than H
+##### only ASVs that are significantly more abundant in D than H:
 ![plot](./Figures/comp_upset_vls.png)
 
-### Highest Abundances 
-
-##### Total Abundances across all homogenates for the 10 Most Abundant ASVs in the Healthy and Diseased Homogenates
-Main Takeaway: very little overlap, the most abundant ASVs trend higher in abundance for healthy compared to diseased
-![plot](./Figures/most_abun_baits.png)
-
-##### Most Abundant Families in each Timepoint and Final Disease State intersection
+### Most Abundant Families in each Timepoint and Final Disease State intersection
 **aggregated by Family**  
 
 - selected the 20 most abundant Families in each group and ranked 1-20 (1 is most abundant)  
