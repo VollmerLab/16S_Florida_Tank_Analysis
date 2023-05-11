@@ -188,21 +188,32 @@ ls_model <- model_data %>%
   mutate(model = list(mixed(value ~time * (final_disease_state + exposure) + 
                               (1 | fragment_id), data = data, method = 'KR',
                             control = variancePartition:::vpcontrol)))
+#compare disease v healthy samples
+comp_dvh <- ls_model %>%
+  rowwise() %>%
+  mutate(comps = list(emmeans(model, ~final_disease_state) %>%
+                        contrast('pairwise', adjust = 'fdr') %>% as_tibble())) %>% 
+  unnest(comps) %>%
+  select(-c(SE, contrast, df, t.ratio)) %>%
+  rename("d_v_h" = estimate) %>%
+  mutate(adj_dvh = ifelse(p.value < 0.05, d_v_h, 0)) %>%
+  mutate(up_down = ifelse(adj_dvh > 0, "up", ifelse(adj_dvh < 0, "down", "non-significant")))
+
+vl_suspects <- comp_dvh %>%
+  filter(adj_dvh < 0) %>%
+  .$asv_names
+
 
 #model summary for all interaction types for our subsetted data
 ls_model_full <- ls_model %>%
   ungroup %>%
   rowwise(asv_names) %>%
-  reframe(as_tibble(model$anova_table, rownames = 'param'),
-          d_v_h = emmeans(model, ~final_disease_state) %>%
-            as_tibble %>%
-            select(emmean) %>%
-            pull(1) %>%
-            diff) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
   dplyr::rename(p = `Pr(>F)`) %>%
   group_by(param) %>%
   mutate(p = p.adjust(p, 'fdr')) %>%
-  ungroup
+  ungroup %>%
+  left_join(comp_dvh %>% select(-c(p.value, data, model)), by = join_by(asv_names))
 
 #model w summary and showing significance for FDS, FDS:time, or both
 ls_model_w_terms <- ls_model_full %>%
@@ -215,41 +226,35 @@ ls_model_w_terms <- ls_model_full %>%
   mutate(terms = ifelse(is.na(terms), param, terms)) %>%
   left_join(ls_model, by = join_by(asv_names))
 
+
+
 #### Prep for Comp Upsets ####
 
 #process data for performing complex upset - LIKELY SUSPECTS
 subset_asv_comp_upset <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
   ungroup() %>%
   rowwise(asv_names) %>%
-  reframe(as_tibble(model$anova_table, rownames = 'param'),
-          d_v_h =  emmeans(model, ~final_disease_state) %>%
-            as_tibble %>%
-            select(emmean) %>%
-            pull(1) %>%
-            diff) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
   dplyr::rename(p = `Pr(>F)`) %>%
   group_by(param) %>%
   mutate(p = p.adjust(p, 'fdr')) %>%
   ungroup %>%
   mutate(p = p < 0.05) %>%
-  select(asv_names, param, p, d_v_h) %>%
+  left_join(comp_dvh %>% select(-c(p.value, data, model)), by = join_by(asv_names)) %>%
+  select(asv_names, param, p, d_v_h, up_down) %>%
   pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_', values_fill = FALSE) %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c(Kingdom, Phylum)) %>%
   #select(-p_time) %>% #TODO decide whether to include time in upsets here
-  filter(!if_all(starts_with('p_'), ~!.))
-  #filter(p_final_disease_state | `p_final_disease_state:time`)
+  filter(!if_all(starts_with('p_'), ~!.)) %>%
+  filter(!(p_time & !p_final_disease_state & !p_exposure & !`p_time:final_disease_state` & !`p_time:exposure`))
+  #filter(p_final_disease_state | `p_time:final_disease_state`)
 
 likely_asvs <- subset_asv_comp_upset %>%
   filter(p_final_disease_state | `p_time:final_disease_state`) %>%
   .$asv_names %>% unique()
 
-v_likely_asvs <- likely_asvs %>%
-  filter(d_v_h < 0) %>%
-  .$asv_names %>% unique()
-
-write_rds(list(likely_asvs, v_likely_asvs), "../intermediate_files/important_asvs.rds")
-
+write_rds(list(likely_asvs, vl_suspects), "../intermediate_files/important_asvs.rds")
 
 #### Complex Upsets ####
   
@@ -271,8 +276,20 @@ write_rds(list(likely_asvs, v_likely_asvs), "../intermediate_files/important_asv
   
 #Likely Suspects, 249 total; 116 w/out time
 upset(subset_asv_comp_upset,
-        colnames(select(subset_asv_comp_upset, starts_with('p_'))), 
-        annotations = list(
+      colnames(select(subset_asv_comp_upset, starts_with('p_'))), 
+      
+      base_annotations=list(
+        'Intersection size'=intersection_size(
+          mapping=aes(fill=up_down)
+        ) + scale_fill_manual(values=c(
+          'up'='#E41A1C', 
+          'down'='#4DAF4A', 'non-significant'='#FF7F00'
+        ))
+      ),
+      queries=list(upset_query(set='p_time:final_disease_state', color="#8400CA", fill = "#4C0075"), 
+                   upset_query(set='p_final_disease_state', color="#8400CA", fill = "#4C0075")),
+               
+      annotations = list(
           # 2nd method - using ggplot
           'Order'=(
             ggplot(mapping=aes(fill=Order)) 
@@ -285,56 +302,35 @@ upset(subset_asv_comp_upset,
         name='asv_names', width_ratio=0.1, min_size = 0) +
   ggtitle("Likely Suspects")
 
-upset(subset_asv_comp_upset,
-                    colnames(select(subset_asv_comp_upset, starts_with('p_'))),
-                    name='asv_names', width_ratio=0.1, min_size = 0) +
-  ggtitle("Likely Suspects")
-  
-# All likely suspects - more abundant in Diseased
-cu_disease <- upset(filter(subset_asv_comp_upset, d_v_h < 0) %>%
-        select(-d_v_h),  #negative = more in disease final state, positive = more in healthy disease state
+
+upset(subset_asv_comp_upset %>% filter(up_down == "up"),
       colnames(select(subset_asv_comp_upset, starts_with('p_'))), 
+      
+      base_annotations=list(
+        'Intersection size'=intersection_size(
+          mapping=aes(fill=up_down)
+        ) + scale_fill_manual(values=c(
+          'up'='#E41A1C', 
+          'down'='#4DAF4A', 'non-significant'='#FF7F00'
+        ))
+      ),
+      queries=list(upset_query(set='p_time:final_disease_state', color="#8400CA", fill = "#4C0075"), 
+                   upset_query(set='p_final_disease_state', color="#8400CA", fill = "#4C0075")),
       
       annotations = list(
         # 2nd method - using ggplot
-        'Family'=(
+        'Order'=(
           ggplot(mapping=aes(fill=Family)) 
-          + geom_bar(stat = 'count', position = 'fill') 
+          + geom_bar(stat = 'count', position = 'fill')
           + scale_y_continuous(labels = scales::percent_format())
         ) +
           ylab('Order') +
           theme(legend.position = 'top')
       ),
-      
-      name='asv_names', width_ratio=0.1, min_size = 1) + #, max_size = 70
-  ggtitle("More in Diseased")
+      name='asv_names', width_ratio=0.1, min_size = 0) +
+  ggtitle("Very Likely Suspects")
+  
 
-
-# All likely suspects - more abundant in Healthy
-cu_healthy <- upset(filter(subset_asv_comp_upset, d_v_h > 0) %>%
-        select(-d_v_h),  #negative = more in disease final state, positive = more in healthy disease state
-      colnames(select(subset_asv_comp_upset, starts_with('p_'))), 
-      
-      annotations = list(
-        # 2nd method - using ggplot
-        'Family'=(
-          ggplot(mapping=aes(fill=Family)) 
-          + geom_bar(stat = 'count', position = 'fill') 
-          + scale_y_continuous(labels = scales::percent_format())
-        ) +
-          ylab('Family') +
-          theme(legend.position = 'top')
-      ),
-      
-      name='asv_names', width_ratio=0.1, min_size = 1) + #, max_size = 30
-  ggtitle("More in Healthy")
-
-
-layout <- '
-AA
-BB
-'
-wrap_plots(A = cu_disease, B = cu_healthy, design = layout)
 
 likely_families <-  subset_asv_comp_upset %>%
   filter(p_final_disease_state | `p_time:final_disease_state`) %>%
@@ -375,7 +371,8 @@ vls_plot_1 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+             y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
@@ -399,7 +396,8 @@ vls_plot_2 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+             y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = time:final_disease_state, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
@@ -424,7 +422,8 @@ vls_plot_3 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h)) %>% distinct(asv_names, d_v_h)), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), y = emmean, ymin = emmean - SE, ymax = emmean + SE,
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+             y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = time:final_disease_state, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
   geom_text(aes(y = (emmean + SE), label = .group),
@@ -621,7 +620,8 @@ logfold_data <- ls_model %>%
   left_join(taxonomy_tibble, by = join_by(asv_names))
 
 
-logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder(paste(Family, " ", Genus, " (", parse_number(asv_names), ")", sep = ""), diff), y = estimate, 
+logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder(paste(Family, " ", 
+                              Genus, " (", parse_number(asv_names), ")", sep = ""), diff), y = estimate, 
              ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
   geom_hline(yintercept = 0) +
   geom_pointrange(position = position_dodge(0.5)) +
@@ -632,8 +632,9 @@ logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder
   facet_grid(rows = vars(terms), scales = "free", space = "free") +
   theme_bw()
 
-logfold_t3_more <- ggplot(logfold_data %>% filter(diff < 0), aes(x = fct_reorder(paste(Family, " ", Genus, " (", parse_number(asv_names), ")", sep = ""), -diff), y = estimate, 
-                                              ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
+logfold_t3_more <- ggplot(logfold_data %>% filter(diff < 0), aes(x = fct_reorder(paste(Family, " ", 
+                                    Genus, " (", parse_number(asv_names), ")", sep = ""), -diff), y = estimate, 
+                                    ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
   geom_hline(yintercept = 0) +
   geom_pointrange(position = position_dodge(0.5)) +
   scale_color_manual(values = c("darkorange1", "firebrick1")) +
