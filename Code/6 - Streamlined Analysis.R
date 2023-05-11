@@ -203,7 +203,7 @@ fds_dvh_summary <- comp_dvh %>%
   select(asv_names, d_v_h, up_down)
 
 vl_suspects <- comp_dvh %>%
-  filter(adj_dvh < 0) %>%
+  filter(adj_dvh > 0) %>%
   .$asv_names
 
 #by exposure
@@ -359,7 +359,7 @@ write_rds(list(likely_families, very_likely_families), "../intermediate_files/fa
   
 #### Tables RE: Differences in FDS or Exposure####
 
-table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
+table_prep1 <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
   ungroup() %>%
   rowwise(asv_names) %>%
   reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
@@ -367,8 +367,8 @@ table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for no
   group_by(param) %>%
   mutate(p = p.adjust(p, 'fdr')) %>%
   ungroup %>%
-  #mutate(p = p < 0.05) %>%
-  mutate(p = ifelse(p < 0.05, 1, 0)) %>%
+  mutate(p = p < 0.05) %>%
+  #mutate(p = ifelse(p < 0.05, 1, 0)) %>%
   left_join(comp_dvh %>% select(-c(p.value, data, model)), by = join_by(asv_names)) %>%
   select(asv_names, param, p, d_v_h, up_down) %>%
   pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_', values_fill = FALSE) %>%
@@ -440,7 +440,36 @@ subset_asv_comp_upset %>% length(p_time)
 count(subset_asv_comp_upset, p_time)
 
 
-table_prep %>% mutate(across(starts_with("p_")), as.double(.x))
+table_prep1 %>% 
+  left_join(exposure_dvh_summary) %>% 
+  select(-Species) %>%
+  group_by(Family) %>%
+  summarize(
+    total = n(),
+    `   ` = " ",
+    time = sum(p_time),
+    fds = sum(p_final_disease_state),
+    exp = sum(p_exposure),
+    t_fds = sum(`p_time:final_disease_state`),
+    t_exp = sum(`p_time:exposure`),
+    ` ` = " ",
+    exp_more_D = length(exp_up_down[exp_up_down == "up"]), 
+    fds_more_D = length(up_down[up_down == "up"]), 
+  ) %>%
+  rowwise() %>%
+  filter(!((time > 0) & (sum(fds, exp, t_fds, t_exp) < 1))) %>%
+  arrange(desc(total)) %>%
+  formattable(align = c("l", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c"), list(
+    Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    area(col = 2) ~ color_tile("white", "#539CA0"),
+    area(col = 4) ~ color_tile("white", "#01B8F7"),
+    area(col = 5) ~ color_tile("white", "#F63517"),
+    area(col = 6) ~ color_tile("white", "#F9E820"),
+    area(col = 7) ~ color_tile("white", "#A33FFF"),
+    area(col = 8) ~ color_tile("white", "#02C40A"),
+    area(col = c(10, 11)) ~ color_tile("white", "#E41A1C")
+    )) %>%
+  export_formattable("../Figures/signifs_by_family.png")
 
 #buffer
 #### Graphing ####
@@ -456,11 +485,12 @@ target_data %>%
   ggvenn(c('D', 'H', 'T3', 'T7'))
 
 
-##EMMEANS for VLS
+##EMMEANS for LS
 
-#VLS FDS only
-vls_plot_1 <- ls_model_w_terms %>%
-  filter(terms == "final_disease_state", d_v_h < 0) %>%
+#LS FDS only
+ls_plot_1 <- ls_model_w_terms %>%
+  filter(terms == "final_disease_state") %>%
+  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~final_disease_state"), 0.05))) %>%
@@ -472,7 +502,7 @@ vls_plot_1 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), -d_v_h, .desc = TRUE), 
              y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
@@ -484,8 +514,9 @@ vls_plot_1 <- ls_model_w_terms %>%
   labs(title = "Final Disease State Only")
 
 #VLS interaction only
-vls_plot_2 <- ls_model_w_terms %>%
-  filter(terms == "time:final_disease_state", d_v_h < 0) %>%
+ls_plot_2 <- ls_model_w_terms %>%
+  filter(terms == "time:final_disease_state") %>%
+  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -497,7 +528,7 @@ vls_plot_2 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h))), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), -d_v_h, .desc = TRUE), 
              y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = time:final_disease_state, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
@@ -510,8 +541,9 @@ vls_plot_2 <- ls_model_w_terms %>%
 
 
 #Both FDS and FDS:time
-vls_plot_3 <- ls_model_w_terms %>%
-  filter(terms == "both", param == "time:final_disease_state", d_v_h < 0) %>%
+ls_plot_3 <- ls_model_w_terms %>%
+  filter(terms == "both", param == "time:final_disease_state") %>%
+  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -523,7 +555,7 @@ vls_plot_3 <- ls_model_w_terms %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c("Kingdom", "Phylum")) %>%
   left_join((select(ls_model_w_terms, c(asv_names, d_v_h)) %>% distinct(asv_names, d_v_h)), by = join_by(asv_names)) %>%
-  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), d_v_h, .desc = TRUE), 
+  ggplot(aes(x = fct_reorder(paste(Family, " ", Genus, " (", asv_names, ")", sep = ""), -d_v_h, .desc = TRUE), 
              y = emmean, ymin = emmean - SE, ymax = emmean + SE,
              col = time:final_disease_state, pch = time)) +
   geom_pointrange(position = position_dodge(0.5)) +
@@ -534,7 +566,13 @@ vls_plot_3 <- ls_model_w_terms %>%
   xlab("ASV") +
   labs(title = "Both FDS and FDS:Time")
 
-vls_plot_1 / vls_plot_2 / vls_plot_3 + plot_layout(heights = c(4, 7, 16)) + 
+#ls - garbage ASVs
+ls_plot_1 / ls_plot_2 / ls_plot_3 + plot_layout(heights = c(1, 20, 15)) + 
+  plot_annotation(title = "Likely Suspects") & theme_linedraw() & 
+  theme(text = element_text('sans'), plot.title = element_text(size = 16))
+
+#vls
+ls_plot_1 / ls_plot_2 / ls_plot_3 + plot_layout(heights = c(4, 3, 14)) + 
   plot_annotation(title = "Very Likely Suspects") & theme_linedraw() & 
   theme(text = element_text('sans'), plot.title = element_text(size = 16))
 
