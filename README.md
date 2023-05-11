@@ -14,34 +14,14 @@
 
 ##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
 
-![plot](./Figures/comp_upset_full_subset.png)
-
-
-#### More Abundant in Disease:
-###### 25 are significant for final disease state or final disease state:time
-
-![plot](./Figures/comp_upset_more_disease.png)  
-
-#### More Abundant in Healthy:
-###### 32 are significant for final disease state or final disease state:time
-
-![plot](./Figures/comp_upset_more_healthy.png)
+![plot](./Figures/comp_upset_full_subset.png)  
 
 #### If you remove ASVs that are only significant for time:
 ##### Only 116 remain, 57 are more abundant in Disease
 
-![plot](./Figures/comp_upset_timeless.png)
+![plot](./Figures/comp_upset_ls.png)
 
-#### Relative Representation of Families of Interest
-Of the total number of ASVs present in all of the data within each Order/Family, what percent of those are found in the Likely or Very Likely Suspect Lists?  
-
-Of the 116 remaining, 57 are significant for final disease state or final disease state:time (more abundant in either healthy or diseased)
-
-##### By Order
-![plot](./Figures/rel_abun_by_order.png)
-
-##### By Family
-![plot](./Figures/rel_abun_by_family.png)
+![plot](./Figures/comp_upset_vls.png)
 
 ### Highest Abundances 
 
