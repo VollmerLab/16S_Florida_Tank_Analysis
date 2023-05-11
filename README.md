@@ -24,6 +24,9 @@
 ##### only ASVs that are significantly more abundant in D than H:
 ![plot](./Figures/comp_upset_vls.png)
 
+#### Differences in exposure and final disease state
+![plot](./Figures/fds_exp_diffs.png)
+
 ### Most Abundant Families in each Timepoint and Final Disease State intersection
 **aggregated by Family**  
 
@@ -40,7 +43,7 @@
 ### Very Likely Suspects
 *present in T3, T7, and Diseased bait*   
 *AND differs significantly for either final disease state or the interaction of final disease state and time*  
-*AND more abundant in diseased than healthy*
+*AND significantly more abundant in diseased than healthy*
 
 ![plot](./Figures/VLS_emmeans.png)
 
