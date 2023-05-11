@@ -49,7 +49,7 @@ removed any families where the only significant term in the whole family is time
 *AND differs significantly for either final disease state or the interaction of final disease state and time*  
 *AND significantly more abundant in diseased than healthy*
 
-![plot](./Figures/emmean_VLS.png)
+![plot](./Figures/emmeans_VLS.png)
 
 ## Logfold Changes in Bacterial Abundance
 - positive logfold change means more disease
