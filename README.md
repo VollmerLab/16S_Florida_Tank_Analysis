@@ -16,11 +16,12 @@
 
 ![plot](./Figures/comp_upset_full_subset.png)  
 
-#### If you remove ASVs that are only significant for time:
-##### Only 116 remain, 57 are more abundant in Disease
+#### If you remove ASVs that are only significant for time, only 116 remain:
+##### legend is describing diseased relative to healthy ("up" means it's significantly higher in disease, etc...)
 
 ![plot](./Figures/comp_upset_ls.png)
 
+##### only ASVs that are significantly more abundant in D than H
 ![plot](./Figures/comp_upset_vls.png)
 
 ### Highest Abundances 
