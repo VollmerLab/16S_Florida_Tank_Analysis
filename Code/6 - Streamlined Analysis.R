@@ -199,9 +199,26 @@ comp_dvh <- ls_model %>%
   mutate(adj_dvh = ifelse(p.value < 0.05, d_v_h, 0)) %>%
   mutate(up_down = ifelse(adj_dvh > 0, "up", ifelse(adj_dvh < 0, "down", "non-significant")))
 
+fds_dvh_summary <- comp_dvh %>%
+  select(asv_names, d_v_h, up_down)
+
 vl_suspects <- comp_dvh %>%
   filter(adj_dvh < 0) %>%
   .$asv_names
+
+#by exposure
+exposure_dvh <- ls_model %>%
+  rowwise() %>%
+  mutate(comps = list(emmeans(model, ~exposure) %>%
+                        contrast('pairwise', adjust = 'fdr') %>% as_tibble())) %>% 
+  unnest(comps) 
+
+exposure_dvh_summary <- exposure_dvh %>%
+  select(-c(SE, contrast, df, t.ratio, data, model)) %>%
+  rename("exp_d_v_h" = estimate) %>%
+  #mutate(adj_dvh = ifelse(p.value < 0.05, exp_d_v_h, 0)) %>%
+  mutate(exp_up_down = ifelse(p.value < 0.05, ifelse(exp_d_v_h > 0, "up", "down"), "non-significant")) %>%
+  select(-c(p.value))
 
 
 #model summary for all interaction types for our subsetted data
@@ -245,10 +262,8 @@ subset_asv_comp_upset <- ls_model %>% #reduces from 305 to 249 bc 56 are signifi
   pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_', values_fill = FALSE) %>%
   left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
   select(-c(Kingdom, Phylum)) %>%
-  #select(-p_time) %>% #TODO decide whether to include time in upsets here
   filter(!if_all(starts_with('p_'), ~!.)) %>%
   filter(!(p_time & !p_final_disease_state & !p_exposure & !`p_time:final_disease_state` & !`p_time:exposure`))
-  #filter(p_final_disease_state | `p_time:final_disease_state`)
 
 likely_asvs <- subset_asv_comp_upset %>%
   filter(p_final_disease_state | `p_time:final_disease_state`) %>%
@@ -342,6 +357,92 @@ very_likely_families <-  subset_asv_comp_upset %>%
 
 write_rds(list(likely_families, very_likely_families), "../intermediate_files/families_of_interest.rds")
   
+#### Tables RE: Differences in FDS or Exposure####
+
+table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
+  ungroup() %>%
+  rowwise(asv_names) %>%
+  reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
+  dplyr::rename(p = `Pr(>F)`) %>%
+  group_by(param) %>%
+  mutate(p = p.adjust(p, 'fdr')) %>%
+  ungroup %>%
+  #mutate(p = p < 0.05) %>%
+  mutate(p = ifelse(p < 0.05, 1, 0)) %>%
+  left_join(comp_dvh %>% select(-c(p.value, data, model)), by = join_by(asv_names)) %>%
+  select(asv_names, param, p, d_v_h, up_down) %>%
+  pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_', values_fill = FALSE) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  select(-c(Kingdom, Phylum)) %>%
+  filter(!if_all(starts_with('p_'), ~!.)) 
+
+sig_for_anything <- table_prep %>% .$asv_names
+
+remove_time_only <- table_prep %>%
+  filter(!(p_time & !p_final_disease_state & !p_exposure & !`p_time:final_disease_state` & !`p_time:exposure`)) %>% 
+  .$asv_names
+
+
+family_table <- exposure_dvh_summary %>% 
+  full_join(fds_dvh_summary) %>% 
+  left_join(taxonomy_tibble) %>%
+  select(-c(Kingdom, Phylum)) %>%
+  mutate(any_sig_int = ifelse(asv_names %in% sig_for_anything, 1, 0), 
+         non_time_sig = ifelse(asv_names %in% remove_time_only, 1, 0)) %>%
+  select(-c(Class, Order, Species, Genus)) %>%
+  group_by(Family) %>%
+  summarize(total = n(), 
+            total_sig = sum(any_sig_int), 
+            total_non_time = sum(non_time_sig),
+            ave_exp = round(mean(exp_d_v_h), 3), 
+            exp_less_D = length(exp_up_down[exp_up_down == "down"]),
+            exp_more_D = length(exp_up_down[exp_up_down == "up"]), 
+            exp_neutral = length(exp_up_down[exp_up_down == "non-significant"]),
+            ave_fds = round(mean(d_v_h), 3), 
+            fds_less_D = length(up_down[up_down == "down"]),
+            fds_more_D = length(up_down[up_down == "up"]), 
+            fds_neutral = length(up_down[up_down == "non-significant"]),
+            all_asv = list(asv_names)
+            ) %>%
+  filter(!(total_sig == 0 & total_non_time == 0)) %>%
+  select(-all_asv) %>%
+  filter(total_non_time > 0) %>%
+  arrange(desc(total_non_time)) %>%
+  rename("All ASVs" = total, "All Significant" = total_sig, "Not Time" = total_non_time)
+  
+
+#make color bar nice
+#unit.scale = function(x) (x - min(x)) / (max(x) - min(x))
+#total = color_bar("#FA614B", fun = unit.scale)
+
+
+
+formattable(family_table, align = c("l", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c"), list(
+  Family = formatter("span", style = ~ style("font-size:10px", color = "gray",font.weight = "bold")),
+  area(col = c(6, 10)) ~ color_tile("white", "#4DAF4A"),
+  area(col = c(7, 11)) ~ color_tile("white", "#E41A1C"),
+  area(col = c(8, 12)) ~ color_tile("white", "#FF7F00"),
+  ave_exp = formatter("span", style = x ~ style(color = ifelse(x < 0, "red", "green"))),
+  ave_fds = formatter("span", style = x ~ style(color = ifelse(x < 0, "red", "green")))
+)) %>%
+  export_formattable("../Figures/fds_exp_diffs.png")
+
+#
+
+ 
+
+ls_model_full %>% 
+  select(-adj_dvh) %>%
+  full_join(exposure_dvh_summary) %>% 
+  left_join(taxonomy_tibble)
+  
+subset_asv_comp_upset %>% length(p_time)
+count(subset_asv_comp_upset, p_time)
+
+
+table_prep %>% mutate(across(starts_with("p_")), as.double(.x))
+
+#buffer
 #### Graphing ####
 
 #venn diagram

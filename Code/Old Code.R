@@ -43,3 +43,14 @@ AA
 BB
 '
 wrap_plots(A = cu_disease, B = cu_healthy, design = layout)
+
+
+
+
+
+,
+d_v_h =  emmeans(model, ~final_disease_state) %>%
+  as_tibble %>%
+  select(emmean) %>%
+  pull(1) %>%
+  diff
