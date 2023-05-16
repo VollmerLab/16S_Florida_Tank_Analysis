@@ -1,6 +1,12 @@
 #Code that streamlines the process from Script #5: Disease-Associated Bacteria
 
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+#### TODO LIST ####
+#rerun pcoa and nmds
+#resolve double filter
+#global patterns package
+#lm for trees
+#compare my model and jason's
 
 
 #### Packages ####
@@ -157,7 +163,7 @@ target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   group_by(asv_names) %>%
-  filter(n_distinct(sample_id[value > 7.04]) > 21) %>%
+  filter(n_distinct(sample_id[value > 7.04]) > 19) %>%
   ungroup()
 
 #likely suspects upset prep
@@ -202,10 +208,6 @@ comp_dvh <- ls_model %>%
 fds_dvh_summary <- comp_dvh %>%
   select(asv_names, d_v_h, up_down)
 
-vl_suspects <- comp_dvh %>%
-  filter(adj_dvh > 0) %>%
-  .$asv_names
-
 #by exposure
 exposure_dvh <- ls_model %>%
   rowwise() %>%
@@ -243,6 +245,9 @@ ls_model_w_terms <- ls_model_full %>%
   mutate(terms = ifelse(is.na(terms), param, terms)) %>%
   left_join(ls_model, by = join_by(asv_names))
 
+likely_suspects <- ls_model_w_terms$asv_names %>% unique()
+
+very_likely_suspects <- ls_model_w_terms %>% filter(adj_dvh > 0) %>% .$asv_names %>% unique()
 
 
 #### Prep for Comp Upsets ####
@@ -265,11 +270,8 @@ subset_asv_comp_upset <- ls_model %>% #reduces from 305 to 249 bc 56 are signifi
   filter(!if_all(starts_with('p_'), ~!.)) %>%
   filter(!(p_time & !p_final_disease_state & !p_exposure & !`p_time:final_disease_state` & !`p_time:exposure`))
 
-likely_asvs <- subset_asv_comp_upset %>%
-  filter(p_final_disease_state | `p_time:final_disease_state`) %>%
-  .$asv_names %>% unique()
 
-write_rds(list(likely_asvs, vl_suspects), "../intermediate_files/important_asvs.rds")
+write_rds(list(likely_suspects, very_likely_suspects), "../intermediate_files/important_asvs.rds")
 
 #### Complex Upsets ####
   
@@ -346,20 +348,18 @@ upset(subset_asv_comp_upset %>% filter(up_down == "up"),
   ggtitle("Very Likely Suspects")
   
 
+likely_families <-  likely_suspects %>% as_tibble() %>% rename("asv_names" = value) %>% 
+  left_join(taxonomy_tibble) %>% .$Family %>% unique()
 
-likely_families <-  subset_asv_comp_upset %>%
-  filter(p_final_disease_state | `p_time:final_disease_state`) %>%
-  .$Family %>% unique()
 
-very_likely_families <-  subset_asv_comp_upset %>%
-  filter(p_final_disease_state | `p_time:final_disease_state`, d_v_h < 0) %>%
-  .$Family %>% unique()
+very_likely_families <- very_likely_suspects %>% as_tibble() %>% rename("asv_names" = value) %>% 
+  left_join(taxonomy_tibble) %>% .$Family %>% unique()
 
 write_rds(list(likely_families, very_likely_families), "../intermediate_files/families_of_interest.rds")
   
 #### Tables RE: Differences in FDS or Exposure####
 
-table_prep1 <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
+table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
   ungroup() %>%
   rowwise(asv_names) %>%
   reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
@@ -490,7 +490,7 @@ target_data %>%
 #LS FDS only
 ls_plot_1 <- ls_model_w_terms %>%
   filter(terms == "final_disease_state") %>%
-  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~final_disease_state"), 0.05))) %>%
@@ -516,7 +516,7 @@ ls_plot_1 <- ls_model_w_terms %>%
 #VLS interaction only
 ls_plot_2 <- ls_model_w_terms %>%
   filter(terms == "time:final_disease_state") %>%
-  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -543,7 +543,7 @@ ls_plot_2 <- ls_model_w_terms %>%
 #Both FDS and FDS:time
 ls_plot_3 <- ls_model_w_terms %>%
   filter(terms == "both", param == "time:final_disease_state") %>%
-  filter(!asv_names %in% vl_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -740,8 +740,6 @@ family_chart_1 %>%
   
 #### Logfold Changes ####
 
-#same model but run on the log of the data
-
 logfold_data <- ls_model %>%
   ungroup() %>%
   inner_join((ls_model_w_terms %>% select(asv_names, terms)), by = join_by(asv_names), multiple = "all") %>%
@@ -759,7 +757,8 @@ logfold_data <- ls_model %>%
   left_join(taxonomy_tibble, by = join_by(asv_names))
 
 
-logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder(paste(Family, " ", 
+ggplot(logfold_data %>% filter(!asv_names %in% very_likely_suspects), 
+                          aes(x = fct_reorder(paste(Family, " ", 
                               Genus, " (", parse_number(asv_names), ")", sep = ""), diff), y = estimate, 
              ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
   geom_hline(yintercept = 0) +
@@ -767,27 +766,193 @@ logfold_t7_more <- ggplot(logfold_data %>% filter(diff > 0), aes(x = fct_reorder
   scale_color_manual(values = c("darkorange1", "firebrick1")) +
   coord_flip() +
   xlab("") +
-  labs(title = "Logfold Changes - More in T7") +
+  labs(title = "LS Logfold Changes") +
   facet_grid(rows = vars(terms), scales = "free", space = "free") +
   theme_bw()
 
-logfold_t3_more <- ggplot(logfold_data %>% filter(diff < 0), aes(x = fct_reorder(paste(Family, " ", 
-                                    Genus, " (", parse_number(asv_names), ")", sep = ""), -diff), y = estimate, 
-                                    ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
+
+ggplot(logfold_data %>% filter(asv_names %in% very_likely_suspects), aes(x = fct_reorder(paste(Family, " ", 
+                   Genus, " (", parse_number(asv_names), ")", sep = ""), diff), y = estimate, 
+                   ymin = estimate - SE, ymax = estimate + SE, colour = time, pch = time)) +
   geom_hline(yintercept = 0) +
   geom_pointrange(position = position_dodge(0.5)) +
   scale_color_manual(values = c("darkorange1", "firebrick1")) +
   coord_flip() +
-  xlab("ASV") +
-  labs(title = "Logfold Changes - More in T3") +
+  xlab("") +
+  labs(title = "VLS Logfold Changes") +
   facet_grid(rows = vars(terms), scales = "free", space = "free") +
-  theme_bw() +
-  theme(legend.position = "none")
-
-logfold_t3_more | logfold_t7_more
+  theme_bw()
 
 
 #TODO add pcoa code to this doc
 
 
 
+
+#### Comparing Methods ####
+
+plot_method_asvs <- read_rds("../intermediate_files/plot_method_asvs.rds")
+
+#check for LS and include only interesting ones
+
+comp_models <- ls_model_w_terms %>% 
+  mutate(ls = TRUE, vls = ifelse(adj_dvh > 0, TRUE, FALSE)) %>%
+  select(asv_names, ls, vls) %>%
+  distinct() %>%
+  full_join(plot_method_asvs) %>%
+  mutate(across(c(ls, vls, linear, quadratic), ~ifelse(is.na(.), FALSE, .))) %>%
+  left_join(taxonomy_tibble) %>%
+  mutate(Name = paste(Family, Genus), .before = asv_names) %>%
+  select(-c(Kingdom, Phylum, Class, Order, Family, Genus, Species)) %>%
+  mutate(ordering = parse_number(asv_names)/max(parse_number(asv_names))) %>%
+  group_by(terms) %>%
+  arrange(ordering, .by_group = TRUE) %>%
+  ungroup() %>%
+  select(-c(ordering, terms)) %>%
+  rowwise() %>%
+  mutate(both = ifelse(any(ls,vls) & any(linear, quadratic), TRUE, FALSE), .before = ls)
+#%>% filter(both)
+
+formattable(comp_models, align = c("l", "c", "c", "c"), list(
+    Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    asv_names = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    both = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                           `background-color` = ifelse(both, "#A846FF", "white"))),
+    ls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                           `background-color` = ifelse(ls, "#29CD13", "white"))),
+    vls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                             `background-color` = ifelse(vls, "#29CD13", "white"))),
+    linear = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                           `background-color` = ifelse(linear, "#12CFCF", "white"))),
+    quadratic = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                           `background-color` = ifelse(quadratic, "#12CFCF", "white")))
+  )) #%>%
+  export_formattable("../Figures/compare_asv_methods.png")
+
+
+  comp_models %>% reframe(asv_names, emily_model = ifelse(any(ls,vls), TRUE, FALSE),
+                          jason_model = ifelse(any(linear,quadratic), TRUE, FALSE)) %>% ggvenn()
+
+tst_p2 <- read_rds("../intermediate_files/both_jasons_models.rds")[[3]]
+
+z_stats <- tst_p2 %>% select(asv_names, coef_comp) %>% unnest(coef_comp) %>% select(asv_names, contrast, Z) %>%
+    pivot_wider(names_from = contrast, values_from = Z) %>% rename("linear_z" = linear, "quadratic_z" = quadratic)
+  
+  
+all_sig_terms_comp <- comp_models %>%
+  left_join(table_prep %>% 
+  select(-c(d_v_h, up_down, Class, Order, Family, Genus, Species)), by = join_by(asv_names)) %>%
+  left_join(z_stats) %>% 
+  mutate(linear_z = round(linear_z, 2), quadratic_z = round(quadratic_z, 2)) %>%
+  #filter(any(linear, quadratic)) %>% 
+  arrange(linear_z) %>% select(Name, asv_names, both, ls, vls, linear, linear_z,
+                                                                  quadratic, quadratic_z, p_time, p_final_disease_state,
+                                                                  `p_time:final_disease_state`, p_exposure, `p_time:exposure`)
+
+
+
+
+formattable(all_sig_terms_comp, align = c("l", "c", "c", "c"), list(
+  Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+  asv_names = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+  both = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                          `background-color` = ifelse(both, "#A846FF", "white"))),
+  ls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                        `background-color` = ifelse(ls, "#29CD13", "white"))),
+  vls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                         `background-color` = ifelse(vls, "#29CD13", "white"))),
+  linear = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(linear, "#12CFCF", "white"))),
+  quadratic = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                               `background-color` = ifelse(quadratic, "#12CFCF", "white"))),
+  linear_z = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(is.na(linear_z), "white", "#12CFCF"))),
+  quadratic_z = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                               `background-color` = ifelse(is.na(quadratic_z), "white", "#12CFCF"))),
+  p_time = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                               `background-color` = ifelse(p_time, "orange", "white"))),
+  p_exposure = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(p_exposure, "orange", "white"))),
+  `p_time:exposure` = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(`p_time:exposure`, "orange", "white"))),
+  `p_time:final_disease_state` = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(`p_time:final_disease_state`, "orange", "white"))),
+  p_final_disease_state = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(p_final_disease_state, "orange", "white")))
+))
+
+
+
+## next attempt
+
+venn_sig_terms <- ls_model_full %>% select(asv_names, param, p) %>% mutate(p = p < 0.05) %>%
+  pivot_wider(names_from = param, values_from = p) %>% 
+  rowwise() %>%
+  mutate(exp = ifelse(any(exposure, `time:exposure`), TRUE, FALSE), 
+         fds = ifelse(any(final_disease_state, `time:final_disease_state`), TRUE, FALSE)) %>%
+  select(asv_names, exp, fds)
+
+first_iter <- read_rds("../intermediate_files/both_jasons_models.rds")[[1]]
+second_iter <- read_rds("../intermediate_files/both_jasons_models.rds")[[2]]
+
+
+comp_models_indepth <- model_data %>% select(asv_names) %>% unique() %>% rowwise() %>%
+  mutate(first = ifelse(asv_names %in% first_iter$asv_names, TRUE, FALSE),
+         second = ifelse(asv_names %in% second_iter$asv_names, TRUE, FALSE)) %>%
+  full_join(venn_sig_terms, by = join_by(asv_names)) %>%
+  filter(any(first, second, exp, fds)) %>%
+  rename("Exposure" = exp, "FDS" = fds) %>%
+  mutate(first__1 = ifelse(first, 1, 0),
+         second__1 = ifelse(second, 1, 0),
+         Exposure__1 = ifelse(Exposure, 1, 0),
+         FDS__1 = ifelse(FDS, 1, 0)) %>%
+  rowwise() %>%
+  mutate(num_of_interactions = sum(first__1, second__1, Exposure__1, FDS__1)) %>% 
+  arrange(desc(num_of_interactions)) %>%
+  select(-c(ends_with("__1")))
+
+comp_models_indepth %>%
+  ggvenn()
+
+comp_models_indepth %>% full_join(all_sig_terms_comp) %>% select(-starts_with("p_")) %>% 
+  select(Name, asv_names, both, ls, vls, FDS, Exposure, first, second, linear, linear_z, quadratic, quadratic_z, num_of_interactions) %>%
+  arrange(desc(num_of_interactions)) %>%
+  filter(num_of_interactions > 1) %>%
+  select(-num_of_interactions) %>%
+  mutate(linear = ifelse(linear, linear_z, 0), quadratic = ifelse(quadratic, quadratic_z, 0)) %>%
+  select(-c(linear_z, quadratic_z)) %>%
+  left_join(taxonomy_tibble) %>%
+  mutate(Name = paste(Family, Genus), .before = asv_names) %>%
+  select(-c(Kingdom, Phylum, Class, Order, Family, Genus, Species)) %>%
+  formattable(align = c("l", "c", "c", "c"), list(
+    Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    asv_names = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    both = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                            `background-color` = ifelse(both, "#A846FF", "white"))),
+    ls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                          `background-color` = ifelse(ls, "#29CD13", "white"))),
+    vls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                           `background-color` = ifelse(vls, "#29CD13", "white"))),
+    linear = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                              `background-color` = ifelse(linear != 0, "#12CFCF", "white"))),
+    quadratic = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                                 `background-color` = ifelse(quadratic != 0, "#12CFCF", "white"))),
+    FDS = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                                 `background-color` = ifelse(FDS, "#FC5629", "white"))),
+    Exposure = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                                 `background-color` = ifelse(Exposure, "#FC5629", "white"))),
+    first = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                                 `background-color` = ifelse(first, "#FC5629", "white"))),
+    second = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
+                                                 `background-color` = ifelse(second, "#FC5629", "white")))
+  ))
+
+
+
+#TODO
+
+#add t0 to model - included in first iter not second bc not fully crossed T0 and FDS
+#emmeans for 3 plus venn interactions
+
+
+#### ####

@@ -34,8 +34,29 @@ make_ts_plot_data <- function(healthy_regression, disease_regression){
             .id = 'exposure') 
 }
 
+clean_afex <- function(model){
+  #model is an afex::mixed model
+  model$anova_table %>%
+    as_tibble(rownames = 'param') %>%
+    janitor::clean_names() %>%
+    rename_with(~str_replace_all(., '_df', 'DF')) %>%
+    rename(pvalue = pr_f) %>%
+    mutate(param = str_replace(param, ':', 'X'),
+           param = str_replace(param, 'final_disease_state', 'finalDisease')) %>%
+    pivot_wider(names_from = 'param',
+                values_from = where(is.numeric),
+                names_vary = 'slowest')
+}
+
+
 #### Data ####
 microbe_data <- read_csv('C:/Users/jdsel/Documents/Google Drive/Research/Vollmer Lab PostDoc/Emily_Microbiome/intermediate_files/pre_model_data.csv',
+                         show_col_types = FALSE) %>%
+  filter(!tank %in% c('HOMO', 'homogenate_fragment')) %>%
+  mutate(time = factor(time, levels = c('T0', 'T3', 'T7')))
+
+#for emily
+microbe_data <- read_csv('../intermediate_files/pre_model_data.csv',
                          show_col_types = FALSE) %>%
   filter(!tank %in% c('HOMO', 'homogenate_fragment')) %>%
   mutate(time = factor(time, levels = c('T0', 'T3', 'T7')))
@@ -77,7 +98,7 @@ tst <- microbe_data %>%
   nest(data = -c(asv_names)) %>%
   # sample_n(10) %>%
   rowwise %>%
-  partition(cluster) %>%
+  #partition(cluster) %>%
   mutate(healthy_regression = list(lmer(value ~ time + (1 | genotype) + (1 | tank),
                                         data = filter(data, exposure != 'D'),
                                         control = variancePartition:::vpcontrol)),
@@ -85,7 +106,7 @@ tst <- microbe_data %>%
                                         data = filter(data, exposure != 'H'),
                                         control = variancePartition:::vpcontrol))) %>%
   mutate(coef_comp = list(compare_coefs(healthy_regression, disease_regression))) %>%
-  collect %>%
+  #collect %>%
   ungroup 
 
 
@@ -113,7 +134,7 @@ tst_pre_plot <- tst_p %>%
   nest(data = -c(linear, quadratic))
   
 
-tst_p %>%
+first_iter_model <- tst_p %>%
   group_by(asv_names) %>%
   filter(any(fdr < 0.05)) %>%
   ungroup %>%
@@ -123,7 +144,7 @@ tst_p %>%
               values_from = is_significant) %>%
   left_join(select(microbe_data, asv_names, Order:Species) %>%
               distinct,
-            by = 'asv_names') %>% View
+            by = 'asv_names') #%>% View
 
 
 
@@ -148,7 +169,7 @@ blah <- tst_pre_plot %>%
 
 blah$plot[[3]]
 
-%>%
+#%>%
   summarise(plot = list(wrap_plots(plot))) %>%
   pull(plot) %>%
   pluck(1)
@@ -158,7 +179,7 @@ tst_p2$data[[1]] %>%
 
 tst_p2 <- tst_p %>%
   group_by(asv_names) %>%
-  filter(any(fdr < 0.05)) %>%
+  #filter(any(fdr < 0.05)) %>%
   select(asv_names) %>%
   ungroup %>%
   distinct %>%
@@ -171,7 +192,7 @@ tst_p2 <- tst_p %>%
                                           method = 'KR',
                                           control = variancePartition:::vpcontrol))) 
 
-tst_p2 %>%
+second_iter_model <- tst_p2 %>%
   rowwise(asv_names, data, ends_with('regression'), ends_with('model')) %>%
   summarise(clean_afex(final_outcome_model),
             .groups = 'drop') %>%
@@ -184,12 +205,35 @@ tst_p2 %>%
               broom::tidy(conf.int = TRUE)) %>%
   left_join(select(microbe_data, asv_names, Order:Species) %>%
               distinct,
-            by = 'asv_names') %>%
+            by = 'asv_names') 
+
+second_iter_model %>%
   ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
              colour = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   facet_wrap(Order + Family + Genus ~ asv_names, scales = 'free_y')
 
+
+#### Significant ASVs ####
+
+plot_method_asvs <- blah %>% select(-plot) %>%
+  unnest(cols = c(data)) %>%
+  mutate(terms = paste(ifelse(linear, "L", "n"), ifelse(quadratic, "Q", "n"), sep = ""), .after = asv_names) %>%
+  #select(asv_names, terms) %>%
+  select(asv_names, linear, quadratic, terms) %>%
+  distinct()
+
+write_rds(plot_method_asvs, "../intermediate_files/plot_method_asvs.rds")
+
+
+
+first_iter_model
+
+second_iter_model
+
+write_rds(list(first_iter_model, second_iter_model, tst_p2), "../intermediate_files/both_jasons_models.rds")
+
+#### ####
 
 
   

@@ -47,6 +47,9 @@ if(aggregation_level != 'none'){
   #names(sequences) <- taxa_names(microbiome_data)
 }
 
+initdat <- psmelt(microbiome_data)
+  
+
 the_samples <- psmelt(microbiome_data) %>%
   as_tibble() %>%
   filter(Abundance > 0) %>%
@@ -163,7 +166,7 @@ the_samples %>%
   filter(tank != 'homogenate_fragment') %>% 
   filter(exposure != 'Field') %>%
   group_by(OTU) %>%
-  filter(n_distinct(Sample) > 21) %>%
+  filter(n_distinct(Sample) > 19) %>%
   ungroup %>%
   mutate(time = if_else(time == 'T0', exposure, time)) %>%
   count(time, OTU) %>%
