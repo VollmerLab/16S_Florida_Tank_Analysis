@@ -50,7 +50,8 @@ if(aggregation_level != 'none'){
 initdat <- psmelt(microbiome_data)
   
 
-the_samples <- psmelt(microbiome_data) %>%
+the_samples1 <- psmelt(microbiome_data) 
+the_samples <- the_samples1 %>%
   as_tibble() %>%
   filter(Abundance > 0) %>%
   left_join(otu_table(microbiome_data) %>% #add column for # of reads
@@ -165,9 +166,12 @@ the_samples %>%
   # filter(n_reads > 10000) %>%
   filter(tank != 'homogenate_fragment') %>% 
   filter(exposure != 'Field') %>%
+  #.$Sample %>% unique() %>% length
+  #.$OTU %>% unique() %>% length
   group_by(OTU) %>%
   filter(n_distinct(Sample) > 19) %>%
   ungroup %>%
+  .$OTU %>% unique() %>% length
   mutate(time = if_else(time == 'T0', exposure, time)) %>%
   count(time, OTU) %>%
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%

@@ -93,8 +93,21 @@ cluster <- new_cluster(parallel::detectCores() - 1)
 cluster_library(cluster, c('dplyr', 'stringr', 'lme4', 'emmeans'))
 cluster_copy(cluster, c('compare_coefs'))
 
+microbe_data %>%
+  filter(asv_names == 'ASV_1') %>%
+  count(genotype, final_disease_state)
+
+
+microbe_data %>%
+  filter(asv_names == 'ASV_1',
+         genotype == 'B8') %>%
+  group_by(genotype) %>% 
+  mutate(final_disease_state = unique(final_disease_state[final_disease_state != 'Field']))
 
 tst <- microbe_data %>%
+  # group_by(genotype) %>%
+  # mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
+  #                                     final_disease_state)) %>%
   nest(data = -c(asv_names)) %>%
   # sample_n(10) %>%
   rowwise %>%
@@ -183,14 +196,41 @@ tst_p2 <- tst_p %>%
   select(asv_names) %>%
   ungroup %>%
   distinct %>%
-  left_join(tst,
+  left_join(tst %>% unnest(data) %>% group_by(genotype) %>% rowwise() %>% mutate(final_disease_state = ifelse(final_disease_state == "Field",
+                           final_disease_state[time == "T7"], final_disease_state)) %>% ungroup() %>% view(),
             by = 'asv_names') %>%
   rowwise %>%
+  mutate(data = list(filter(data, exposure != 'H') %>%
+                       ungroup %>%
+                       group_by(genotype) %>%
+                       filter(length(unique(time)) > 1) %>%
+                       mutate(final_disease_state_check = unique(final_disease_state[final_disease_state != 'Field'])))) 
+
+
+
+
+
+%>%
+  
   mutate(final_outcome_model = list(mixed(value ~ time * final_disease_state + (1 | genotype) + 
                                             (1 | tank),
-                                          data = filter(data, exposure == 'D'),
+                                          data = filter(data, exposure != 'H'),
                                           method = 'KR',
                                           control = variancePartition:::vpcontrol))) 
+
+with(tst_p2$data[[1]], table(time, final_disease_state))
+
+
+mixed(value ~ time * final_disease_state + (1 | genotype) + 
+        (1 | tank),
+      data = tst_p2$data[[1]],
+      method = 'KR',
+      control = variancePartition:::vpcontrol)
+
+filter(tst$data[[1]], exposure != 'H') %>%
+  count(genotype, exposure, final_disease_state, time) %>%
+  pivot_wider(names_from = time,
+              values_from = n)
 
 second_iter_model <- tst_p2 %>%
   rowwise(asv_names, data, ends_with('regression'), ends_with('model')) %>%
@@ -206,6 +246,41 @@ second_iter_model <- tst_p2 %>%
   left_join(select(microbe_data, asv_names, Order:Species) %>%
               distinct,
             by = 'asv_names') 
+
+second_iter_model %>%
+  ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
+             colour = final_disease_state)) +
+  geom_pointrange(position = position_dodge(0.5)) +
+  facet_wrap(Order + Family + Genus ~ asv_names, scales = 'free_y')
+
+
+second_iter_model_plots <- second_iter_model %>%
+  ungroup() %>%
+  nest_by(asv_names) %>%
+  rowwise() %>%
+  mutate(second_plot = list(ggplot(data = data, aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
+                                colour = final_disease_state)) +
+                       geom_pointrange(position = position_dodge(0.5)) +
+                       labs(title = paste("Second - ", asv_names, sep = ""))))
+
+
+first_iter_model_plots <- tst_pre_plot %>%
+  #mutate(sig_aspects = paste(ifelse(linear, "L", "n"), ifelse(quadratic, "Q", "n"), sep = "")) %>%
+  unnest(data) %>%
+  ungroup() %>%
+  nest_by(asv_names) %>%
+  rowwise() %>%
+  mutate(first_plot = list(ggplot(data = data) +
+                              geom_pointrange(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
+                                                  colour = exposure), position = position_dodge(0.5)) +
+                              labs(title = paste("First - ", asv_names, " (linear: ", data$linear, ", quadratic: ", data$quadratic , ")", sep = ""))))
+
+jason_model_plots <- first_iter_model_plots %>%
+  select(asv_names, first_plot) %>%
+  full_join(second_iter_model_plots %>% select(asv_names, second_plot))
+
+write_rds(jason_model_plots, "../intermediate_files/comp_models_plots_1_2.rds")
+
 
 second_iter_model %>%
   ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,

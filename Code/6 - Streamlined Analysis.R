@@ -130,7 +130,7 @@ if(aggregation_level != 'none'){
 
 #otu_tmm
 otu_tmm <- microbiome_data %>%
-  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  #phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
   t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
@@ -160,11 +160,15 @@ target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state), factor)) %>%
+  #filter(value > 7.04) %>%
+  #.$sample_id %>% unique() %>% length
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
+  #.$asv_names %>% unique() %>% length
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   group_by(asv_names) %>%
   filter(n_distinct(sample_id[value > 7.04]) > 19) %>%
-  ungroup()
+  ungroup() %>%
+  .$asv_names %>% unique() %>% length
 
 #likely suspects upset prep
 target_upset_data <- target_data %>%
@@ -948,7 +952,45 @@ comp_models_indepth %>% full_join(all_sig_terms_comp) %>% select(-starts_with("p
   ))
 
 
+comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names
 
+model_comp_emmeans_plots <- ls_model %>%
+  ungroup %>%
+  filter(asv_names %in% (comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names)) %>%
+  rowwise %>% #computes on a data frame one row at a time
+  mutate(terms = list(find_unique_significant_terms_rmANOVA(model, 0.05))) %>%
+  unnest(terms, keep_empty = TRUE) %>%
+  rowwise %>%
+  mutate(em_out = list(possibly(make_emmean_model, otherwise = NULL)(model, 
+                                                                     as.formula(str_c('~', terms)), 
+                                                                     0.05))) %>%
+  mutate(plot = list(possibly(make_model_plot, otherwise = NULL, quiet = TRUE)
+                     (em_out, data, terms))) %>%
+  group_by(asv_names) %>%
+  reframe(plot = ifelse(any(is.na(terms)), #if NAs in data, then no plot.  else, plot
+                        list(NULL),
+                        list(wrap_plots(plot) &
+                               plot_annotation(title = asv_names) & 
+                               theme_bw())))
+
+comp_models_plots <- read_rds("../intermediate_files/comp_models_plots_1_2.rds")
+
+all_plots_comp_models <- model_comp_emmeans_plots %>% 
+    full_join(comp_models_plots) %>%
+    filter(asv_names %in% (comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names)) %>%
+    pivot_longer(cols = where(is.list),
+                 names_to = 'name',
+                 values_to = 'plot') %>%
+    rowwise %>%
+    mutate(missing_plot = !is.null(plot)) %>%
+    ungroup %>%
+    filter(missing_plot) %>%
+    group_by(asv_names) %>%
+    summarise(plots = list(wrap_plots(plot) &
+                             plot_annotation(title = asv_names) & 
+                             theme_bw()),
+              n_plot = n())
+  
 #TODO
 
 #add t0 to model - included in first iter not second bc not fully crossed T0 and FDS
