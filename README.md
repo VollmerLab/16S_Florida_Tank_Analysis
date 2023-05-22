@@ -61,12 +61,13 @@ removed any families where the only significant term in the whole family is time
 
 ![plot](./Figures/rickettsiales_corr.png)
 
-### PCoA and NMDS
+### PCoA
 
 ![plot](./Figures/pcoa_fds.png)
 
-
 ![plot](./Figures/pcoa_exp.png)
+
+### NMDS
 
 ![plot](./Figures/dual_nmds_plots.png)
 
