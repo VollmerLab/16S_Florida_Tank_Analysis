@@ -64,22 +64,28 @@ microbe_data <- read_csv('../intermediate_files/pre_model_data.csv',
   mutate(time = factor(time, levels = c('T0', 'T3', 'T7')))
 
 #### First Iteration - Exposure ####
+control_options <- variancePartition:::vpcontrol
+# control_options$optimizer <- 'bobyqa'
 
 iter1 <- microbe_data %>%
-  group_by(genotype) %>%
-  mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
-                                      final_disease_state)) %>%
-  ungroup() %>% 
-  filter(!genotype %in% c("M6", "U42")) %>%
+  # group_by(genotype) %>%
+  # mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
+  #                                     final_disease_state)) %>%
+  # ungroup() %>% 
+  # filter(!genotype %in% c("M6", "U42")) %>%
+  mutate(time = factor(time, ordered = TRUE)) %>%
   nest(data = -c(asv_names)) %>%
+  # dplyr::slice(183) %>%
+  # dplyr::slice(180:195) %>%
+  filter(!asv_names %in% c('ASV_469')) %>% #has fixed 0s at both T3 & T7 in healthy
   rowwise %>%
   #partition(cluster) %>%
-  mutate(healthy_regression = list(lmer(value ~ time + (1 | genotype) + (1 | tank),
+  mutate(healthy_regression = list(lmer(value ~ time + (0 + dummy(time, 'T0') | fragment_id),
                                         data = filter(data, exposure != 'D'),
-                                        control = variancePartition:::vpcontrol)),
-         disease_regression = list(lmer(value ~ time + (1 | genotype) + (1 | tank),
+                                        control = control_options)),
+         disease_regression = list(lmer(value ~ time + (0 + dummy(time, 'T0') | fragment_id),
                                         data = filter(data, exposure != 'H'),
-                                        control = variancePartition:::vpcontrol))) %>%
+                                        control = control_options))) %>%
   mutate(coef_comp = list(compare_coefs(healthy_regression, disease_regression))) %>%
   #collect %>%
   ungroup 
@@ -134,7 +140,7 @@ iter1_plots <- iter1_pre_plot %>%
                        facet_wrap(Order + Family + Genus ~ asv_names, scales = 'free_y') +
                        labs(title = str_c('linear: ', linear, '; quadratic: ', quadratic)))) %>%
   ungroup 
-
+iter1_plots$plot[[3]]
 #### Second Iteration - Final Disease State ####
 
 iter2 <- iter1_pvals %>%
@@ -146,13 +152,13 @@ iter2 <- iter1_pvals %>%
   left_join(iter1,
             by = 'asv_names') %>%
   rowwise %>%
-  mutate(final_outcome_model = list(mixed(value ~ time * final_disease_state + (1 | genotype) + 
-                                            (1 | tank),
-                                          data = filter(data, exposure != 'H'),
+  mutate(final_outcome_model = list(mixed(value ~ time * final_disease_state + 
+                                            (0 + dummy(time, 'T0') | fragment_id),
+                                          data = filter(data, exposure != 'H', !is.na(final_disease_state)),
                                           method = 'KR',
                                           control = variancePartition:::vpcontrol))) 
 
-write_rds(iter2, "../intermediate_files/plot_model_iter2")
+write_rds(iter2, "../intermediate_files/plot_model_iter2.rds")
 
 iter2_model <- iter2 %>%
   rowwise(asv_names, data, ends_with('regression'), ends_with('model')) %>%
