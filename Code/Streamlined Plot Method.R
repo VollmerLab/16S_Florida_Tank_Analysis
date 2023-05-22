@@ -1,4 +1,8 @@
-library(tidyverse)
+#Streamlined version of Jason's Plot-Based Significance Model
+
+setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+
+#### Packages ####
 library(lme4)
 library(lmerTest)
 library(emmeans)
@@ -6,8 +10,12 @@ library(qvalue)
 library(afex)
 library(multidplyr)
 library(patchwork)
+library(tidyverse)
+
+select <- dplyr::select
 
 #### Functions ####
+
 compare_coefs <- function(healthy_regression, disease_regression){
   #https://stats.stackexchange.com/questions/93540/testing-equality-of-coefficients-from-two-different-regressions
   healthy_poly <- emmeans(healthy_regression, ~time) %>%
@@ -48,70 +56,22 @@ clean_afex <- function(model){
                 names_vary = 'slowest')
 }
 
+#### Read in Data ####
 
-#### Data ####
-microbe_data <- read_csv('C:/Users/jdsel/Documents/Google Drive/Research/Vollmer Lab PostDoc/Emily_Microbiome/intermediate_files/pre_model_data.csv',
-                         show_col_types = FALSE) %>%
-  filter(!tank %in% c('HOMO', 'homogenate_fragment')) %>%
-  mutate(time = factor(time, levels = c('T0', 'T3', 'T7')))
-
-#for emily
 microbe_data <- read_csv('../intermediate_files/pre_model_data.csv',
                          show_col_types = FALSE) %>%
   filter(!tank %in% c('HOMO', 'homogenate_fragment')) %>%
   mutate(time = factor(time, levels = c('T0', 'T3', 'T7')))
 
-count(microbe_data, exposure)
+#### First Iteration - Exposure ####
 
-microbe_data %>%
-  select(sample_id:final_disease_state) %>%
-  distinct() %>%
-  count(time, exposure, final_disease_state)
-
-microbe_data %>%
-  select(sample_id:final_disease_state) %>%
-  distinct() %>%
-  filter(exposure == 'H', final_disease_state == 'D')
-
-healthy_regression <- lmer(value ~ time + (1 | genotype) + (1 | tank),
-                           data = filter(microbe_data, asv_names == 'ASV_1', exposure != 'D'))
-
-disease_regression <- lmer(value ~ time + (1 | genotype) + (1 | tank),
-                           data = filter(microbe_data, asv_names == 'ASV_1', exposure != 'H'))
-
-compare_coefs(healthy_regression, disease_regression)
-
-
-microbe_data %>%
-  filter(tank != 'homogenate_fragment')
-
-nested_dat <- microbe_data %>%
-  nest(data = -c(asv_names)) 
-
-
-cluster <- new_cluster(parallel::detectCores() - 1)
-cluster_library(cluster, c('dplyr', 'stringr', 'lme4', 'emmeans'))
-cluster_copy(cluster, c('compare_coefs'))
-
-microbe_data %>%
-  filter(asv_names == 'ASV_1') %>%
-  count(genotype, final_disease_state)
-
-
-microbe_data %>%
-  filter(asv_names == 'ASV_1',
-         genotype == 'B8') %>%
-  group_by(genotype) %>% 
-  mutate(final_disease_state = unique(final_disease_state[final_disease_state != 'Field']))
-
-first_iter <- microbe_data %>%
+iter1 <- microbe_data %>%
   group_by(genotype) %>%
   mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
-                                       final_disease_state)) %>%
+                                      final_disease_state)) %>%
   ungroup() %>% 
   filter(!genotype %in% c("M6", "U42")) %>%
   nest(data = -c(asv_names)) %>%
-  # sample_n(10) %>%
   rowwise %>%
   #partition(cluster) %>%
   mutate(healthy_regression = list(lmer(value ~ time + (1 | genotype) + (1 | tank),
@@ -124,8 +84,9 @@ first_iter <- microbe_data %>%
   #collect %>%
   ungroup 
 
+write_rds(iter1, "../intermediate_files/plot_model_iter1.rds")
 
-tst_p <- first_iter %>%
+iter1_pvals <- iter1 %>%
   select(asv_names, coef_comp) %>%
   unnest(coef_comp) %>%
   group_by(contrast) %>%
@@ -133,7 +94,7 @@ tst_p <- first_iter %>%
          qvalue = qvalue(p)$qvalues) %>%
   ungroup
 
-tst_pre_plot <- tst_p %>%
+iter1_pre_plot <- iter1_pvals %>%
   group_by(asv_names) %>%
   filter(any(fdr < 0.05)) %>%
   ungroup %>%
@@ -141,15 +102,15 @@ tst_pre_plot <- tst_p %>%
   select(asv_names, contrast, is_significant) %>%
   pivot_wider(names_from = contrast,
               values_from = is_significant) %>%
-  left_join(tst,
+  left_join(iter1,
             by = 'asv_names') %>%
   rowwise(asv_names, linear, quadratic) %>%
   summarise(make_ts_plot_data(healthy_regression, disease_regression),
             .groups = 'drop') %>%
   nest(data = -c(linear, quadratic))
-  
 
-first_iter_model <- tst_p %>%
+
+iter1_model <- iter1_pvals %>%
   group_by(asv_names) %>%
   filter(any(fdr < 0.05)) %>%
   ungroup %>%
@@ -161,15 +122,7 @@ first_iter_model <- tst_p %>%
               distinct,
             by = 'asv_names') #%>% View
 
-
-
-tst_pre_plot$data[[1]] %>%
-  ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
-             colour = exposure)) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  facet_wrap(~asv_names)
-
-blah <- tst_pre_plot %>%
+iter1_plots <- iter1_pre_plot %>%
   rowwise %>%
   mutate(data = list(data %>% 
                        left_join(select(microbe_data, asv_names, Order:Species) %>%
@@ -182,23 +135,15 @@ blah <- tst_pre_plot %>%
                        labs(title = str_c('linear: ', linear, '; quadratic: ', quadratic)))) %>%
   ungroup 
 
-blah$plot[[3]]
+#### Second Iteration - Final Disease State ####
 
-#%>%
-  summarise(plot = list(wrap_plots(plot))) %>%
-  pull(plot) %>%
-  pluck(1)
-  
-tst_p2$data[[1]] %>%
-  filter(genotype == 'K1')
-
-tst_p2 <- tst_p %>%
+iter2 <- iter1_pvals %>%
   group_by(asv_names) %>%
   #filter(any(fdr < 0.05)) %>%
   select(asv_names) %>%
   ungroup %>%
   distinct %>%
-  left_join(tst,
+  left_join(iter1,
             by = 'asv_names') %>%
   rowwise %>%
   mutate(final_outcome_model = list(mixed(value ~ time * final_disease_state + (1 | genotype) + 
@@ -207,40 +152,9 @@ tst_p2 <- tst_p %>%
                                           method = 'KR',
                                           control = variancePartition:::vpcontrol))) 
 
+write_rds(iter2, "../intermediate_files/plot_model_iter2")
 
-
-  mutate(data = list(filter(data, exposure != 'H') %>%
-                       ungroup %>%
-                       group_by(genotype) %>%
-                       filter(length(unique(time)) > 1) %>%
-                       mutate(final_disease_state_check = unique(final_disease_state[final_disease_state != 'Field'])))) 
-
-
-
-
-%>%
-
-with(tst_p2$data[[1]], table(time, final_disease_state))
-
-#%>% unnest(data) %>% ungroup() %>% filter(!genotype %in% c("M6", "U42")) %>% group_by(genotype) %>% 
-mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
-                                    final_disease_state)) %>% ungroup() %>% 
-  nest(data = -c(asv_names, healthy_regression, disease_regression, coef_comp), .by = asv_names)
-
-
-
-mixed(value ~ time * final_disease_state + (1 | genotype) + 
-        (1 | tank),
-      data = tst_p2$data[[1]],
-      method = 'KR',
-      control = variancePartition:::vpcontrol)
-
-filter(tst$data[[1]], exposure != 'H') %>%
-  count(genotype, exposure, final_disease_state, time) %>%
-  pivot_wider(names_from = time,
-              values_from = n)
-
-second_iter_model <- tst_p2 %>%
+iter2_model <- iter2 %>%
   rowwise(asv_names, data, ends_with('regression'), ends_with('model')) %>%
   summarise(clean_afex(final_outcome_model),
             .groups = 'drop') %>%
@@ -255,51 +169,47 @@ second_iter_model <- tst_p2 %>%
               distinct,
             by = 'asv_names') 
 
-second_iter_model %>%
+iter2_model %>%
   ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
              colour = final_disease_state)) +
   geom_pointrange(position = position_dodge(0.5)) +
   facet_wrap(Order + Family + Genus ~ asv_names, scales = 'free_y')
 
+#### Plot Individual ASVs ####
 
-second_iter_model_plots <- second_iter_model %>%
-  ungroup() %>%
-  nest_by(asv_names) %>%
-  rowwise() %>%
-  mutate(second_plot = list(ggplot(data = data, aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
-                                colour = final_disease_state)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = paste("Second - ", asv_names, sep = ""))))
-
-
-first_iter_model_plots <- tst_pre_plot %>%
+#Iteration 1
+iter1_indiv_plots <- iter1_pre_plot %>%
   #mutate(sig_aspects = paste(ifelse(linear, "L", "n"), ifelse(quadratic, "Q", "n"), sep = "")) %>%
   unnest(data) %>%
   ungroup() %>%
   nest_by(asv_names) %>%
   rowwise() %>%
   mutate(first_plot = list(ggplot(data = data) +
-                              geom_pointrange(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
-                                                  colour = exposure), position = position_dodge(0.5)) +
-                              labs(title = paste("First - ", asv_names, " (linear: ", data$linear, ", quadratic: ", data$quadratic , ")", sep = ""))))
+                             geom_pointrange(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
+                                                 colour = exposure), position = position_dodge(0.5)) +
+                             labs(title = paste("First - ", asv_names, " (linear: ", data$linear, ", quadratic: ", data$quadratic , ")", sep = ""))))
+#Iteration 2
+iter2_indiv_plots <- iter2_model %>%
+  ungroup() %>%
+  nest_by(asv_names) %>%
+  rowwise() %>%
+  mutate(second_plot = list(ggplot(data = data, aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
+                                                    colour = final_disease_state)) +
+                              geom_pointrange(position = position_dodge(0.5)) +
+                              labs(title = paste("Second - ", asv_names, sep = ""))))
 
-jason_model_plots <- first_iter_model_plots %>%
+
+
+jason_model_plots <- iter1_indiv_plots %>%
   select(asv_names, first_plot) %>%
-  full_join(second_iter_model_plots %>% select(asv_names, second_plot))
+  full_join(iter2_indiv_plots %>% select(asv_names, second_plot))
 
 write_rds(jason_model_plots, "../intermediate_files/comp_models_plots_1_2.rds")
 
-
-second_iter_model %>%
-  ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
-             colour = final_disease_state)) +
-  geom_pointrange(position = position_dodge(0.5)) +
-  facet_wrap(Order + Family + Genus ~ asv_names, scales = 'free_y')
-
-
 #### Significant ASVs ####
 
-plot_method_asvs <- blah %>% select(-plot) %>%
+plot_method_asvs <- iter1_plots %>% 
+  select(-plot) %>%
   unnest(cols = c(data)) %>%
   mutate(terms = paste(ifelse(linear, "L", "n"), ifelse(quadratic, "Q", "n"), sep = ""), .after = asv_names) %>%
   #select(asv_names, terms) %>%
@@ -308,15 +218,7 @@ plot_method_asvs <- blah %>% select(-plot) %>%
 
 write_rds(plot_method_asvs, "../intermediate_files/plot_method_asvs.rds")
 
-
-
-first_iter_model
-
-second_iter_model
-
-write_rds(list(first_iter_model, second_iter_model, tst_p2), "../intermediate_files/both_jasons_models.rds")
+write_rds(list(iter1_model, iter2_model, iter2), "../intermediate_files/both_jasons_models.rds")
 
 #### ####
 
-
-  

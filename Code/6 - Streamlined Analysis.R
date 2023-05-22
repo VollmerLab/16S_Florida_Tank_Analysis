@@ -3,7 +3,7 @@
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### TODO LIST ####
-#rerun pcoa and nmds
+
 #global patterns package
 #lm for trees
 #compare my model and jason's
@@ -45,6 +45,86 @@ select <- dplyr::select
 make_emmean_model <- function(model, form, alpha){
   emmeans(model, specs = form, type = 'response') %>%
     cld(Letters = LETTERS, reversed = TRUE, alpha = alpha) 
+}
+
+make_model_plot <- function(predOut, rawData, var_inclusion){
+  
+  all_vars <- str_extract_all(var_inclusion, 'time|final_disease_state|exposure') %>%
+    unlist
+  
+  if(any(str_detect(all_vars, 'time'))){
+    x_var <- str_subset(all_vars, 'time.*')
+  } else {
+    x_var <- all_vars[1]
+  }
+  
+  if(length(all_vars) > 1){
+    colour_var <- str_subset(all_vars, x_var, negate = TRUE)
+  } else {
+    colour_var <- NULL
+  }
+  
+  y_var <- str_subset(colnames(predOut), 'emmean|response')
+  y_data <- str_subset(colnames(rawData), 'value')
+  
+  if(is.null(colour_var)){
+    as_tibble(predOut) %>%
+      mutate(.group = str_trim(.group)) %>%
+      ggplot(aes(x = !!sym(x_var))) +
+      
+      stat_halfeye(data = rawData, aes(y = !!sym(y_data)),
+                   adjust = 0.5, width = 0.6, .width = 0, 
+                   alpha = 0.5, show.legend = FALSE,
+                   fatten_point = 0, justification = -0.25, 
+                   position = position_dodge(0.5), size = 0) +
+      
+      geom_half_point(data = rawData, aes(y = !!sym(y_data)),
+                      side = 'l', range_scale = 0.1, alpha = 1,
+                      position = position_dodge(width = 0.5),
+                      show.legend = FALSE,
+                      transformation = position_jitter(height = 0, width = 0.05)) +
+      
+      geom_pointrange(aes(y = !!sym(y_var),
+                          ymin = lower.CL, ymax = upper.CL),
+                      position = position_dodge(0.5)) +
+      geom_text(aes(y = (upper.CL), label = .group),
+                position = position_dodge(0.5), vjust = -0.1, 
+                show.legend = FALSE) +
+      labs(x = case_when(x_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                         x_var == 'exposure' ~ 'Exposure',
+                         x_var == 'final_disease_state' ~ 'Disease State'))
+    
+  } else {
+    as_tibble(predOut) %>%
+      mutate(.group = str_trim(.group)) %>%
+      ggplot(aes(x = !!sym(x_var), colour = !!sym(colour_var))) +
+      
+      stat_halfeye(data = rawData, aes(y = !!sym(y_data), fill = !!sym(colour_var)),
+                   adjust = 0.5, width = 0.6, .width = 0, 
+                   alpha = 0.5, show.legend = FALSE,
+                   fatten_point = 0, justification = -0.25, 
+                   position = position_dodge(0.5), size = 0) +
+      
+      geom_half_point(data = rawData, aes(y = !!sym(y_data), colour = !!sym(colour_var)),
+                      side = 'l', range_scale = 0.1, alpha = 1,
+                      position = position_dodge(width = 0.5),
+                      show.legend = FALSE,
+                      transformation = position_jitter(height = 0, width = 0.05)) +
+      
+      geom_pointrange(aes(y = !!sym(y_var),
+                          ymin = lower.CL, ymax = upper.CL),
+                      position = position_dodge(0.5)) +
+      geom_text(aes(y = (upper.CL), label = .group),
+                position = position_dodge(0.5), vjust = -0.1,
+                show.legend = FALSE) +
+      labs(x = case_when(x_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                         x_var == 'exposure' ~ 'Exposure',
+                         x_var == 'final_disease_state' ~ 'Disease State'),
+           colour = case_when(colour_var %in% c('time', 'timepoint') ~ 'Time (d)',
+                              colour_var == 'exposure' ~ 'Exposure',
+                              colour_var == 'final_disease_state' ~ 'Disease State'))
+  }
+  
 }
 
 export_formattable <- function(f, file, width = "100%", height = NULL, 
@@ -111,6 +191,44 @@ my_color_tile_baits <- function(health_state) {
             )
   )
 }
+
+plot_agg_pcoa <- function(cpm_counts){
+  filtered_pcoa <- t(cpm_counts) %>%
+    vegdist(method = 'euclidean') %>%
+    magrittr::divide_by(1000) %>%
+    pcoa()
+  
+  percent_variance <- filtered_pcoa$values$Eigenvalues / sum(filtered_pcoa$values$Eigenvalue)
+  
+  filtered_pcoa$vectors %>%
+    as_tibble(rownames = 'sample_id') %>%
+    dplyr::select(sample_id, Axis.1, Axis.2) %>%
+    inner_join(metadata,
+               by = 'sample_id') %>%
+    ggplot(aes(x = Axis.1, y = Axis.2, colour = exposure, 
+               shape = time, group = fragment_id)) +
+    geom_point() +
+    geom_path() +
+    labs(x = str_c('PCoA 1 (', scales::percent(percent_variance[1]), ')'),
+         y = str_c('PCoA 2 (', scales::percent(percent_variance[2]), ')'),
+         title = agg_title) +
+    theme_classic()
+  
+}
+
+find_unique_significant_terms_rmANOVA <- function(model, alpha){
+  significant_terms <- model$anova_table %>%
+    as_tibble(rownames = 'param') %>%
+    janitor::clean_names() %>%
+    filter(pr_f < alpha) %>%
+    pull(param)
+  
+  unique_values <- outer(significant_terms, significant_terms, str_count) %>%
+    colSums() %>%
+    equals(1)
+  
+  str_replace(significant_terms[unique_values], ':', '*')
+}
 #
 #### Read in Data ####
 
@@ -150,7 +268,7 @@ model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
   mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id))
 
-#write_csv((model_data %>% inner_join(target_upset_data)), "../intermediate_files/pre_model_data.csv")
+write_csv((model_data %>% inner_join(target_upset_data)), "../intermediate_files/pre_model_data.csv")
 
 #target microbiome data - zeroes considered
 target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
@@ -781,8 +899,7 @@ ggplot(logfold_data %>% filter(asv_names %in% very_likely_suspects), aes(x = fct
 
 plot_method_asvs <- read_rds("../intermediate_files/plot_method_asvs.rds")
 
-#check for LS and include only interesting ones
-
+#check for LS/VLS and linear/quadratic (plot model iter1)
 comp_models <- ls_model_w_terms %>% 
   mutate(ls = TRUE, vls = ifelse(adj_dvh > 0, TRUE, FALSE)) %>%
   select(asv_names, ls, vls) %>%
@@ -799,8 +916,8 @@ comp_models <- ls_model_w_terms %>%
   select(-c(ordering, terms)) %>%
   rowwise() %>%
   mutate(both = ifelse(any(ls,vls) & any(linear, quadratic), TRUE, FALSE), .before = ls)
-#%>% filter(both)
 
+#table comparing ls/vls and plot model iter1
 formattable(comp_models, align = c("l", "c", "c", "c"), list(
     Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
     asv_names = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
@@ -817,28 +934,28 @@ formattable(comp_models, align = c("l", "c", "c", "c"), list(
   )) #%>%
   export_formattable("../Figures/compare_asv_methods.png")
 
-
-  comp_models %>% reframe(asv_names, emily_model = ifelse(any(ls,vls), TRUE, FALSE),
+# overlap in ls/vls and plot model iter1
+comp_models %>% reframe(asv_names, emily_model = ifelse(any(ls,vls), TRUE, FALSE),
                           jason_model = ifelse(any(linear,quadratic), TRUE, FALSE)) %>% ggvenn()
 
-tst_p2 <- read_rds("../intermediate_files/both_jasons_models.rds")[[3]]
+iter2 <- read_rds("../intermediate_files/both_jasons_models.rds")[[3]]
 
-z_stats <- tst_p2 %>% select(asv_names, coef_comp) %>% unnest(coef_comp) %>% select(asv_names, contrast, Z) %>%
-    pivot_wider(names_from = contrast, values_from = Z) %>% rename("linear_z" = linear, "quadratic_z" = quadratic)
+z_stats <- iter2 %>% select(asv_names, coef_comp) %>% 
+  unnest(coef_comp) %>% select(asv_names, contrast, Z) %>%
+  mutate(Z = -Z) %>% pivot_wider(names_from = contrast, values_from = Z) %>% 
+  rename("linear_z" = linear, "quadratic_z" = quadratic)
   
-  
+#the above table + check all sig terms
 all_sig_terms_comp <- comp_models %>%
   left_join(table_prep %>% 
   select(-c(d_v_h, up_down, Class, Order, Family, Genus, Species)), by = join_by(asv_names)) %>%
   left_join(z_stats) %>% 
   mutate(linear_z = round(linear_z, 2), quadratic_z = round(quadratic_z, 2)) %>%
   #filter(any(linear, quadratic)) %>% 
-  arrange(linear_z) %>% select(Name, asv_names, both, ls, vls, linear, linear_z,
-                                                                  quadratic, quadratic_z, p_time, p_final_disease_state,
-                                                                  `p_time:final_disease_state`, p_exposure, `p_time:exposure`)
-
-
-
+  arrange(linear_z) %>% 
+  select(Name, asv_names, both, ls, vls, linear, linear_z,
+                 quadratic, quadratic_z, p_time, p_final_disease_state,
+                 `p_time:final_disease_state`, p_exposure, `p_time:exposure`)
 
 formattable(all_sig_terms_comp, align = c("l", "c", "c", "c"), list(
   Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
@@ -869,9 +986,7 @@ formattable(all_sig_terms_comp, align = c("l", "c", "c", "c"), list(
                                             `background-color` = ifelse(p_final_disease_state, "orange", "white")))
 ))
 
-
-
-## next attempt
+## 4 Way Venn - First/Second Model Iteration and FDS/Exposure
 
 venn_sig_terms <- ls_model_full %>% select(asv_names, param, p) %>% mutate(p = p < 0.05) %>%
   pivot_wider(names_from = param, values_from = p) %>% 
@@ -882,7 +997,6 @@ venn_sig_terms <- ls_model_full %>% select(asv_names, param, p) %>% mutate(p = p
 
 first_iter <- read_rds("../intermediate_files/both_jasons_models.rds")[[1]]
 second_iter <- read_rds("../intermediate_files/both_jasons_models.rds")[[2]]
-
 
 comp_models_indepth <- model_data %>% select(asv_names) %>% unique() %>% rowwise() %>%
   mutate(first = ifelse(asv_names %in% first_iter$asv_names, TRUE, FALSE),
@@ -900,8 +1014,11 @@ comp_models_indepth <- model_data %>% select(asv_names) %>% unique() %>% rowwise
   select(-c(ends_with("__1")))
 
 comp_models_indepth %>%
+  relocate(Exposure, .after = first) %>%
+  relocate(second, .after = FDS) %>%
   ggvenn()
 
+# 4 Way Venn as a Table - Z SCORES ARE FIXED: pos is more disease
 comp_models_indepth %>% full_join(all_sig_terms_comp) %>% select(-starts_with("p_")) %>% 
   select(Name, asv_names, both, ls, vls, FDS, Exposure, first, second, linear, linear_z, quadratic, quadratic_z, num_of_interactions) %>%
   arrange(desc(num_of_interactions)) %>%
@@ -911,14 +1028,12 @@ comp_models_indepth %>% full_join(all_sig_terms_comp) %>% select(-starts_with("p
   select(-c(linear_z, quadratic_z)) %>%
   left_join(taxonomy_tibble) %>%
   mutate(Name = paste(Family, Genus), .before = asv_names) %>%
-  select(-c(Kingdom, Phylum, Class, Order, Family, Genus, Species)) %>%
+  select(-c(Kingdom, Phylum, Class, Order, Family, Genus, Species, both, ls)) %>%
+  relocate(c(first, linear, quadratic), .after = Exposure) %>%
+  relocate(FDS, .before = second) %>%
   formattable(align = c("l", "c", "c", "c"), list(
     Name = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
     asv_names = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
-    both = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
-                                            `background-color` = ifelse(both, "#A846FF", "white"))),
-    ls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
-                                          `background-color` = ifelse(ls, "#29CD13", "white"))),
     vls = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
                                            `background-color` = ifelse(vls, "#29CD13", "white"))),
     linear = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
@@ -930,18 +1045,17 @@ comp_models_indepth %>% full_join(all_sig_terms_comp) %>% select(-starts_with("p
     Exposure = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
                                                  `background-color` = ifelse(Exposure, "#FC5629", "white"))),
     first = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
-                                                 `background-color` = ifelse(first, "#FC5629", "white"))),
+                                                 `background-color` = ifelse(first, "#12CFCF", "white"))),
     second = formatter("span", style = ~style(color = "white", display = "block", padding = "0 4px", `border-radius` = "4px", 
-                                                 `background-color` = ifelse(second, "#FC5629", "white")))
+                                                 `background-color` = ifelse(second, "#12CFCF", "white")))
   ))
 
 
-comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names
-
+#gather emmeans plots for disease state or exposure significance
 model_comp_emmeans_plots <- ls_model %>%
   ungroup %>%
   filter(asv_names %in% (comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names)) %>%
-  rowwise %>% #computes on a data frame one row at a time
+  rowwise %>%
   mutate(terms = list(find_unique_significant_terms_rmANOVA(model, 0.05))) %>%
   unnest(terms, keep_empty = TRUE) %>%
   rowwise %>%
@@ -959,6 +1073,7 @@ model_comp_emmeans_plots <- ls_model %>%
 
 comp_models_plots <- read_rds("../intermediate_files/comp_models_plots_1_2.rds")
 
+#all plots for the ASVs with 3+ interactions
 all_plots_comp_models <- model_comp_emmeans_plots %>% 
     full_join(comp_models_plots) %>%
     filter(asv_names %in% (comp_models_indepth %>% filter(num_of_interactions >= 3) %>% .$asv_names)) %>%
@@ -973,12 +1088,102 @@ all_plots_comp_models <- model_comp_emmeans_plots %>%
     summarise(plots = list(wrap_plots(plot) &
                              plot_annotation(title = asv_names) & 
                              theme_bw()),
-              n_plot = n())
+              n_plot = n()) %>%
+  left_join(taxonomy_tibble %>% select(asv_names, Family, Genus)) %>%
+  relocate(c(Family, Genus), .before = asv_names)
   
-#TODO
+#### Patchwork PCoA Plot for ASVs, Genus, Family ####
+microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds") %>%
+  subset_samples(time %in% c('T3', 'T7'))
+metadata <- sample_data(microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  dplyr::select(-retain_sample) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
+         .after = sample_id)
 
-#add t0 to model - included in first iter not second bc not fully crossed T0 and FDS
-#emmeans for 3 plus venn interactions
+agg_levels <- c("none", "Genus", "Family")
 
+for(i in 1:length(agg_levels)){
+  aggregation_level = agg_levels[i]
+  
+  if(aggregation_level != 'none'){
+    microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
+    taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
+    agg_title <-  aggregation_level
+  } else {
+    taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+    agg_title <-  "ASV"
+  }
+  
+  if(i == 1){
+    otu_tmm <- microbiome_data %>%
+      phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+      otu_table() %>% 
+      t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
+      as.data.frame %>%
+      as.matrix %>% 
+      DGEList(remove.zeros = TRUE) %>%
+      edgeR::calcNormFactors(method = 'TMMwsp')
+    plota <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    
+  }else{ 
+    otu_tmm <- microbiome_data %>%
+      phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+      otu_table() %>% 
+      as.data.frame %>%
+      as.matrix %>% 
+      DGEList(remove.zeros = TRUE) %>%
+      edgeR::calcNormFactors(method = 'TMMwsp')
+    if(i == 2){
+      plotb <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2)) +
+        scale_x_reverse() #+
+        #scale_y_reverse()
+    }else if(i == 3){
+      plotc <- plot_agg_pcoa(cpm(otu_tmm, log = TRUE, prior.count = 2))
+    }
+  }
+}
+plota + plotb + plotc
+
+
+
+#### NMDS ####
+
+mb_data <- microbiome_data %>%
+  phyloseq_transform_css %>% #normalizing by column and then log transform
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>% 
+  otu_table %>%
+  t
+
+otu_nmds <- metaMDS(mb_data, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
+
+nmds_plot_exp <- scores(otu_nmds)$sites %>%
+  as_tibble(rownames = 'sample_id') %>%
+  left_join(metadata, by = 'sample_id') %>%
+  
+  ggplot(aes(x = NMDS1, y = NMDS2, colour = exposure, shape = time)) +
+  geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
+             colour = 'gray60', size = 0.1, shape = 'circle') +
+  
+  geom_point() +
+  theme_bw() +
+  labs(title = "Exposure") +
+  labs(color = "Exposure")
+
+nmds_plot_fds <- scores(otu_nmds)$sites %>%
+  as_tibble(rownames = 'sample_id') %>%
+  left_join(metadata, by = 'sample_id') %>%
+  
+  ggplot(aes(x = NMDS1, y = NMDS2, colour = final_disease_state, shape = time)) +
+  geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
+             colour = 'gray60', size = 0.1, shape = 'circle') +
+  
+  geom_point() +
+  theme_bw() +
+  labs(title = "Final Disease State") +
+  labs(color = "FDS")
+
+nmds_plot_exp | nmds_plot_fds
 
 #### ####
+
