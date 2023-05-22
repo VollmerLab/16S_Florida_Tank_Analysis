@@ -3,20 +3,19 @@
 ### Filters
 - minimum 1,000 reads  
 - 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
-- each ASV must be present in at least 10% of individuals
 - Analyzing data for Timepoints 3 and 7
 - Must be present in the Diseased Homogenate, T3 and T7 samples
 
 ### Remaining ASVs:
-##### Sections of interest are 220 and 85 for a total of 305 ASVs
+##### Sections of interest are 278 and 104 for a total of 305 ASVs
 ![plot](./Figures/Venn.png)
 
 
-##### 305 ASVs gets reduced to 249 ASVs because 56 are significant for nothing
+##### 382 ASVs gets reduced to 304 ASVs because 78 are significant for nothing
 
 ![plot](./Figures/comp_upset_full_subset.png)  
 
-#### If you remove ASVs that are only significant for time, only 116 remain:
+#### If you remove ASVs that are only significant for time, only 172 remain:
 ##### legend is describing diseased relative to healthy ("up" means it's significantly higher in disease, etc...)
 
 ![plot](./Figures/comp_upset_ls.png)
