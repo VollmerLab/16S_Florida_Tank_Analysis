@@ -1,9 +1,9 @@
 #Code that streamlines the process from Script #5: Disease-Associated Bacteria
 
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+
 #### TODO LIST ####
 #rerun pcoa and nmds
-#resolve double filter
 #global patterns package
 #lm for trees
 #compare my model and jason's
@@ -130,7 +130,7 @@ if(aggregation_level != 'none'){
 
 #otu_tmm
 otu_tmm <- microbiome_data %>%
-  #phyloseq_filter_prevalence(prev.trh = 0.1) %>%
+  phyloseq_filter_prevalence(prev.trh = 0.1) %>%
   otu_table() %>% 
   t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
@@ -152,7 +152,7 @@ model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
 
 #write_csv((model_data %>% inner_join(target_upset_data)), "../intermediate_files/pre_model_data.csv")
 
-#target microbiome data - zeroes considered and each ASV must be in 10+% of individuals
+#target microbiome data - zeroes considered
 target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
   as_tibble(rownames = "sample_id") %>%
@@ -160,21 +160,16 @@ target_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   pivot_longer(cols = -any_of(colnames(metadata)), 
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state), factor)) %>%
-  #filter(value > 7.04) %>%
-  #.$sample_id %>% unique() %>% length
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
-  #.$asv_names %>% unique() %>% length
   mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
-  group_by(asv_names) %>%
-  filter(n_distinct(sample_id[value > 7.04]) > 19) %>%
-  ungroup() %>%
-  .$asv_names %>% unique() %>% length
+  group_by(asv_names)
+  #filter(n_distinct(sample_id[value > 7.04]) > 19)
 
 #likely suspects upset prep
 target_upset_data <- target_data %>%
   mutate(time = if_else(time == 'T0', exposure, time)) %>%
   group_by(time, asv_names) %>%
-  summarise(n = sum(value > 7.04)) %>%
+  summarise(n = sum(value > 7.12)) %>%
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
   mutate(across(-asv_names, ~. > 0)) %>%
   left_join(taxonomy_tibble, by = "asv_names") %>%
@@ -257,7 +252,7 @@ very_likely_suspects <- ls_model_w_terms %>% filter(adj_dvh > 0) %>% .$asv_names
 #### Prep for Comp Upsets ####
 
 #process data for performing complex upset - LIKELY SUSPECTS
-subset_asv_comp_upset <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
+subset_asv_comp_upset <- ls_model %>% #reduces from 382 to 304 bc 78 are significant for nothing, 132 of these are ~time
   ungroup() %>%
   rowwise(asv_names) %>%
   reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
@@ -303,13 +298,13 @@ upset(subset_asv_comp_upset,
         'Intersection size'=intersection_size(
           mapping=aes(fill=up_down)
         ) + scale_fill_manual(values=c(
-          'up'='#E41A1C', 
+          'up'='#E41A1C',
           'down'='#4DAF4A', 'non-significant'='#FF7F00'
         ))
       ),
-      queries=list(upset_query(set='p_time:final_disease_state', color="#8400CA", fill = "#4C0075"), 
+      queries=list(upset_query(set='p_time:final_disease_state', color="#8400CA", fill = "#4C0075"),
                    upset_query(set='p_final_disease_state', color="#8400CA", fill = "#4C0075")),
-               
+
       annotations = list(
           # 2nd method - using ggplot
           'Order'=(
@@ -321,7 +316,7 @@ upset(subset_asv_comp_upset,
             theme(legend.position = 'top')
         ),
         name='asv_names', width_ratio=0.1, min_size = 0) +
-  ggtitle("Likely Suspects")
+  ggtitle("Full Subset")
 
 
 upset(subset_asv_comp_upset %>% filter(up_down == "up"),
@@ -363,7 +358,7 @@ write_rds(list(likely_families, very_likely_families), "../intermediate_files/fa
   
 #### Tables RE: Differences in FDS or Exposure####
 
-table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
+table_prep1 <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for nothing, 133 of these are ~time
   ungroup() %>%
   rowwise(asv_names) %>%
   reframe(as_tibble(model$anova_table, rownames = 'param')) %>%
@@ -371,8 +366,8 @@ table_prep <- ls_model %>% #reduces from 305 to 249 bc 56 are significant for no
   group_by(param) %>%
   mutate(p = p.adjust(p, 'fdr')) %>%
   ungroup %>%
-  mutate(p = p < 0.05) %>%
-  #mutate(p = ifelse(p < 0.05, 1, 0)) %>%
+  #mutate(p = p < 0.05) %>%
+  mutate(p = ifelse(p < 0.05, 1, 0)) %>%
   left_join(comp_dvh %>% select(-c(p.value, data, model)), by = join_by(asv_names)) %>%
   select(asv_names, param, p, d_v_h, up_down) %>%
   pivot_wider(names_from = 'param', values_from = p, names_prefix = 'p_', values_fill = FALSE) %>%
@@ -431,17 +426,6 @@ formattable(family_table, align = c("l", "c", "c", "c", "c", "c", "c", "c", "c",
 )) %>%
   export_formattable("../Figures/fds_exp_diffs.png")
 
-#
-
- 
-
-ls_model_full %>% 
-  select(-adj_dvh) %>%
-  full_join(exposure_dvh_summary) %>% 
-  left_join(taxonomy_tibble)
-  
-subset_asv_comp_upset %>% length(p_time)
-count(subset_asv_comp_upset, p_time)
 
 
 table_prep1 %>% 
@@ -483,7 +467,7 @@ target_data %>%
   mutate(time = if_else(time == 'T0', exposure, time)) %>%
   # count(time, asv_names) %>%
   group_by(time, asv_names) %>%
-  summarise(n = sum(value > 7.04)) %>%
+  summarise(n = sum(value > 7.12)) %>%
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
   mutate(across(-asv_names, ~. > 0)) %>%
   ggvenn(c('D', 'H', 'T3', 'T7'))
@@ -494,7 +478,7 @@ target_data %>%
 #LS FDS only
 ls_plot_1 <- ls_model_w_terms %>%
   filter(terms == "final_disease_state") %>%
-  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~final_disease_state"), 0.05))) %>%
@@ -520,7 +504,7 @@ ls_plot_1 <- ls_model_w_terms %>%
 #VLS interaction only
 ls_plot_2 <- ls_model_w_terms %>%
   filter(terms == "time:final_disease_state") %>%
-  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -547,7 +531,7 @@ ls_plot_2 <- ls_model_w_terms %>%
 #Both FDS and FDS:time
 ls_plot_3 <- ls_model_w_terms %>%
   filter(terms == "both", param == "time:final_disease_state") %>%
-  filter(!asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
+  filter(asv_names %in% very_likely_suspects) %>% #asv_names for VLS or !asv_names for LS
   ungroup() %>%
   rowwise() %>%
   mutate(test = list(make_emmean_model(model, as.formula("~time:final_disease_state"), 0.05))) %>%
@@ -576,7 +560,7 @@ ls_plot_1 / ls_plot_2 / ls_plot_3 + plot_layout(heights = c(1, 20, 15)) +
   theme(text = element_text('sans'), plot.title = element_text(size = 16))
 
 #vls
-ls_plot_1 / ls_plot_2 / ls_plot_3 + plot_layout(heights = c(4, 3, 14)) + 
+ls_plot_1 / ls_plot_3 + plot_layout(heights = c(21, 25)) + 
   plot_annotation(title = "Very Likely Suspects") & theme_linedraw() & 
   theme(text = element_text('sans'), plot.title = element_text(size = 16))
 

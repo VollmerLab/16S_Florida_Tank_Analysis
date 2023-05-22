@@ -162,12 +162,11 @@ the_samples %>%
   pivot_wider(names_from = exposure, values_from = abundance)
 
 #4 way venn diagram with ~10% prevalence filter
-the_samples %>%
+venn_way <- the_samples %>%
   # filter(n_reads > 10000) %>%
   filter(tank != 'homogenate_fragment') %>% 
   filter(exposure != 'Field') %>%
   #.$Sample %>% unique() %>% length
-  #.$OTU %>% unique() %>% length
   group_by(OTU) %>%
   filter(n_distinct(Sample) > 19) %>%
   ungroup %>%
