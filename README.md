@@ -65,7 +65,10 @@ removed any families where the only significant term in the whole family is time
 
 ### PCoA and NMDS
 
-![plot](./Figures/PCoA_multiple_aggregations.png)
+![plot](./Figures/pcoa_fds.png)
+
+
+![plot](./Figures/pcoa_exp.png)
 
 ![plot](./Figures/Mountford_NMDS.png)
 
