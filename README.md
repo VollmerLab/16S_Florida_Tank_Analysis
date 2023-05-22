@@ -55,8 +55,6 @@ removed any families where the only significant term in the whole family is time
 - positive logfold change means more disease
 - LS vs VLS almost perfectly separates by whether it's more abundant at T3 (LS) or T7 (VLS)
 
-![plot](./Figures/logfold_ls.png)
-
 ![plot](./Figures/logfold_VLS.png)
 
 ### Potential Link between Rickettsiales and Disease
@@ -70,5 +68,5 @@ removed any families where the only significant term in the whole family is time
 
 ![plot](./Figures/pcoa_exp.png)
 
-![plot](./Figures/Mountford_NMDS.png)
+![plot](./Figures/dual_nmds_plots.png)
 
