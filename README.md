@@ -21,6 +21,7 @@
 ![plot](./Figures/comp_upset_ls.png)
 
 ##### only ASVs that are significantly more abundant in D than H:
+###### updates to preprocessing data have increased this subset by 35
 ![plot](./Figures/comp_upset_vls.png)
 
 #### Significant ASV Counts by Family
