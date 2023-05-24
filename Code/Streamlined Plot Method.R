@@ -1,6 +1,7 @@
 #Streamlined version of Jason's Plot-Based Significance Model
 
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+rerun_model <- TRUE
 
 #### Packages ####
 library(lme4)
@@ -67,30 +68,47 @@ microbe_data <- read_csv('../intermediate_files/pre_model_data.csv',
 control_options <- variancePartition:::vpcontrol
 # control_options$optimizer <- 'bobyqa'
 
-iter1 <- microbe_data %>%
-  # group_by(genotype) %>%
-  # mutate(final_disease_state = ifelse(final_disease_state == "Field", final_disease_state[time == "T7"], 
-  #                                     final_disease_state)) %>%
-  # ungroup() %>% 
-  # filter(!genotype %in% c("M6", "U42")) %>%
+microbe_data %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
-  nest(data = -c(asv_names)) %>%
-  # dplyr::slice(183) %>%
-  # dplyr::slice(180:195) %>%
-  filter(!asv_names %in% c('ASV_469')) %>% #has fixed 0s at both T3 & T7 in healthy
-  rowwise %>%
-  #partition(cluster) %>%
-  mutate(healthy_regression = list(lmer(value ~ time + (0 + dummy(time, 'T0') | fragment_id),
-                                        data = filter(data, exposure != 'D'),
-                                        control = control_options)),
-         disease_regression = list(lmer(value ~ time + (0 + dummy(time, 'T0') | fragment_id),
-                                        data = filter(data, exposure != 'H'),
-                                        control = control_options))) %>%
-  mutate(coef_comp = list(compare_coefs(healthy_regression, disease_regression))) %>%
-  #collect %>%
-  ungroup 
+  group_by(asv_names, exposure) %>%
+  mutate(total = n(), .after = time) %>%
+  filter(value < 7.13) %>%
+  reframe(zer = n(), total = total) %>%
+  mutate(prop = zer/total) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(asv_names) %>%
+  filter(prop > 0.90, exposure != "Field") %>%
+    pull(asv_names) -> many_zeros
 
-write_rds(iter1, "../intermediate_files/plot_model_iter1.rds")
+if(file.exists("../intermediate_files/plot_model_iter1.rds") & !rerun_model){
+  iter1 <- read_rds("../intermediate_files/plot_model_iter1.rds")
+} else {
+  iter1 <- microbe_data %>%
+    # group_by(asv_names) %>%
+    # filter(n_distinct(sample_id[value > 7.13]) > 24) %>%
+    mutate(time = factor(time, ordered = TRUE)) %>%
+    
+    #add tiny random number to deal with constant values in a sample
+    #error was in 'ASV_1634': emmeans -> emm_basis -> pbkrtest::vcovAdj.lmerMod -> 
+    #pbkrtest:::vcovAdj_internal -> forceSymmetric(2 * solve(IE2))
+    
+    mutate(value = value + rnorm(nrow(.), 0.0001, 0.001)) %>%
+    nest(data = -c(asv_names)) %>%
+    rowwise %>%
+    #partition(cluster) %>%
+    mutate(healthy_regression = list(lmer(value ~ time + (1 | genotype) + (0 + dummy(time, 'T0') | tank),
+                                          data = filter(data, exposure != 'D'),
+                                          control = control_options)),
+           disease_regression = list(lmer(value ~ time + (1 | genotype) + (0 + dummy(time, 'T0') | tank),
+                                          data = filter(data, exposure != 'H'),
+                                          control = control_options))) %>%
+    mutate(coef_comp = list(compare_coefs(healthy_regression, disease_regression))) %>%
+    #collect %>%
+    ungroup
+  write_rds(iter1, "../intermediate_files/plot_model_iter1.rds")
+}
+
 
 iter1_pvals <- iter1 %>%
   select(asv_names, coef_comp) %>%
@@ -145,7 +163,7 @@ iter1_plots$plot[[3]]
 
 iter2 <- iter1_pvals %>%
   group_by(asv_names) %>%
-  #filter(any(fdr < 0.05)) %>%
+  filter(any(fdr < 0.05)) %>%
   select(asv_names) %>%
   ungroup %>%
   distinct %>%
