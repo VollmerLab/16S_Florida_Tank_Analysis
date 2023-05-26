@@ -37,6 +37,8 @@ library(formattable)
 library(htmltools)
 library(webshot)
 library(microshades)
+library(cowplot)
+library(microViz)
 library(tidyverse)
 
 select <- dplyr::select
@@ -1186,113 +1188,50 @@ nmds_plot_fds <- scores(otu_nmds)$sites %>%
 
 nmds_plot_exp | nmds_plot_fds
 
-#### Fun Colors ####
-library(speedyseq)
-
-#FIXME
-"red"
-
-color_test <- prep_mdf(microbiome_data) 
-
-tax_designations <- colnames(taxonomy_tibble %>% select(-asv_names))
-
-color_test1 <- color_test %>% select(-retain_sample) %>% 
-  #filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "preTank")) %>%
-  filter(!is.na(final_disease_state)) %>%
-  group_by(time, exposure, 
-               final_disease_state, Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
-  summarize(Abundance = mean(Abundance)) %>% mutate(Sample = paste(time, exposure, final_disease_state, 
-                                                                   sep = "_")) %>% as.data.frame()
-
-#mdf_fam <- prep_mdf(microbiome_data, subgroup_level = "Family")
-
-color_objs_GP <- create_color_dfs(color_test1, selected_groups = c('Proteobacteria', 'Actinobacteriota', 'Bacteroidota', 'Firmicutes'), cvd = TRUE)
-
-mdf_GP <- color_objs_GP$mdf
-cdf_GP <- color_objs_GP$cdf
-
-plot <- plot_microshades(mdf_GP, cdf_GP) + facet_wrap(~time, scales = "free_x")
-plot
+#### Microshades Microbe Abundances ####
 
 
+mdf_prep_test1 <- microbiome_data %>%
+           tax_glom("Genus") %>%
+           psmelt() 
 
-new_groups <- extend_group(mdf_GP, cdf_GP, "Phylum", "Genus", "Proteobacteria", existing_palette = "micro_cvd_orange", new_palette = "micro_orange", n_add = 5)
-GP_legend_new <-custom_legend(new_groups$mdf, new_groups$cdf)
-
-plot_diff <- plot_microshades(new_groups$mdf, new_groups$cdf) + facet_wrap(~time, scales = "free_x")
-plot_diff
-
-
-
-color_objs_GP_test <- create_color_dfs(color_test1, group_level = "Order", 
-            selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
-                                "Pseudomonadales", "Rhodobacterales"), cvd = TRUE)
-
-mdf_GP_test <- color_objs_GP_test$mdf
-cdf_GP_test<- color_objs_GP_test$cdf
-plot_test <- plot_microshades(mdf_GP_test, cdf_GP_test, group_label = "Order-Genus") + facet_wrap(~time, scales = "free_x")
-plot_test
-
-library(cowplot)
-GP_legend_new <-custom_legend(mdf_GP_test, cdf_GP_test, group_level = "Order")
-
-plot_diff <- plot_microshades(mdf_GP_test, cdf_GP_test) + 
-  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
-  theme(legend.position = "none")  +
-  #theme(axis.text.x = element_text(size= 6)) +
-  facet_wrap(~time, scales = "free_x", nrow = 1) +
-  #theme(axis.text.x = element_text(size= 6)) + 
-  theme(plot.margin = margin(6,20,6,6))
-
-plot_grid(plot_diff, GP_legend_new,  rel_widths = c(1, .25))
-
-
-### our data
-
-all_model_data <-  cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
-  t %>%
-  as_tibble(rownames = "sample_id") %>%
-  full_join(metadata, by = "sample_id") %>%
-  pivot_longer(cols = -any_of(colnames(metadata)), 
-               names_to = "asv_names", values_to = "value") %>%
-  filter(tank != "homogenate_fragment") %>%
-  mutate(final_disease_state = ifelse(exposure == "Field", "Field", final_disease_state)) %>%
-  mutate(across(c(exposure, final_disease_state), factor)) %>%
-  mutate(fragment_id = str_c(exposure, tank, genotype, final_disease_state)) %>%
-  mutate(fragment_id = if_else(time == 'T0', 'homogenate', fragment_id)) %>%
-  left_join(taxonomy_tibble) %>%
-  select(-disease_state) %>%
-  group_by(time, exposure, final_disease_state) %>%
-  mutate(tot = sum(value)) %>%
+mdf_processed_data <- mdf_prep_test1 %>%
+  filter(Abundance > 0) %>%
+  mutate(category = paste(time, exposure, final_disease_state, 
+                          sep = "_")) %>%
+  mutate(category = ifelse(str_detect(category, "Field"), "T0", category)) %>%
+  mutate(time = ifelse(category %in% c("T0_D_D", "T0_H_H"), "Doses", time)) %>%
+  mutate(category = ifelse(category == "T0_D_D", "Diseased", ifelse(category == "T0_H_H", "Healthy", category))) %>%
+  group_by(category) %>%
+  mutate(total = sum(Abundance)) %>%
   ungroup() %>%
-  group_by(time, exposure, final_disease_state, asv_names, Kingdom, Phylum, Class, Order, Family, Genus, Species, tot) %>%
-  rowwise() %>%
-  reframe(val = sum(value), Abundance = sum(value)/tot) %>%
+  select(-c(retain_sample)) %>%
+  group_by(category, Genus) %>%
+  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
   distinct() %>%
-  mutate(Sample = case_when(exposure == "Field" ~ "T0",
-                            time == "T0" & exposure != "Field" & final_disease_state == "H" ~ "Healthy Dose",
-                            time == "T0" & exposure != "Field" & final_disease_state == "D" ~ "Diseased Dose",
-                            time %in% c("T3", "T7") ~ paste(time, exposure, final_disease_state, sep = "_"))) %>%
+  rename(Sample = category, Abundance = rel_abun) %>%
   as.data.frame()
 
-color_objs_GP_test <- create_color_dfs(all_model_data, group_level = "Order", 
+
+color_objs_microbes <- create_color_dfs(mdf_processed_data, group_level = "Order", 
                                        selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
-                                                           "Pseudomonadales", "Rhodobacterales"), cvd = TRUE)
-mdf_GP_test <- color_objs_GP_test$mdf
-cdf_GP_test<- color_objs_GP_test$cdf
+                                                           "Pseudomonadales",  "Rhodobacterales"), top_n_subgroups = 4,  cvd = TRUE)
+mdf_microbes <- color_objs_microbes$mdf
+cdf_microbes <- color_objs_microbes$cdf
 
-GP_legend_new <-custom_legend(mdf_GP_test, cdf_GP_test, group_level = "Order")
+legend_microbes <-custom_legend(mdf_microbes, cdf_microbes, group_level = "Order")
 
-plot_diff <- plot_microshades(mdf_GP_test, cdf_GP_test) + 
+plot_microbes_prelim <- plot_microshades(mdf_microbes, cdf_microbes) + 
   scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
-  theme(legend.position = "none")  +
-  #theme(axis.text.x = element_text(size= 6)) +
-  facet_wrap(~time, scales = "free_x", nrow = 1) +
-  #theme(axis.text.x = element_text(size= 6)) + 
-  theme(plot.margin = margin(6,20,6,6))
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6))
+  
+plot_grid(plot_microbes_prelim, legend_microbes,  rel_widths = c(1, .25))
 
-plot_grid(plot_diff, GP_legend_new,  rel_widths = c(1, .25))
 
-#### ####
 
-color_test %>% group_by(Order) %>% summarize(tot = sum(Abundance)) %>% arrange(desc(tot))
+
+
+
+
