@@ -6,6 +6,10 @@
 
 ![plot](./Figures/microshades_abundances.png)
 
+- normalized data with 10% prevalence filter
+
+![plot](./Figures/microshades_normalized.png)
+
 ### Filters
 - minimum 1,000 reads  
 - 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
