@@ -1,5 +1,11 @@
 # 16S Florida Tank Analysis
 
+### Microbe Abundances
+- only filter is abundance > 0, non-normalized data, melted phyloseq
+- category titles are "timepoint_exposure_final disease state
+
+![plot](./Figures/microshades_abundances.png)
+
 ### Filters
 - minimum 1,000 reads  
 - 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
