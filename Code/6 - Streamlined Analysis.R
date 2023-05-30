@@ -1235,3 +1235,50 @@ plot_grid(plot_microbes_prelim, legend_microbes,  rel_widths = c(1, .25))
 
 
 
+#####
+
+all_model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
+  t %>%
+  as_tibble(rownames = "sample_id") %>%
+  full_join(metadata, by = "sample_id") %>%
+  pivot_longer(cols = -any_of(colnames(metadata)), 
+               names_to = "asv_names", values_to = "value") %>%
+  filter(tank != "homogenate_fragment") %>%
+  filter(value > 7.13) %>%
+  mutate(category = paste(time, exposure, final_disease_state, 
+                          sep = "_")) %>%
+  mutate(category = ifelse(str_detect(category, "Field"), "T0", category)) %>%
+  mutate(time = ifelse(category %in% c("T0_D_D", "T0_H_H"), "Doses", time)) %>%
+  mutate(category = ifelse(category == "T0_D_D", "Diseased", ifelse(category == "T0_H_H", "Healthy", category))) %>%
+  group_by(category) %>%
+  left_join(taxonomy_tibble, by = join_by(asv_names)) %>%
+  filter(!is.na(Genus)) %>%
+  rename(Abundance = value) %>%
+  mutate(total = sum(Abundance)) %>%
+  ungroup() %>%
+  group_by(category, Genus) %>%
+  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  distinct() %>%
+  rename(Sample = category, Abundance = rel_abun) %>%
+  #mutate(Genus = ifelse(is.na(Genus), "NA", Genus)) %>%
+  as.data.frame()
+
+color_objs_test <- create_color_dfs(all_model_data, group_level = "Order", 
+                      selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
+                      "Pseudomonadales",  "Rhodobacterales"), top_n_subgroups = 4,  cvd = TRUE)
+mdf_test <- color_objs_test$mdf
+cdf_test <- color_objs_test$cdf
+
+legend_microbestest <-custom_legend(mdf_test, cdf_test, group_level = "Order")
+
+plot_microbestest<- plot_microshades(mdf_test, cdf_test) + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6))
+
+plot_grid(plot_microbestest, legend_microbestest,  rel_widths = c(1, .25))
+
+
+new_groups <- extend_group(mdf_GP, cdf_GP, "Phylum", "Genus", "Proteobacteria", existing_palette = "micro_cvd_orange", new_palette = "micro_orange", n_add = 5)
+
