@@ -6,7 +6,7 @@
 
 ![plot](./Figures/microshades_abundances.png)
 
-- normalized data with 10% prevalence filter
+- normalized data with 10% prevalence filter, removed normalized zero values (~7.11)
 
 ![plot](./Figures/microshades_normalized.png)
 
