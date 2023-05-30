@@ -4,11 +4,9 @@
 - only filter is abundance > 0, non-normalized data, melted phyloseq
 - category titles are "timepoint_exposure_final disease state
 
-![plot](./Figures/microshades_abundances.png)
+![plot](./Figures/microshades_ordergenus.png)
 
-- normalized data with 10% prevalence filter, removed normalized zero values (~7.11)
-
-![plot](./Figures/microshades_normalized.png)
+![plot](./Figures/microshades_classfamily.png)
 
 ### Filters
 - minimum 1,000 reads  
