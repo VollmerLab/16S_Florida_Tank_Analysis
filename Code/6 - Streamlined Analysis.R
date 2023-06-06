@@ -249,6 +249,12 @@ if(aggregation_level != 'none'){
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
 }
 
+#### Microshades Microbe Abundance ####
+
+
+#### Make Venn showing ASVs to keep ####
+
+
 #otu_tmm
 otu_tmm <- microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.1) %>%
