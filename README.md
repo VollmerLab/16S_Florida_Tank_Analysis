@@ -2,6 +2,7 @@
 
 ### Microbe Abundances
 - only filter is abundance > 0, non-normalized data, melted phyloseq
+- **removed** samples that were healthy exposed and contracted WBD
 - category titles are "timepoint_exposure_final disease state
 
 ![plot](./Figures/microshades_ordergenus.png)
