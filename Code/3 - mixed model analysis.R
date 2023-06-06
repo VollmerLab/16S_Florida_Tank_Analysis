@@ -430,6 +430,61 @@ tmp %>%
   wrap_plots() +
   plot_layout(guides = 'collect')
 
+
+filter(significant_models, 
+       `fdr_DS(T7-T3)` < 0.05,
+       `fdr_T7(DSvHR.DR.HS)` < 0.05,
+       `fdr_T7(DSvDR)` < 0.05,
+       # `fdr_DS(T7-T0)` < 0.05
+       ) %>%
+  filter(#`estimate_DS(T7-T3)` > 0,
+         #`estimate_DS(T7-T0)` > 0,
+         `estimate_T7(DSvDR)` < 0) %>%
+  mutate(across(Kingdom:Species, str_replace_na)) %>%
+  rowwise %>%
+  mutate(plot = list(emmeans(model, ~treatment) %>%
+                       broom::tidy(conf.int = TRUE) %>%
+                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
+                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
+                                  colour = exposure,
+                                  shape = susceptability)) +
+                       geom_pointrange(position = position_dodge(0.5)) +
+                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
+  pull(plot) %>%
+  wrap_plots() +
+  plot_layout(guides = 'collect')
+
+T3(DS.DRvHS.HR)
+T7(DS.DRvHS.HR)
+filter(significant_models, 
+       # `fdr_DS(T7-T3)` < 0.05,
+       `fdr_T3(DSvHR.DR.HS)` < 0.05,
+       # `fdr_T3(DSvDR)` < 0.05,
+       # `fdr_DS(T7-T0)` < 0.05,
+       # `fdr_DS(T3-T0)` < 0.05,
+       `fdr_T7(DSvHR.DR.HS)` < 0.05,
+       `fdr_T7(DSvDR)` < 0.05,
+) %>%
+  filter(#`estimate_DS(T7-T3)` > 0,
+    #`estimate_DS(T7-T0)` > 0,
+    `estimate_T7(DSvDR)` > 0) %>%
+  mutate(across(Kingdom:Species, str_replace_na)) %>%
+  rowwise %>%
+  mutate(plot = list(emmeans(model, ~treatment) %>%
+                       broom::tidy(conf.int = TRUE) %>%
+                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
+                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
+                                  colour = exposure,
+                                  shape = susceptability)) +
+                       geom_pointrange(position = position_dodge(0.5)) +
+                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
+  pull(plot) %>%
+  wrap_plots() +
+  plot_layout(guides = 'collect')
+
+
+
+
 tmp <- significant_models %>%
   select(asv_id, starts_with('fdr')) %>% 
   select(-contains(c('treatment', 'tank', 'genotype'))) %>%
