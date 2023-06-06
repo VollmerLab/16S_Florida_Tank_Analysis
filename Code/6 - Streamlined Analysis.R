@@ -1200,8 +1200,10 @@ mdf_processed_data <- mdf_prep_test1 %>%
   mutate(category = paste(time, exposure, final_disease_state, 
                           sep = "_")) %>%
   mutate(category = ifelse(str_detect(category, "Field"), "T0", category)) %>%
+  filter(!category %in% c("T3_H_D", "T7_H_D")) %>%
   mutate(time = ifelse(category %in% c("T0_D_D", "T0_H_H"), "Doses", time)) %>%
   mutate(category = ifelse(category == "T0_D_D", "Diseased", ifelse(category == "T0_H_H", "Healthy", category))) %>%
+  mutate(category = ifelse(time == "T3", paste(time, exposure, sep = "_"), category)) %>%
   group_by(category) %>%
   mutate(total = sum(Abundance)) %>%
   ungroup() %>%
@@ -1210,32 +1212,50 @@ mdf_processed_data <- mdf_prep_test1 %>%
   reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
   distinct() %>%
   rename(Sample = category, Abundance = rel_abun) %>%
+  mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0", "T3_H", "T3_D", "T7_H_H", "T7_D_H", "T7_D_D"))) %>%
   as.data.frame()
 
+## ORDER GENUS
 
-color_objs_microbes <- create_color_dfs(mdf_processed_data, group_level = "Order", 
+color_objs_ordergenus <- create_color_dfs(mdf_processed_data, group_level = "Order", 
                                        selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
-                                                           "Pseudomonadales",  "Rhodobacterales"), top_n_subgroups = 4,  cvd = TRUE)
-mdf_microbes <- color_objs_microbes$mdf
-cdf_microbes <- color_objs_microbes$cdf
+                                                           "Pseudomonadales",  "Rhodobacterales"), cvd = TRUE)
+mdf_ordergenus <- color_objs_ordergenus$mdf
+cdf_ordergenus <- color_objs_ordergenus$cdf
 
-legend_microbes <-custom_legend(mdf_microbes, cdf_microbes, group_level = "Order")
+legend_ordergenus <-custom_legend(mdf_ordergenus, cdf_ordergenus, group_level = "Order")
 
-plot_microbes_prelim <- plot_microshades(mdf_microbes, cdf_microbes) + 
+plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf_ordergenus) + 
   scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
   facet_grid(cols = vars(time), scales = "free", space = "free") +
   theme_bw() +
-  theme(legend.position = "none", plot.margin = margin(6,20,6,6))
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
+  labs(title = "Order Genus")
   
-plot_grid(plot_microbes_prelim, legend_microbes,  rel_widths = c(1, .25))
+plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
+
+## CLASS FAMILY
+
+color_objs_classfamily <- create_color_dfs(mdf_processed_data, group_level = "Class", 
+                                          selected_groups = c("Alphaproteobacteria", "Gammaproteobacteria", "Bacteroidia", 
+                                                              "Verrucomicrobiae",  "Campylobacteria"), cvd = TRUE, subgroup_level = "Family")
+mdf_classfamily <- color_objs_classfamily$mdf
+cdf_classfamily <- color_objs_classfamily$cdf
+
+legend_classfamily <-custom_legend(mdf_classfamily, cdf_classfamily, group_level = "Class", subgroup_level = "Family")
+
+plot_classfamily_prelim <- plot_microshades(mdf_classfamily, cdf_classfamily) + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
+  labs(title = "Class Family")
+
+plot_grid(plot_classfamily_prelim, legend_classfamily,  rel_widths = c(1, .25))
 
 
 
-
-
-
-
-#####
+#### ####
 
 all_model_data <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
   t %>%
