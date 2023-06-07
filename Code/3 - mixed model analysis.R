@@ -1,4 +1,5 @@
-##TODO - change fdr/qvalue correction to only adjust term/post-hoc values if the global model is significant
+##TODO - Set up/evaluate contrasts for relevant/interesting bacterial responses
+#           -want to identify pathogens, opportunists, probiotics
 ##TODO - 
 
 #### Libraries ####
@@ -135,87 +136,7 @@ p_adjust <- function(df, exclude_cols = NA_character_){
     reorder_columns 
 }
 
-find_significant_terms <- function(q_values, params, alpha = 0.05){
-  #Make not ugly AF...figure out how to reference column names as default value
-  params[which(q_values < alpha)] %>%
-    str_remove_all('.*_')
-}
-
-get_plotting_vars <- function(sig_terms){
-  
-}
-
-get_plotting_data <- function(model, sig_terms){
-  sig_terms <- c('exposure', 'susceptability')
-  if(length(sig_terms) == 1){
-    if(sig_terms == 'exposure'){
-      em_form <- ~time_exposure
-      
-      out <- emmeans(model, em_form) %>%
-        broom::tidy(conf.int = TRUE) %>%
-        separate(time_exposure, into = c('time', 'exposure'))
-      
-    } else if(sig_terms == 'susceptability'){
-      em_form <- ~time_exposure * susceptability
-      
-      out <- emmeans(model, em_form) %>%
-        contrast(method = list('T0_R' = c(1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-                               'T0_S' = c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0),
-                               'T3_R' = c(0, 1/2, 1/2, 0, 0, 0, 0, 0, 0, 0),
-                               'T3_S' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, 0, 0),
-                               'T7_R' = c(0, 0, 0, 1/2, 1/2, 0, 0, 0, 0, 0),
-                               'T7_S' = c(0, 0, 0, 0, 0, 0, 0, 0, 1/2, 1/2)),
-                 adjust = 'none') %>%
-        broom::tidy(conf.int = TRUE) %>%
-        select(-term) %>%
-        separate(contrast, into = c('time', 'susceptability'))
-    }
-  } else {
-    em_form <- ~time_exposure * susceptability
-    out <- emmeans(model, em_form) %>%
-      broom::tidy(conf.int = TRUE) %>%
-      separate(time_exposure, into = c('time', 'exposure'))
-  }
-  out
-}
-
-make_plot <- function(plot_data, sig_terms, TITLE, SUBTITLE){
-  sig_terms <- c('exposure', 'susceptability')
-  if(length(sig_terms) == 1){
-    if(sig_terms == 'exposure'){
-      out <- ggplot(plot_data, 
-                    aes(x = time, y = estimate,
-                        ymin = conf.low, ymax = conf.high,
-                        colour = exposure)) +
-        scale_colour_manual(values = c('F' = 'black', 'D' = 'red', 'H' = 'blue'))
-      
-    } else if(sig_terms == 'susceptability'){
-      out <- ggplot(plot_data, 
-                    aes(x = time, y = estimate,
-                        ymin = conf.low, ymax = conf.high,
-                        shape = susceptability))
-    }
-  } else {
-    out <- ggplot(plot_data, 
-                  aes(x = time, y = estimate,
-                      ymin = conf.low, ymax = conf.high,
-                      colour = exposure, shape = susceptability)) +
-      scale_colour_manual(values = c('F' = 'black', 'D' = 'red', 'H' = 'blue'))
-  }
-  out +
-    geom_pointrange(position = position_dodge(0.5)) +
-    labs(x = NULL,
-         y = 'log2_cpm',
-         title = TITLE,
-         subtitle = SUBTITLE) +
-    theme_classic() +
-    theme(axis.text = element_text(colour = 'black', size = 12),
-          axis.title = element_text(colour = 'black', size = 16),
-          panel.background = element_rect(colour = 'black'))
-}
-
-
-cluster_copy(cluster, c('fit_model', 'process_model', 'process_postHoc', 'find_significant_terms'))
+cluster_copy(cluster, c('fit_model', 'process_model', 'process_postHoc'))
 
 #
 #### Data ####
@@ -223,7 +144,8 @@ normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samp
   mutate(time = factor(time, ordered = TRUE)) %>%
   mutate(treatment = str_c(time, exposure, susceptability, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
-         timeC = str_extract(time, '[0-9]+') %>% as.numeric) %>%
+         timeC = str_extract(time, '[0-9]+') %>% as.numeric,
+         across(Kingdom:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer) #%>%
   # filter(asv_number <= 200)
 
@@ -298,9 +220,10 @@ posthoc_categories <- tibble(summarised_effect = c('time', 'resistance', 'exposu
   mutate(contrast_name = names(contrasts)) 
 
 #### Pathogen Pattern based Contrasts ####
-model <- asv_models$model[[1]]
-emmeans(model, ~treatment)
-pathogen_posthoc <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
+# model <- asv_models$model[[1]]
+# emmeans(model, ~treatment)
+posthoc_order <- c('T0.F.R', 'T0.F.S', 'T3.D.R', 'T3.D.S', 'T3.H.R', 'T3.H.S', 'T7.D.R', 'T7.D.S', 'T7.H.R', 'T7.H.S')
+example_posthoc <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
                        'DS(T7-T3)' = c(0, 0, 0, -1, 0, 0, 0, 1, 0, 0),
                        'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
                        'T0(DSvHR.DR.HS)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0),
@@ -309,13 +232,80 @@ pathogen_posthoc <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
                        'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
                        'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
 
+bacterial_growth <- list('(T3-T0)' = c(-1/2, -1/2, 1/4, 1/4, 1/4, 1/4, 0, 0, 0, 0),
+                         '(T7-T3)' = c(0, 0, -1/4, -1/4, -1/4, -1/4, 1/4, 1/4, 1/4, 1/4),
+                         '(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/4, 1/4, 1/4, 1/4),
+                         
+                         'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
+                         'DS(T7-T3)' = c(0, 0, 0, -1, 0, 0, 0, 1, 0, 0),
+                         'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
+                         
+                         'DR(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0, 0, 0, 0),
+                         'DR(T7-T3)' = c(0, 0, -1, 0, 0, 0, 1, 0, 0, 0),
+                         'DR(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1, 0, 0, 0),
+                         
+                         'HS(T3-T0)' = c(0, -1, 0, 0, 0, 1, 0, 0, 0, 0),
+                         'HS(T7-T3)' = c(0, 0, 0, 0, 0, -1, 0, 0, 0, 1),
+                         'HS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 0, 0, 1),
+                         
+                         'HR(T3-T0)' = c(-1, 0, 0, 0, 1, 0, 0, 0, 0, 0),
+                         'HR(T7-T3)' = c(0, 0, 0, 0, -1, 0, 0, 0, 1, 0),
+                         'HR(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 0, 0, 1, 0),
+                         
+                         'H(T3-T0)' = c(-1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0, 0, 0),
+                         'H(T7-T3)' = c(0, 0, 0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2),
+                         'H(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 0, 1/2, 1/2),
+                         
+                         'D(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0),
+                         'D(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0),
+                         'D(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0),
+                         
+                         'R(T3-T0)' = c(-1, 0, 1/2, 0, 1/2, 0, 0, 0, 0, 0),
+                         'R(T7-T3)' = c(0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2, 0),
+                         'R(T7-T0)' = c(-1, 0, 0, 0, -1/2, 0, 1/2, 0, 1/2, 0),
+                         
+                         'S(T3-T0)' = c(0, -1, 0, 1/2, 0, 1/2, 0, 0, 0, 0),
+                         'S(T7-T3)' = c(0, 0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2),
+                         'S(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1/2, 0, 1/2))
+
+early_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
+                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0))
+continuous_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
+                            'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+                            'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
+                            'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
+                      'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+
+early_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0))
+continuous_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0),
+                               'T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2))
+late_opportunist <- list('T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2))
+
+
+probiotic <- list('T0(RvS)' = c(1, -1, 0, 0, 0, 0, 0, 0, 0, 0),
+                  'T3(DRvDS)' = c(0, 0, 1, -1, 0, 0, 0, 0, 0, 0),
+                  'T7(DRvDS)' = c(0, 0, 0, 0, 0, 0, 1, -1, 0, 0))
+
+posthoc_categories <- tibble(microbial_signature = c('growth_comparisons',
+                                                     'early_pathogen', 'continuous_pathogen', 'late_pathogen',
+                                                     'early_opportunist', 'continuous_opportunist', 'late_opportunist',
+                                                     'probiotic'),
+                             contrasts = list(bacterial_growth,
+                                              early_pathogen, continuous_pathogen, late_pathogen,
+                                              early_opportunist, continuous_opportunist, late_opportunist,
+                                              probiotic)) %>%
+  unnest(contrasts) %>%
+  mutate(contrast_name = names(contrasts)) %>%
+  group_by(contrast_name, contrasts) %>%
+  summarise(signatures = list(c(microbial_signature)),
+            .groups = 'drop')
 
 #### Model ASV counts ####
-
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- write_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
-  cluster_copy(cluster, c('pathogen_posthoc'))
+  cluster_copy(cluster, c('posthoc_categories'))
   
   asv_models <- normalized_asv_counts %>%
     nest_by(across(c('asv_id', Kingdom:Species))) %>%
@@ -326,7 +316,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
            posthoc = list(emmeans(model, ~treatment) %>%
-                            contrast(method = pathogen_posthoc, adjust = 'none'))) %>%
+                            contrast(method = posthoc_categories$contrasts, adjust = 'none'))) %>%
     collect() %>%
     select(-re_model, -ends_with('global')) %>%
     ungroup %>% 
@@ -367,7 +357,7 @@ significant_models <- asv_models %>%
   ungroup() %>%
   p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
 
-significant_models %>%
+bacterial_signature_asv <- significant_models %>%
   select(asv_id, starts_with('fdr')) %>% 
   select(-contains(c('treatment', 'tank', 'genotype'))) %>%
   mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
@@ -376,15 +366,26 @@ significant_models %>%
                names_to = c('term'),
                values_to = 'significance') %>%
   mutate(term = str_remove(term, 'fdr_')) %>%
+  
+  #Select ASVs which fit all characteristics of any given bacterial signature
   left_join(posthoc_categories, by = c('term' = 'contrast_name')) %>%
-  mutate(summarised_effect = if_else(is.na(summarised_effect), term, summarised_effect)) %>%
-  group_by(asv_id, summarised_effect) %>%
-  # filter(asv_id == 'ASV_1') %>%
-  summarise(significance = any(significance),
-            .groups = 'drop_last') %>%
-  filter(significance) %>%
-  filter(!summarised_effect %in% c('time')) %>%
-  summarise(terms = list(summarised_effect),
+  filter(signatures != 'growth_comparisons') %>%
+  select(-contrasts) %>%
+  unnest(signatures) %>%
+  # mutate(signatures = if_else(signatures == 'growth_comparisons', term, signatures)) %>%
+  # 
+  # filter(signatures != 'growth_comparisons' | 
+  #          (signatures == 'growth_comparisons' & significance)) %>%
+  
+  group_by(asv_id, signatures) %>%
+  filter(all(significance)) %>%
+  ungroup %>%
+  select(-term) %>%
+  distinct 
+
+bacterial_signature_asv %>%
+  group_by(asv_id) %>%
+  summarise(terms = list(unique(signatures)),
             .groups = 'drop') %>%
   
   ggplot(aes(x = terms)) +
@@ -395,6 +396,33 @@ significant_models %>%
 
 
 #### Plot Individual Groupings ####
+
+the_plots <- bacterial_signature_asv %>%
+  arrange(signatures) %>%
+  group_by(asv_id) %>%
+  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
+  inner_join(significant_models,
+             by = 'asv_id') %>%
+  rowwise %>%
+  mutate(plot = list(emmeans(model, ~treatment) %>%
+                       broom::tidy(conf.int = TRUE) %>%
+                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
+                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
+                                  colour = exposure,
+                                  shape = susceptability)) +
+                       geom_pointrange(position = position_dodge(0.5)) +
+                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
+  group_by(signatures) %>%
+  summarise(plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
+
+the_plots$plots[[1]]
+the_plots$plots[[2]]
+the_plots$plots[[3]]
+the_plots$plots[[4]]
+the_plots$plots[[5]]
+the_plots$plots[[6]]
+
+#### Work Zone ####
 tmp <- filter(significant_models, 
               `fdr_DS(T7-T3)` < 0.05,
               `fdr_T7(DSvHR.DR.HS)` < 0.05,
@@ -404,17 +432,6 @@ tmp <- filter(significant_models,
          `estimate_DS(T7-T0)` > 0,
          `estimate_T7(DSvDR)` > 0) %>%
   mutate(across(Kingdom:Species, str_replace_na)) 
-
-
-tmp <- filter(significant_models, 
-              `fdr_DS(T3-T0)` < 0.05,
-              `fdr_DS(T7-T0)` < 0.05) %>%
-  mutate(across(Kingdom:Species, str_replace_na)) 
-
-the_grid <- ref_grid(tmp$model[[1]], ~treatment)
-the_grid2 <- add_grouping(the_grid, 'plot_conditions', 'treatment',
-                          newlevs = c('T0_F_R', 'T0_F_S', 'T3_D_R', 'T3_D_S', 'T3_H_C', 
-                                      'T3_H_C', 'T7_D_R', 'T7_D_S', 'T7_H_C', 'T7_H_C'))
 
 tmp %>%
   rowwise %>%
