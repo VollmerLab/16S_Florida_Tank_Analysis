@@ -93,7 +93,7 @@ if(file.exists("../intermediate_files/plot_model_iter1.rds") & !rerun_model){
     #error was in 'ASV_1634': emmeans -> emm_basis -> pbkrtest::vcovAdj.lmerMod -> 
     #pbkrtest:::vcovAdj_internal -> forceSymmetric(2 * solve(IE2))
     
-    mutate(value = value + rnorm(nrow(.), 0.0001, 0.001)) %>%
+    mutate(value = value + rnorm(nrow(.), 0.1, 0.01)) %>%
     nest(data = -c(asv_names)) %>%
     rowwise %>%
     #partition(cluster) %>%
