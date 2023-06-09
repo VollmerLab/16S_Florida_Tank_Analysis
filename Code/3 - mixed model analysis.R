@@ -283,9 +283,9 @@ continuous_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2,
 late_opportunist <- list('T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2))
 
 
-probiotic <- list('T0(RvS)' = c(1, -1, 0, 0, 0, 0, 0, 0, 0, 0),
-                  'T3(DRvDS)' = c(0, 0, 1, -1, 0, 0, 0, 0, 0, 0),
-                  'T7(DRvDS)' = c(0, 0, 0, 0, 0, 0, 1, -1, 0, 0))
+probiotic <- list('T0(SvR)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0),
+                  'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+                  'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
 
 posthoc_categories <- tibble(microbial_signature = c('growth_comparisons',
                                                      'early_pathogen', 'continuous_pathogen', 'late_pathogen',
@@ -396,7 +396,6 @@ bacterial_signature_asv %>%
 
 
 #### Plot Individual Groupings ####
-
 the_plots <- bacterial_signature_asv %>%
   arrange(signatures) %>%
   group_by(asv_id) %>%

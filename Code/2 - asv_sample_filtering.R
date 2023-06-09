@@ -197,8 +197,16 @@ full_data <- otu_tmm %>%
                            names_to = 'sample_id',
                            values_to = 'weight'),
             by = c('asv_id', 'sample_id')) %>%
+  left_join(as_tibble(otu_tmm$counts, rownames = 'asv_id') %>%
+              pivot_longer(cols = -asv_id,
+                           names_to = 'sample_id',
+                           values_to = 'read_count'),
+            by = c('asv_id', 'sample_id')) %>%
   
   left_join(metadata, 
+            by = 'sample_id') %>%
+  left_join(as_tibble(otu_tmm$samples, rownames = 'sample_id') %>%
+              select(-group),
             by = 'sample_id') %>%
   left_join(tax_table(microbiome_data) %>%
               as.data.frame() %>%
