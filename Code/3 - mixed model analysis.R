@@ -220,8 +220,7 @@ posthoc_categories <- tibble(summarised_effect = c('time', 'resistance', 'exposu
   mutate(contrast_name = names(contrasts)) 
 
 #### Pathogen Pattern based Contrasts ####
-# model <- asv_models$model[[1]]
-# emmeans(model, ~treatment)
+# emmeans(asv_models$model[[1]], ~treatment)
 posthoc_order <- c('T0.F.R', 'T0.F.S', 'T3.D.R', 'T3.D.S', 'T3.H.R', 'T3.H.S', 'T7.D.R', 'T7.D.S', 'T7.H.R', 'T7.H.S')
 example_posthoc <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
                        'DS(T7-T3)' = c(0, 0, 0, -1, 0, 0, 0, 1, 0, 0),
@@ -393,6 +392,33 @@ bacterial_signature_asv %>%
   scale_x_upset() +
   theme_classic() +
   theme_combmatrix(combmatrix.label.make_space = TRUE)
+
+
+# emily comp upset
+
+testt <- bacterial_signature_asv %>% pivot_wider(names_from = signatures, values_from = significance)
+testt[is.na(testt)] <- FALSE
+
+testt <- testt %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
+
+upset(testt,
+      colnames(select(testt, starts_with('late') | starts_with('early') | starts_with('cont'))), 
+      
+      base_annotations=list(
+        'Intersection size'=intersection_size(
+          mapping=aes(fill=Family)
+        ) 
+      ),
+      queries=list(upset_query(set="early_opportunist", color="deepskyblue", fill = "deepskyblue"),
+                   upset_query(set="late_opportunist", color="deepskyblue", fill = "deepskyblue"),
+                   upset_query(set="continuous_opportunist", color="deepskyblue", fill = "deepskyblue"),
+                   upset_query(set="early_pathogen", color="firebrick1", fill = "firebrick1"),
+                   upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1")),
+      
+      name='asv_names', width_ratio=0.1, min_size = 0) +
+  ggtitle("Disease-Associated Bacteria")
+
+
 
 
 #### Plot Individual Groupings ####
