@@ -2,7 +2,7 @@ Using the same filtered ASV dataset as used in the primary linear mixed model an
 
 In order to perform this analysis I reduced the dataset to include only 15 coral genotypes which had data across all timepoints in the diseased treatment.
 
-First I used an NMDS to visualize differences between bacterial communities.
+First I used an NMDS to visualize differences between bacterial communities. ASVs included are only those significantly associated with NMDS1 and/or NMDS2
 ![image info](Figures/nmds_diseaseExposed_genotype_asv.png)
 
 The data was then split into training (4D, 5H) and testing (3D, 3H) datasets. Data was preprocessed by first downsampling to have the same number of diseased and healthy genotypes, then ASVs containing 0 variance across samples were removed and all ASV counts were log base2 transformed prior to mean/sd normalization.
@@ -16,4 +16,4 @@ The top 12 most important ASVs, based on permutation importance, in predicting f
 Each of the top 12 overall most important ASVs was then plotted through time to see how the ASV count changes across time and all treatments.
 ![image info](Figures/rf_important_asv_time.png)
 
-For each genotype exposed to the disease I created a SHAP plot to see 
+For each genotype exposed to the disease I created a SHAP plot to see

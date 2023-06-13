@@ -10,6 +10,8 @@ library(themis)
 library(finetune)
 library(tidytext)
 library(vip)
+library(kernelshap)
+library(shapviz)
 
 #### Functions ####
 variance_explained <- function(recipe, step_number){
@@ -174,7 +176,7 @@ preprocess_recipie <- recipe(final_disease_state ~ ., data = coral_train) %>%
 
 #### Build Random Forest Model ####
 forest_model <- rand_forest() %>%
-  set_engine('ranger', importance = 'permutation') %>%
+  set_engine('ranger', importance = 'permutation', probability = TRUE) %>%
   set_mode('classification') %>%
   set_args(mtry = tune(),
            trees = tune(),
@@ -222,7 +224,7 @@ bayes_tune <- tune_bayes(disease_wflow,
                          control = control_bayes(verbose = TRUE,
                                                  verbose_iter = TRUE,
                                                  no_improve = 10,
-                                                 uncertain = 5))
+                                                 uncertain = 3))
 autoplot(bayes_tune)
 
 #### Finalize Hyper Parameters ####
@@ -268,29 +270,88 @@ fit_rf %>%
 ggsave('../Figures/random_forest_asvImportance.png', height = 15, width = 7)
 
 #### SHAP Plots ####
-library(DALEXtra)
-#https://ema.drwhy.ai/shapley.html#SHAPRcode
-# https://www.tmwr.org/explain.html#back-to-beans
-# https://christophm.github.io/interpretable-ml-book/shap.html
-accuracy_loss <- function(observed, predicted){
-  mean(observed == predicted)
+shap_vals <- kernelshap(fit_rf, 
+                        X = select(prepared_dataset, -final_disease_state), 
+                        bg_X = prepared_dataset,
+                        pred_fun = predict_function_rf,
+                        verbose = TRUE)
+
+shap_viz <- shapviz(shap_vals)
+
+make_shap_force_plot <- function(shap_viz, max_asvs = 15){
+  force_data <- shap_viz$S %>%
+    as_tibble() %>%
+    select(-genotype) %>%
+    bind_cols(select(prepared_dataset, genotype, final_disease_state), .) %>%
+    pivot_longer(cols = -c(genotype, final_disease_state),
+                 names_to = 'asv_id',
+                 values_to = 'shap_val') %>%
+    group_by(genotype, final_disease_state) %>%
+    arrange(-abs(shap_val), .by_group = TRUE) %>%
+    mutate(a = row_number(-abs(shap_val))) %>%
+    
+    mutate(asv_id = case_when(a > max_asvs ~ "Other", TRUE ~ as.character(asv_id))) %>%
+    group_by(genotype, final_disease_state, asv_id) %>%
+    summarize(shap_val = sum(shap_val),
+              .groups = 'drop') %>%
+    mutate(direction = shap_val > 0) %>%
+    mutate(direction = case_when(final_disease_state == 'D' ~ direction,
+                                 TRUE ~ !direction)) %>%
+    arrange(genotype, final_disease_state, direction, abs(shap_val)) %>%
+    group_by(genotype, final_disease_state) %>%
+    mutate(to = cumsum(shap_val),
+           from = lag(to, default = 0)) %>%
+    mutate(across(c(to, from), ~. + get_baseline(shap_viz))) %>%
+    ungroup %>%
+    mutate(asv_id = str_remove(asv_id, '_asv_id'))
+  
+  
+  force_data %>%
+    ggplot(aes(xmin = from, xmax = to, y = genotype, 
+               # colour = factor(shap_val < 0, levels = c(FALSE, TRUE)),
+               fill = asv_id)) +
+    geom_vline(xintercept = shap_viz$baseline, linetype = 'dashed') +
+    gggenes::geom_gene_arrow(show.legend = TRUE, aes(group = factor(shap_val < 0, levels = c(FALSE, TRUE))),
+                             arrowhead_width = grid::unit(2, "mm"),
+                             position = position_dodge(1)) +
+    
+    # geom_point(data = force_data %>%
+    #                group_by(genotype, final_disease_state) %>%
+    #                summarise(prob_d = sum(shap_val),
+    #                          .groups = 'drop') %>%
+    #                mutate(prob_d = prob_d + get_baseline(shap_viz)),
+    #              inherit.aes = FALSE,
+    #              aes(y = genotype, x = prob_d, colour = final_disease_state)) +
+    geom_text(data = force_data %>%
+                group_by(genotype, final_disease_state) %>%
+                summarise(prob_d = sum(shap_val),
+                          .groups = 'drop') %>%
+                mutate(prob_d = prob_d + get_baseline(shap_viz)),
+              inherit.aes = FALSE, hjust = 'outward',
+              aes(y = genotype, x = prob_d, label = scales::percent(prob_d,
+                                                                    accuracy = 0.1))) +
+    
+    facet_grid(final_disease_state ~ ., scales = 'free_y',
+               labeller = labeller(final_disease_state = c('D' = 'Disease', 'H' = 'Healthy'))) +
+    scale_x_continuous(labels = scales::percent_format(),
+                       limits = c(0, 1)) +
+    labs(y = NULL,
+         x = 'Probability of Disease',
+         fill = 'ASV ID') +
+    guides(fill = guide_legend(title.position = 'top', title.hjust = 0.5, nrow = 5),
+           colour = 'none') +
+    theme_classic() +
+    theme(legend.position = 'bottom',
+          axis.text = element_text(colour = 'black', size = 12),
+          panel.background = element_rect(colour = 'black'),
+          strip.background = element_blank()) 
 }
 
-tmp <- explain_tidymodels(fit_rf, 
-                   data = select(prepared_dataset, -final_disease_state), 
-                   y = prepared_dataset$final_disease_state == 'D',
-                   verbose = TRUE)
-
-loss_default(tmp$model_info$type)
-
-blat <- predict_parts(explainer = tmp, 
-              new_observation = prepared_dataset, 
-              type = "shap",
-              B = 25)
-
-tst <- model_parts(tmp)
-plot(tst, max_vars = 10)
-tst$variable[1]
+shap_plot_disease <- make_shap_force_plot(shap_viz, 15)
+ggsave('../Figures/rf_shap_disease_expose.png',
+       plot = shap_plot_disease, 
+       height = 15,
+       width = 10)
 
 #### Plot Counts of top ASVs ####
 fit_rf %>%
@@ -320,3 +381,44 @@ fit_rf %>%
   theme(panel.background = element_rect(colour = 'black'),
         strip.background = element_blank())
 ggsave('../Figures/rf_important_asv_time.png', height = 15, width = 15)
+
+#### SHAP Plot for Healthy exposed samples ####
+healthy_through_time <- normalized_asv_counts %>%
+  select(sample_id, time, exposure, tank, genotype, final_disease_state) %>%
+  distinct %>%
+  filter(exposure == 'H') %>%
+  select(-exposure) %>%
+  pivot_wider(names_from = time,
+              values_from = sample_id) %>%
+  filter(!is.na(T3), !is.na(T7)) %>%
+  select(-tank) %>%
+  left_join(field_samples, 
+            by = 'genotype') %>%
+  filter(!is.na(T0)) 
+
+healthy_dataset <- healthy_through_time %>%
+  pivot_longer(cols = starts_with('T'),
+               names_to = 'timepoint',
+               values_to = 'sample_id') %>%
+  left_join(taxonomic_counts,
+            by = 'sample_id') %>%
+  select(-sample_id) %>%
+  pivot_wider(names_from = timepoint,
+              values_from = any_of(colnames(taxonomic_counts)),
+              names_glue = "{timepoint}_{.value}") %>%
+  mutate(final_disease_state = factor(final_disease_state))
+
+healthy_shap_vals <- kernelshap(fit_rf, 
+                        X = select(prepared_dataset, -final_disease_state), 
+                        bg_X = healthy_dataset,
+                        pred_fun = predict_function_rf,
+                        verbose = TRUE)
+
+healthy_shap_viz <- shapviz(healthy_shap_vals)
+
+
+shap_plot_healthy <- make_shap_force_plot(healthy_shap_viz, 15)
+ggsave('../Figures/rf_shap_healthy_expose.png',
+       plot = shap_plot_healthy, 
+       height = 15,
+       width = 10)
