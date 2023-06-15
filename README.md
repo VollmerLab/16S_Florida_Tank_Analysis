@@ -9,11 +9,13 @@
 
 ![plot](./Figures/microshades_classfamily.png)
 
-### Filters
-- minimum 1,000 reads  
-- 10% prevalence via phyloseq_filter_prevalence(prev.trh = 0.1)  
-- Analyzing data for Timepoints 3 and 7
-- Must be present in the Diseased Homogenate, T3 and T7 samples
+### Current Model
+
+
+
+
+
+# OLD MODEL FIGURES
 
 ### Remaining ASVs:
 ##### Sections of interest are 278 and 104 for a total of 305 ASVs
