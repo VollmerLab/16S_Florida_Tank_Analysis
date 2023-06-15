@@ -1,9 +1,12 @@
 # 16S Florida Tank Analysis
 
 ### Microbe Abundances
-- only filter is abundance > 0, non-normalized data, melted phyloseq
-- **removed** samples that were healthy exposed and contracted WBD
+- category titles are "timepoint_exposure_susceptibility"  
+
+![plot](./Figures/microshades_og_susceptibility.png)
+
 - category titles are "timepoint_exposure_final disease state
+- - **removed** samples that were healthy exposed and contracted WBD
 
 ![plot](./Figures/microshades_ordergenus.png)
 
@@ -11,7 +14,9 @@
 
 ### Current Model
 
-
+- lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
+- examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
+- make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
 
 
 
