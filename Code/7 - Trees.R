@@ -72,14 +72,17 @@ make_tree_plot <- function(tree_output, taxonomy_tibble, fam_name){
     #          by = c('tip.label' = 'asv_names')) %>%
     # filter(!str_detect(label, 'ASV'))
     as.treedata() %>%
-    mutate(likely_color = ifelse(tip.label %in% very_likely_asvs, "very likely", 
-                                 ifelse(tip.label %in% likely_asvs, "likely", "unlikely"))) %>%
+    #mutate(likely_color = ifelse(tip.label %in% very_likely_asvs, "very likely", 
+    #                             ifelse(tip.label %in% likely_asvs, "likely", "unlikely"))) %>%
+    mutate(likely_color = ifelse(tip.label %in% asvs_opp, "opportunist", 
+                                 ifelse(tip.label %in% asvs_path, "pathogen", "other"))) %>%
     left_join(taxonomy_tibble %>% select(asv_names, Family, Genus, Species), by = c('tip.label' = 'asv_names')) %>%
     ggtree(ladderize = TRUE, layout = 'rectangular') +
     geom_text(aes(label = ifelse(str_detect(tip.label, 'ASV'), paste(Genus, " (", parse_number(tip.label), ")", 
                                                                      sep = ""),tip.label), colour = likely_color), hjust = 0) +
     geom_text(aes(label = boot_support), hjust = 0) + 
-    scale_color_manual(values = c("very likely" = "red", "likely" = "orange", "unlikely" = "black")) +
+    #scale_color_manual(values = c("very likely" = "red", "likely" = "orange", "unlikely" = "black")) +
+    scale_color_manual(values = c("pathogen" = "firebrick2", "opportunist" = "deepskyblue", "other" = "black")) +
     theme(legend.position='top', 
           legend.justification='left',
           legend.direction='horizontal') +
@@ -123,7 +126,7 @@ full_metadata <- cpm(otu_tmm, log = TRUE, prior.count = 2) %>%
                names_to = "asv_names", values_to = "value") %>%
   mutate(across(c(exposure, final_disease_state), factor)) %>%
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
-  select(-c(value, disease_state))
+  select(-c(value, clone_group, resistance, susceptability, reads))
 
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
   as.data.frame %>%
@@ -141,21 +144,25 @@ import_asvs <- read_rds("../intermediate_files/important_asvs.rds")
 likely_asvs <- import_asvs[[1]]
 very_likely_asvs <- import_asvs[[2]]
 
+asvs_path
+asvs_opp
+
 #format data for becoming a tree
 current_fam <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
   rowwise() %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
-  filter(Family %in% likely_families) %>%
+  filter(Family %in% sig_fams_nm) %>%
   rowwise %>%
   mutate(n_asv = nrow(data)) %>%
-  ungroup
+  ungroup %>%
+  filter(n_asv > 15)
 
-current_fam <- current_fam %>% filter(Family %in% c("Sphingomonadaceae", "Rubritaleaceae"))
+current_fam <- current_fam %>% filter(Family %in% c("Oligoflexaceae", "Hyphomonadaceae"))
 
-# cluster <- new_cluster(parallel::detectCores() - 1)
-# cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
-# cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
+ # cluster <- new_cluster(parallel::detectCores() - 1)
+ # cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
+ # cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
 
 plot_list <- current_fam %>%
   unnest(data) %>%
@@ -166,11 +173,11 @@ plot_list <- current_fam %>%
   filter(!is.na(final_disease_state)) %>% ### the metadata for the ones w all NAs were removed by prev filter
   rowwise() %>%
   nest(metadata = c(sample_id, time, exposure, tank, genotype, final_disease_state)) %>%
-  # partition(cluster) %>%
+  #partition(cluster) %>%
   rowwise() %>%
   mutate(forest = list(make_tree(data, nboot = 10, make_plot = FALSE)),
          tree_plot = list(possibly(make_tree_plot, otherwise = NULL)(forest, taxonomy_tibble, Family))) %>%
-  # collect %>%
+  #collect %>%
   identity()
 
 write_rds(plot_list, "../intermediate_files/family_trees.rds")

@@ -409,10 +409,10 @@ upset(testt,
           mapping=aes(fill=Family)
         ) 
       ),
-      queries=list(upset_query(set="early_opportunist", color="deepskyblue", fill = "deepskyblue"),
-                   upset_query(set="late_opportunist", color="deepskyblue", fill = "deepskyblue"),
+      queries=list(upset_query(set="early_opportunist", color="lightskyblue", fill = "lightskyblue"),
+                   upset_query(set="late_opportunist", color="deepskyblue3", fill = "deepskyblue3"),
                    upset_query(set="continuous_opportunist", color="deepskyblue", fill = "deepskyblue"),
-                   upset_query(set="early_pathogen", color="firebrick1", fill = "firebrick1"),
+                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA"),
                    upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1")),
       
       name='asv_names', width_ratio=0.1, min_size = 0) +
