@@ -6,7 +6,7 @@
 ![plot](./Figures/microshades_og_susceptibility.png)
 
 - category titles are "timepoint_exposure_final disease state
-- - **removed** samples that were healthy exposed and contracted WBD
+- **removed** samples that were healthy exposed and contracted WBD
 
 ![plot](./Figures/microshades_ordergenus.png)
 
