@@ -18,6 +18,8 @@
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
 
+![plot](./Figures/venn_nm.png)
+
 ### Trees
 
 ![plot](./Figures/Tree_Colwelliaceae.png)
