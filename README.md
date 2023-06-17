@@ -22,8 +22,25 @@
 
 ![plot](./Figures/cu_bacterial_strategies.png)
 
-compared to random forest model:
+##### significant ASVs
+
+![plot](./Figures/bac_strat_cp1.png)
+
+![plot](./Figures/bac_strat_cp2.png)
+
+![plot](./Figures/bac_strat_cp3.png)
+
+![plot](./Figures/bac_strat_cp4.png)
+
+![plot](./Figures/bac_strat_cp5.png)
+
+![plot](./Figures/bac_strat_cp6.png)
+
+
+
+###### compared to random forest model:
 ![plot](./Figures/nm_comparison_venn.png)
+(see random_forest_analysis.md for more details and plots)
 
 ### Trees
 
