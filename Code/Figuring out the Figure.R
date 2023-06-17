@@ -252,10 +252,23 @@ the_plots1$plot[1]
   summarise(plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
 
+###
+  library(stringr)
+  rand_forest_asvs <- c(149, 26, 96, 85, 3, 82, 161, 165, 284, 40, 479, 142)
 
+  rand_forest_asvs <- rand_forest_asvs %>%
+    as.character() %>%
+    as_tibble() %>%
+    mutate(value = paste("ASV_", value, sep = "")) %>%
+    pull(value)
 
-
-
+  sig_asvs_nm
+  
+  both_models <- c(rand_forest_asvs, sig_asvs_nm) %>% unique() %>% as.tibble() %>%
+    mutate(random_forest = ifelse(value %in% rand_forest_asvs, TRUE, FALSE)) %>%
+    mutate(planned_comparisons = ifelse(value %in% sig_asvs_nm, TRUE, FALSE))
+  
+  ggvenn(both_models, fill_color = c("green", "#FF9300"))
 
 
 
