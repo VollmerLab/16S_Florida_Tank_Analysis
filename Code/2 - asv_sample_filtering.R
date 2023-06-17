@@ -8,6 +8,7 @@ library(metagMisc)
 library(edgeR)
 library(variancePartition)
 library(ggvenn)
+library(microshades)
 
 #### Functions ####
 # data <- otu_tmm; prop_missing <- 0.25
@@ -107,10 +108,102 @@ if(aggregation_level != 'none'){
 
 #### Microshades Microbe Abundance ####
 
+mdf_prep_test1 <- microbiome_data %>%
+  tax_glom("Genus") %>%
+  psmelt() 
+
+mdf_processed_data <- mdf_prep_test1 %>%
+  filter(Abundance > 0) %>%
+  mutate(category = paste(time, exposure, final_disease_state, 
+                          sep = "_")) %>%
+  mutate(category = ifelse(str_detect(category, "F"), "T0", category)) %>%
+  filter(!category %in% c("T3_H_D", "T7_H_D")) %>%
+  mutate(time = ifelse(category %in% c("T0_D_D", "T0_H_H"), "Doses", time)) %>%
+  mutate(category = ifelse(category == "T0_D_D", "Diseased", ifelse(category == "T0_H_H", "Healthy", category))) %>%
+  mutate(category = ifelse(time == "T3", paste(time, exposure, sep = "_"), category)) %>%
+  group_by(category) %>%
+  mutate(total = sum(Abundance)) %>%
+  ungroup() %>%
+  select(-c(retain_sample)) %>%
+  group_by(category, Genus) %>%
+  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  distinct() %>%
+  rename(Sample = category, Abundance = rel_abun) %>%
+  mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0", "T3_H", "T3_D", "T7_H_H", "T7_D_H", "T7_D_D"))) %>%
+  as.data.frame()
+
+## ORDER GENUS
+
+color_objs_ordergenus <- create_color_dfs(mdf_processed_data, group_level = "Order", 
+                                          selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
+                                                              "Pseudomonadales",  "Rhodobacterales"), cvd = TRUE)
+mdf_ordergenus <- color_objs_ordergenus$mdf
+cdf_ordergenus <- color_objs_ordergenus$cdf
+
+legend_ordergenus <-custom_legend(mdf_ordergenus, cdf_ordergenus, group_level = "Order")
+
+plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf_ordergenus) + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
+  labs(title = "Order Genus")
+
+plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
+
+
+#testing
+
+mdf_processed_suscep_data <- mdf_prep_test1 %>%
+  filter(Abundance > 0) %>%
+  mutate(category = paste(time, exposure, susceptability, 
+                          sep = "_")) %>%
+  mutate(category = ifelse(str_detect(category, "F"), paste("T0", susceptability, sep = "_"), category)) %>%
+  mutate(time = ifelse(category %in% c("T0_D_NA", "T0_H_NA"), "Doses", time)) %>%
+  mutate(category = ifelse(category == "T0_D_NA", "Diseased", ifelse(category == "T0_H_NA", "Healthy", category))) %>%
+  group_by(category) %>%
+  mutate(total = sum(Abundance)) %>%
+  ungroup() %>%
+  select(-c(retain_sample)) %>%
+  group_by(category, Genus) %>%
+  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  distinct() %>%
+  rename(Sample = category, Abundance = rel_abun) %>%
+  mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0_S", "T0_R", "T3_H_S", "T3_H_R", "T3_D_S", "T3_D_R", "T7_H_S", "T7_H_R", "T7_D_S", "T7_D_R"))) %>%
+  as.data.frame()
+
+color_objs_suscep <- create_color_dfs(mdf_processed_suscep_data, group_level = "Order", 
+                                          selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
+                                                              "Pseudomonadales",  "Rhodobacterales"), cvd = TRUE)
+mdf_suscep <- color_objs_suscep$mdf
+cdf_suscep <- color_objs_suscep$cdf
+
+legend_suscep <-custom_legend(mdf_suscep, cdf_suscep, group_level = "Order")
+
+plot_suscep_prelim <- plot_microshades(mdf_suscep, cdf_suscep) + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
+  labs(title = "Order Genus - Susceptibility")
+
+plot_grid(plot_suscep_prelim, legend_suscep,  rel_widths = c(1, .25))
+
+
+#only show sig genuses - cant do it by asv so less interesting than expected
+mdf_processed_data
+
+mdf_only_sig <- mdf_processed_data %>% 
+  mutate(sig_genus = ifelse(Genus %in% testt$Genus, Genus, NA))
+
+ggplot(mdf_only_sig, aes(fill = sig_genus, x = Sample, y = Abundance)) +
+  geom_bar(position = "fill", stat = "identity") +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw()
 
 #### Make Venn showing ASVs to keep ####
 otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data, 
-                                                     prev.trh = 0.1) %>%
+                                                     prev.trh = 0.2) %>%
   psmelt() %>%
   as_tibble  %>%
   mutate(across(c(exposure, final_disease_state), factor)) %>%

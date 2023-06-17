@@ -1,6 +1,7 @@
 #Code for making phylogenetic trees
 setwd("~/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
+#TODO phylolm
 
 #### Packages ####
 library(ggvenn)
@@ -160,9 +161,9 @@ current_fam <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
 
 current_fam <- current_fam %>% filter(Family %in% c("Oligoflexaceae", "Hyphomonadaceae"))
 
- # cluster <- new_cluster(parallel::detectCores() - 1)
- # cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
- # cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
+  # cluster <- new_cluster(parallel::detectCores() - 1)
+  # cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
+  # cluster_copy(cluster, c('make_tree', 'make_tree_plot'))
 
 plot_list <- current_fam %>%
   unnest(data) %>%
@@ -175,7 +176,7 @@ plot_list <- current_fam %>%
   nest(metadata = c(sample_id, time, exposure, tank, genotype, final_disease_state)) %>%
   #partition(cluster) %>%
   rowwise() %>%
-  mutate(forest = list(make_tree(data, nboot = 10, make_plot = FALSE)),
+  mutate(forest = list(make_tree(data, nboot = 100, make_plot = FALSE)),
          tree_plot = list(possibly(make_tree_plot, otherwise = NULL)(forest, taxonomy_tibble, Family))) %>%
   #collect %>%
   identity()
