@@ -20,6 +20,11 @@
 
 ![plot](./Figures/venn_nm.png)
 
+![plot](./Figures/cu_bacterial_strategies.png)
+
+compared to random forest model:
+![plot](./Figures/nm_comparison_venn.png)
+
 ### Trees
 
 ![plot](./Figures/Tree_Colwelliaceae.png)
