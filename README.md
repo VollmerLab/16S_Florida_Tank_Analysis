@@ -1,10 +1,13 @@
 # 16S Florida Tank Analysis
 
 ### Microbe Abundances
-- category titles are "timepoint_exposure_susceptibility"  
+
+##### Exposure:Susceptibility
+- category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
 
+##### Exposure:Final Disease State
 - category titles are "timepoint_exposure_final disease state
 - **removed** samples that were healthy exposed and contracted WBD
 
@@ -17,6 +20,17 @@
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
+
+**Early Pathogen:** differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T3 between Disease-Exposed Susceptible and all other T3 treatments  
+**Late Pathogen:** differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and all other T7 treatments  
+**Continuous Pathogen:** meets criteria for both early and late pathogens
+
+**Early Opportunist:** differs at T3 between Disease-Exposed and Healthy-Exposed  
+**Late Opportunist:** differs at T7 between Disease-Exposed and Healthy-Exposed  
+**Continuous Opportunist:** meets criteria for both early and late opportunists  
+
+**Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
+
 
 ![plot](./Figures/venn_nm.png)
 
