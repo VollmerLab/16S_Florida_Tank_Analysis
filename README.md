@@ -53,7 +53,7 @@
 
 
 ###### compared to random forest model:
-![plot](./Figures/nm_comparison_venn.png)
+![plot](./Figures/nm_comparison_venn.png)  
 (see random_forest_analysis.md for more details and plots)
 
 ### Trees
