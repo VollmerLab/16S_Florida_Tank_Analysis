@@ -53,6 +53,8 @@
 
 #### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
 
+![plot](./Figures/venn_nm_unfiltered.png)
+
 ![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 ### Trees
