@@ -25,7 +25,7 @@
 
 **Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
 
-#### **ONLY IN Diseased Dose, T3, T7**
+#### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
 
 ![plot](./Figures/venn_nm.png)
 
