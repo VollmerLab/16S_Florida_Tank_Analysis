@@ -40,7 +40,7 @@ the 89 ASVs above into a complex upset by bacterial strategy
 ![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 #### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
-Adding the filter for being in D, T3, and T7 before vs. after the model alters 
+Adding the filter for being in D, T3, and T7 before vs. after the model OR the p-value adjustment alters the output  
 
 ![plot](./Figures/venn_nm.png)
 
