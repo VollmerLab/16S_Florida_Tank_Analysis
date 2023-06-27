@@ -1,22 +1,31 @@
 # 16S Florida Tank Analysis
 
 ### Microbe Abundances
-- category titles are "timepoint_exposure_susceptibility"  
+
+##### Exposure:Susceptibility
+- category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
 
-- category titles are "timepoint_exposure_final disease state
-- **removed** samples that were healthy exposed and contracted WBD
-
-![plot](./Figures/microshades_ordergenus.png)
-
-![plot](./Figures/microshades_classfamily.png)
 
 ### Current Model
 
+- filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than 100 cpm per sample
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
+
+**Early Pathogen:** differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T3 between Disease-Exposed Susceptible and all other T3 treatments  
+**Late Pathogen:** differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and all other T7 treatments  
+**Continuous Pathogen:** meets criteria for both early and late pathogens
+
+**Early Opportunist:** differs at T3 between Disease-Exposed and Healthy-Exposed  
+**Late Opportunist:** differs at T7 between Disease-Exposed and Healthy-Exposed  
+**Continuous Opportunist:** meets criteria for both early and late opportunists  
+
+**Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
+
+#### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
 
 ![plot](./Figures/venn_nm.png)
 
@@ -39,8 +48,14 @@
 
 
 ###### compared to random forest model:
-![plot](./Figures/nm_comparison_venn.png)
+![plot](./Figures/nm_comparison_venn.png)  
 (see random_forest_analysis.md for more details and plots)
+
+#### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
+
+![plot](./Figures/venn_nm_unfiltered.png)
+
+![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 ### Trees
 
@@ -56,6 +71,15 @@
 
 
 # OLD MODEL FIGURES
+
+##### Exposure:Final Disease State
+- category titles are "timepoint_exposure_final disease state
+- **removed** samples that were healthy exposed and contracted WBD
+
+![plot](./Figures/microshades_ordergenus.png)
+
+![plot](./Figures/microshades_classfamily.png)
+
 
 ### Remaining ASVs:
 ##### Sections of interest are 278 and 104 for a total of 305 ASVs
