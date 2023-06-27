@@ -69,11 +69,7 @@ Adding the filter for being in D, T3, and T7 before vs. after the model alters
 
 ### Trees
 
-![plot](./Figures/lim_tree_franc.png)
-
-![plot](./Figures/lim_tree_colwell.png)
-
-![plot](./Figures/lim_tree_rhodo.png)
+[wip]
 
 
 # OLD MODEL FIGURES
