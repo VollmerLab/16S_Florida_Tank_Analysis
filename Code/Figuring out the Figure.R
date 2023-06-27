@@ -177,7 +177,7 @@ the_plots1 <- bacterial_signature_asv %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
       scale_color_manual(aesthetics = "colour1", values = c("#F75D5D", "#A70000"), guide = "legend", 
                          name = "Disease Exposed", labels = c("Susceptible", "Resistant")) +
-      scale_shape_manual(values = c(16, 17, 16, 17), guide = "none") +
+      scale_shape_manual(values = c(17, 16, 17, 16), guide = "none") +
       scale_color_manual(aesthetics = "colour2", values = c("#3DD8EA", "#048291"), guide = "legend", 
                          name = "Healthy Exposed", labels = c("Susceptible", "Resistant")) +
       guides(colour1 = guide_legend(
@@ -185,7 +185,7 @@ the_plots1 <- bacterial_signature_asv %>%
         colour2 = guide_legend(
           override.aes=list(linetype = c(6, 1), shape = c(16, 17)))) +
       scale_x_continuous(breaks=c(0, 3, 7)) +
-      scale_linetype_manual(values = c(6, 1, 6, 1), guide = "none") +
+      scale_linetype_manual(values = c(1, 6, 1, 6), guide = "none") +
       theme_bw() +
       xlab("Time") +
       ylab(expression("Normalized log"[2]*" (cpm)")) +

@@ -3,7 +3,6 @@
 ##TODO - 
 
 #### Libraries ####
-library(tidyverse)
 library(magrittr)
 library(lmerTest)
 library(emmeans)
@@ -12,8 +11,10 @@ library(ggupset)
 library(qvalue)
 library(patchwork)
 library(relayer) #devtools::install_github("clauswilke/relayer")
+library(ComplexUpset)
+library(tidyverse)
 
-refit_models <- TRUE
+refit_models <- FALSE
 
 #### Functions ####
 cluster <- new_cluster(parallel::detectCores() - 1)
@@ -305,7 +306,7 @@ posthoc_categories <- tibble(microbial_signature = c('growth_comparisons',
 
 #### Model ASV counts ####
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
-  asv_models <- write_rds('../intermediate_files/mixed_model_results.rds.gz')
+  asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
   cluster_copy(cluster, c('posthoc_categories'))
   
@@ -421,6 +422,7 @@ upset(testt,
       name='asv_names', width_ratio=0.1, min_size = 0) +
   ggtitle("Bacterial Strategies")
 
+#need to clean up
 sig_asvs_nm <- testt %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
   pull(asv_id) %>% unique()
 
