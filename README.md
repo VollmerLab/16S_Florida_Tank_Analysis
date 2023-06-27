@@ -69,7 +69,13 @@ Adding the filter for being in D, T3, and T7 before vs. after the model alters
 
 ### Trees
 
-[wip]
+only includes ASVs that passed the initial filtering (not the D, T3, T7 filter)
+
+![plot](./Figures/lim_tree_colwell.png)
+
+![plot](./Figures/lim_tree_franc.png)
+
+![plot](./Figures/lim_tree_rhodo.png)
 
 
 # OLD MODEL FIGURES
