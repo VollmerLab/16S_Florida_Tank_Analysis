@@ -27,15 +27,20 @@
 
 #### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
 
+Applied filters for 20% prevalence, less than 10% missingness, remove ASVs with an average of less than 100 cpm per sample  
 ![plot](./Figures/venn_nm_unfiltered.png)
 
+ASVs that were significant for treatment (time + exposure + susceptibility)  
 ![plot](./Figures/venn_nm_sig_treatment.png)
 
+ASVs that meet the criteria for one of our pathogen/opportunist strategies  
 ![plot](./Figures/venn_nm_in_category.png)
 
+the 89 ASVs above into a complex upset by bacterial strategy
 ![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 #### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
+Adding the filter for being in D, T3, and T7 before vs. after the model alters 
 
 ![plot](./Figures/venn_nm.png)
 
@@ -64,15 +69,11 @@
 
 ### Trees
 
-![plot](./Figures/Tree_Colwelliaceae.png)
+![plot](./Figures/lim_tree_franc.png)
 
-![plot](./Figures/Tree_flavobacteriaceae.png)
+![plot](./Figures/lim_tree_colwell.png)
 
-![plot](./Figures/Tree_francisellaceae.png)
-
-![plot](./Figures/Tree_rhodobacteraceae.png)
-
-![plot](./Figures/Tree_saccharospirillaceae.png)
+![plot](./Figures/lim_tree_rhodo.png)
 
 
 # OLD MODEL FIGURES
