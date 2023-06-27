@@ -25,9 +25,19 @@
 
 **Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
 
+#### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
+
+![plot](./Figures/venn_nm_unfiltered.png)
+
+![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
+
 #### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
 
 ![plot](./Figures/venn_nm.png)
+
+![plot](./Figures/venn_nm_sig_treatment.png)
+
+![plot](./Figures/venn_nm_in_category.png)
 
 ![plot](./Figures/cu_bacterial_strategies.png)
 
@@ -51,11 +61,6 @@
 ![plot](./Figures/nm_comparison_venn.png)  
 (see random_forest_analysis.md for more details and plots)
 
-#### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
-
-![plot](./Figures/venn_nm_unfiltered.png)
-
-![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 ### Trees
 
