@@ -29,15 +29,15 @@
 
 ![plot](./Figures/venn_nm_unfiltered.png)
 
+![plot](./Figures/venn_nm_sig_treatment.png)
+
+![plot](./Figures/venn_nm_in_category.png)
+
 ![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
 
 #### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
 
 ![plot](./Figures/venn_nm.png)
-
-![plot](./Figures/venn_nm_sig_treatment.png)
-
-![plot](./Figures/venn_nm_in_category.png)
 
 ![plot](./Figures/cu_bacterial_strategies.png)
 
