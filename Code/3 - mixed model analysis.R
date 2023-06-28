@@ -142,7 +142,7 @@ cluster_copy(cluster, c('fit_model', 'process_model', 'process_postHoc'))
 
 #
 #### Data ####
-normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
+normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
   mutate(treatment = str_c(time, exposure, susceptability, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
@@ -305,6 +305,7 @@ posthoc_categories <- tibble(microbial_signature = c('growth_comparisons',
             .groups = 'drop')
 
 #### Model ASV counts ####
+
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
@@ -357,8 +358,10 @@ significant_models <- asv_models %>%
   # slice(26) %>%
   rowwise %>%
   mutate(process_postHoc(posthoc)) %>%
+  filter(asv_id %in% otus_to_analyze) %>% #otus in D, T3, T7
   ungroup() %>%
-  p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
+  p_adjust(exclude_cols = c('treatment', 'tank', 'genotype')) #%>% #affects otu filter
+
 
 bacterial_signature_asv <- significant_models %>%
   select(asv_id, starts_with('fdr')) %>% 
@@ -400,13 +403,16 @@ bacterial_signature_asv %>%
 
 # emily comp upset
 
-testt <- bacterial_signature_asv %>% pivot_wider(names_from = signatures, values_from = significance)
-testt[is.na(testt)] <- FALSE
+comp_upset_bac_strat <- bacterial_signature_asv %>%
+  pivot_wider(names_from = signatures, values_from = significance)
 
-testt <- testt %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
+comp_upset_bac_strat[is.na(comp_upset_bac_strat)] <- FALSE
 
-upset(testt,
-      colnames(select(testt, starts_with('late') | starts_with('early') | starts_with('cont'))), 
+#need to add taxonomy tibble to this doc
+comp_upset_bac_strat <- comp_upset_bac_strat %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
+
+upset(comp_upset_bac_strat,
+      colnames(select(comp_upset_bac_strat, starts_with('late') | starts_with('early') | starts_with('cont'))), 
       
       base_annotations=list(
         'Intersection size'=intersection_size(
@@ -416,23 +422,24 @@ upset(testt,
       queries=list(upset_query(set="early_opportunist", color="lightskyblue", fill = "lightskyblue"),
                    upset_query(set="late_opportunist", color="deepskyblue3", fill = "deepskyblue3"),
                    upset_query(set="continuous_opportunist", color="#43B3E3", fill = "#43B3E3"),
-                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA"),
+                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA"), 
+                   upset_query(set="continuous_pathogen", color="#FF5757", fill = "#FF5757"),
                    upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1")),
       
       name='asv_names', width_ratio=0.1, min_size = 0) +
-  ggtitle("Bacterial Strategies")
+  ggtitle("Bacterial Strategies - filter after model, before correcting p-value")
 
 #need to clean up
-sig_asvs_nm <- testt %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
+sig_asvs_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
   pull(asv_id) %>% unique()
 
-asvs_opp <- testt %>% filter(late_opportunist | early_opportunist | continuous_opportunist) %>%
+asvs_opp <- comp_upset_bac_strat %>% filter(late_opportunist | early_opportunist | continuous_opportunist) %>%
   select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% pull(asv_id) %>% unique()
 
-asvs_path <- testt %>% filter(!asv_id %in% asvs_opp) %>%
+asvs_path <- comp_upset_bac_strat %>% filter(!asv_id %in% asvs_opp) %>%
   select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% pull(asv_id) %>% unique()
 
-sig_fams_nm <- testt %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
+sig_fams_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
   pull(Family) %>% unique()
 
 
@@ -533,6 +540,33 @@ the_plots$plots[[5]]
 the_plots$plots[[6]]
 
 
+#### Emily Work Zone ####
+
+#find asvs that are on ave more abundant in H than D at both T3 and T7 - possible probiotics
+poss_probiotic_list <- normalized_asv_counts %>% 
+  filter(time != "T0") %>% 
+  filter(exposure == "D", susceptability == "S") %>%
+  group_by(asv_id, time, final_disease_state) %>%
+  summarize(aveval = mean(log2_cpm)) %>%
+  ungroup() %>%
+  group_by(asv_id, time) %>%
+  reframe(diff_H_D = aveval[final_disease_state == "H"] - aveval[final_disease_state == "D"]) %>%
+  mutate(diff_H_D = diff_H_D > 0) %>%
+  ungroup() %>%
+  group_by(asv_id) %>%
+  filter(all(diff_H_D)) %>%
+  pull(asv_id)
+
+normalized_asv_counts %>%
+  filter(asv_id %in% poss_probiotic_list) %>%
+  mutate(treatmenttype = paste(exposure, final_disease_state, susceptability, sep = "_")) %>%
+  filter(treatmenttype %in% c("D_D_S", "D_H_S")) %>%
+  ggplot() +
+  geom_jitter(aes(time, log2_cpm, col = treatmenttype, alpha = treatmenttype)) +
+  scale_color_manual(values = c("gray", "red")) +
+  scale_alpha_manual(values = c(0.5, 1)) +
+  facet_wrap(~asv_id) +
+  theme_bw()
 
 #### Work Zone ####
 tmp <- filter(significant_models, 

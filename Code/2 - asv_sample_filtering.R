@@ -210,13 +210,14 @@ otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data,
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
   filter(Abundance > 0) %>%
   mutate(time = if_else(time == 'T0', exposure, time)) %>%
+  #filter(OTU %in% bacterial_signature_asv$asv_id) %>%
   group_by(time, OTU) %>%
   summarise(n = sum(Abundance),
             .groups = 'drop') %>%
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
   mutate(across(-OTU, ~. > 0))
 
-ggvenn(otu_timepoint_presence, c('D', 'H', 'T3', 'T7'))
+ggvenn(otu_timepoint_presence, c('D', 'H', 'T3', 'T7')) + ggtitle("Bacterial Strategies")
   
 otus_to_analyze <- filter(otu_timepoint_presence, 
                           (D & T3 & T7)) %>%
@@ -236,7 +237,7 @@ otu_tmm <- microbiome_data %>%
   filter_missing_groups(metadata, 1) %>%
  
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
-  filter_venn(otus_to_analyze) %>%
+  #filter_venn(otus_to_analyze) %>%
   filter_samples(model_samples) %>% #remove samples not to be analyzed
   filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
 
@@ -273,7 +274,7 @@ dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm,
                                     column_to_rownames('sample_id'),
                                   BPPARAM = param, 
                                   plot = TRUE)
-
+#87917 vs 36251
 #### ASV Modelling ####
 full_data <- otu_tmm %>%
   cpm(log = TRUE, prior.count = 0.5,
@@ -306,6 +307,7 @@ full_data <- otu_tmm %>%
               as_tibble(rownames = 'asv_id'),
             by = c('asv_id'))
 
+#filtered for the 
 write_csv(full_data, '../intermediate_files/fully_preprocessed_samples.csv.gz')
 n_distinct(full_data$asv_id)
 

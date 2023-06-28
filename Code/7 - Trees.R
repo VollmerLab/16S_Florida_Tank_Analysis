@@ -92,6 +92,10 @@ make_tree_plot <- function(tree_output, taxonomy_tibble, fam_name){
 
 #### Read in Data ####
 
+#only ASVs we care about - need to fix implementation
+relevant_asvs <- read_csv('../intermediate_files/nonvenn_filtered_fully_preprocessed_samples.csv.gz') %>%
+  pull(asv_id) %>% unique()
+
 #convert phyloseq data to tibble (metadata + abundance + taxonomy)
 aggregation_level <- 'none' #or none
 
@@ -151,15 +155,16 @@ asvs_opp
 #format data for becoming a tree
 current_fam <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
+  filter(asv_names %in% relevant_asvs) %>%
   rowwise() %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
   filter(Family %in% sig_fams_nm) %>%
   rowwise %>%
   mutate(n_asv = nrow(data)) %>%
   ungroup %>%
-  filter(n_asv > 15)
+  filter(n_asv > 2)
 
-current_fam <- current_fam %>% filter(Family %in% c("Oligoflexaceae", "Hyphomonadaceae"))
+current_fam <- current_fam %>% filter(Family %in% c("Terasakiellaceae"))
 
   # cluster <- new_cluster(parallel::detectCores() - 1)
   # cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
@@ -181,7 +186,7 @@ plot_list <- current_fam %>%
   #collect %>%
   identity()
 
-write_rds(plot_list, "../intermediate_files/family_trees.rds")
+#write_rds(plot_list, "../intermediate_files/family_trees.rds")
 
 #### Jason's tutorial ####
 
