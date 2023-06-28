@@ -61,6 +61,11 @@ asvs that are on ave more abundant in H than D at both T3 and T7:
 
 ![plot](./Figures/ASV_nmds.png)
 
+- mostly clusters by early/late
+- unfilled circles represent combinations of time, exposure, and susceptibility
+- 2 in top right are T0, middle left are T3, bottom right are T7
+
+
 ##### significant ASVs
 
 ![plot](./Figures/bac_strat_cp1.png)
