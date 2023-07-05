@@ -5,6 +5,9 @@
 ![plot](./Figures/cu_t037_dh.png)
 ![plot](./Figures/venn_w_h.png)
 
+![plot](./Figures/vegathurber_dysbiosis.png)
+
+
 ##### Exposure:Susceptibility
 - category titles are "timepoint_exposure_susceptibility"
 
