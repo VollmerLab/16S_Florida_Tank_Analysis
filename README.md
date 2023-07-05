@@ -5,6 +5,7 @@
 ![plot](./Figures/cu_t037_dh.png)
 ![plot](./Figures/venn_w_h.png)
 
+from Vega Thurber et al 2020:
 ![plot](./Figures/vegathurber_dysbiosis.jpeg)
 
 
