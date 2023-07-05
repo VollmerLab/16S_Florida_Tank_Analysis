@@ -217,8 +217,43 @@ otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data,
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
   mutate(across(-OTU, ~. > 0))
 
-ggvenn(otu_timepoint_presence, c('D', 'H', 'T3', 'T7')) + ggtitle("Bacterial Strategies")
-  
+ggvenn(otu_timepoint_presence, c('D', 'H', 'T3', 'T7')) + ggtitle("ASV Presence")
+
+venn_all_times_and_doses <- 
+  testfilt <- phyloseq_filter_prevalence(microbiome_data, 
+                                         prev.trh = 0.2) %>%
+  psmelt() %>%
+  as_tibble  %>%
+  mutate(across(c(exposure, final_disease_state), factor)) %>%
+  filter(tank != "homogenate_fragment") %>%
+  filter(Abundance > 0) %>%
+  mutate(time = if_else(time == 'T0' & tank == "HOMO", exposure, time)) %>%
+  #filter(OTU %in% bacterial_signature_asv$asv_id) %>%
+  group_by(time, OTU) %>%
+  summarise(n = sum(Abundance),
+            .groups = 'drop') %>%
+  pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
+  mutate(across(-OTU, ~. > 0))
+
+ggvenn(venn_all_times_and_doses, c('D', 'T0', 'T3', 'T7')) + ggtitle("ASV Presence")
+
+upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "asv_names")), 
+      c('D', 'H', 'T0', 'T3', 'T7'), 
+      
+      base_annotations=list(
+        'Intersection size'=intersection_size(
+          mapping=aes(fill=Order)
+        )
+      ),
+      
+      queries=list(upset_query(set='D', color="#DF0000", fill = "#DF0000"),
+                   upset_query(set='T0', color="#D98EFF", fill = "#D98EFF"),
+                   upset_query(set='T3', color="#B21BFF", fill = "#B21BFF"),
+                   upset_query(set='T7', color="#650197", fill = "#650197"),
+                   upset_query(set='H', color="#0FAB02", fill = "#0FAB02")),
+      
+      name='asv_names', width_ratio=0.1, min_size = 1)
+
 otus_to_analyze <- filter(otu_timepoint_presence, 
                           (D & T3 & T7)) %>%
   pull(OTU)
