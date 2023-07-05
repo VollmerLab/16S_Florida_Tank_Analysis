@@ -2,6 +2,9 @@
 
 ### Microbe Abundances
 
+![plot](./Figures/cu_t037_dh.png)
+![plot](./Figures/venn_w_h.png)
+
 ##### Exposure:Susceptibility
 - category titles are "timepoint_exposure_susceptibility"
 
@@ -52,6 +55,20 @@ Adding the filter for being in D, T3, and T7 before vs. after the model OR the p
 
 ![plot](./Figures/cu_bacterial_strategies.png)
 
+#### probiotics?
+
+asvs that are on ave more abundant in H than D at both T3 and T7:  
+![plot](./Figures/probiotics_scatter.png)
+
+#### ASV NMDS by bacterial strategy
+
+![plot](./Figures/ASV_nmds.png)
+
+- mostly clusters by early/late
+- unfilled circles represent combinations of time, exposure, and susceptibility
+- 2 in top right are T0, middle left are T3, bottom right are T7
+
+
 ##### significant ASVs
 
 ![plot](./Figures/bac_strat_cp1.png)
@@ -83,10 +100,6 @@ only includes ASVs that passed the initial filtering (not the D, T3, T7 filter)
 
 ![plot](./Figures/lim_tree_rhodo.png)
 
-##### probiotics?
-
-asvs that are on ave more abundant in H than D at both T3 and T7:  
-![plot](./Figures/probiotics_scatter.png)
 
 # OLD MODEL FIGURES
 
