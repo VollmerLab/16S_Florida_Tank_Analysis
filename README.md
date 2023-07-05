@@ -88,12 +88,6 @@ asvs that are on ave more abundant in H than D at both T3 and T7:
 ![plot](./Figures/bac_strat_cp6.png)
 
 
-
-###### compared to random forest model:
-![plot](./Figures/nm_comparison_venn.png)  
-(see random_forest_analysis.md for more details and plots)
-
-
 ### Trees
 
 only includes ASVs that passed the initial filtering (not the D, T3, T7 filter)
