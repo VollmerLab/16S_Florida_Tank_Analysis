@@ -219,8 +219,7 @@ otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data,
 
 ggvenn(otu_timepoint_presence, c('D', 'H', 'T3', 'T7')) + ggtitle("ASV Presence")
 
-venn_all_times_and_doses <- 
-  testfilt <- phyloseq_filter_prevalence(microbiome_data, 
+venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data, 
                                          prev.trh = 0.2) %>%
   psmelt() %>%
   as_tibble  %>%
@@ -228,22 +227,24 @@ venn_all_times_and_doses <-
   filter(tank != "homogenate_fragment") %>%
   filter(Abundance > 0) %>%
   mutate(time = if_else(time == 'T0' & tank == "HOMO", exposure, time)) %>%
-  #filter(OTU %in% bacterial_signature_asv$asv_id) %>%
+  #filter(OTU %in% venn_group) %>%
   group_by(time, OTU) %>%
   summarise(n = sum(Abundance),
             .groups = 'drop') %>%
   pivot_wider(names_from = time, values_from = n, values_fill = 0L) %>%
-  mutate(across(-OTU, ~. > 0))
+  mutate(across(-OTU, ~. > 0)) %>% 
+  mutate(T0_H = ifelse(H | T0, TRUE, FALSE))
 
-ggvenn(venn_all_times_and_doses, c('D', 'T0', 'T3', 'T7')) + ggtitle("ASV Presence")
+ggvenn(venn_all_times_and_doses, c('D', 'T0_H', 'T3', 'T7')) + ggtitle("title")
 
 upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "asv_names")), 
       c('D', 'H', 'T0', 'T3', 'T7'), 
       
       base_annotations=list(
-        'Intersection size'=intersection_size(
-          mapping=aes(fill=Order)
-        )
+        'Intersection size'=intersection_size()
+      ),
+      themes=upset_modify_themes(
+        list('intersections_matrix'=theme(strip.background =element_text(size=20)))
       ),
       
       queries=list(upset_query(set='D', color="#DF0000", fill = "#DF0000"),
@@ -272,10 +273,15 @@ otu_tmm <- microbiome_data %>%
   filter_missing_groups(metadata, 1) %>%
  
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
-  #filter_venn(otus_to_analyze) %>%
+  filter_venn(otus_to_analyze) %>%
   filter_samples(model_samples) %>% #remove samples not to be analyzed
-  filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
+  filter_asv_meanCount(metadata, 10000) #Remove ASVs with an average of less than N CPM per sample
 
+
+venn_group <- otu_tmm %>%
+  cpm(log = TRUE, prior.count = 0.5,
+      normalized.lib.sizes = TRUE) %>%
+  as_tibble(rownames = 'asv_id') %>% pull(asv_id)
 
 #### Plot Group by number of ASVs = 0 ####
 otu_tmm$counts %>%

@@ -101,11 +101,24 @@ process_model <- function(model, re_model, random_anova){
     bind_cols(global_row, r2_row, varDecomp_row, ., aov_row)
 }
 
+run_posthoc <- function(model, contrast_list){
+  em_out <- emmeans(model, ~treatment)
+  
+  contrast_list %>%
+    rowwise(direction) %>%
+    reframe(emmeans::contrast(em_out,
+                              method = contrast$contrasts, 
+                              adjust = 'none',
+                              side = direction) %>%
+              as_tibble)
+}
+
 # posthoc <- asv_models$posthoc[[1]]
 process_postHoc <- function(posthoc){
   post_row <- as_tibble(posthoc) %>%
     rename(tvalue = t.ratio,
            pvalue = p.value) %>%
+    mutate(contrast = str_c(contrast, direction, sep = '_'), .keep = 'unused') %>%
     pivot_wider(names_from = c('contrast'),
                 values_from = c('estimate', 'SE', 'df', 'tvalue', 'pvalue'),
                 names_vary = 'slowest')
@@ -149,6 +162,7 @@ normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_pr
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
          across(Kingdom:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer) #%>%
+  #filter(asv_id %in% otus_to_analyze) #otus in D, T3, T7
   # filter(asv_number <= 200)
 
 #
@@ -271,13 +285,30 @@ bacterial_growth <- list('(T3-T0)' = c(-1/2, -1/2, 1/4, 1/4, 1/4, 1/4, 0, 0, 0, 
 
 #pathogens
 early_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0))
+                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+                       'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0))
 continuous_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
                             'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+                            'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
                             'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-                            'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+                            'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
+                            'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
 late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-                      'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+                      'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
+                      'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
+
+
+# early_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
+#                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+#                       'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
+# continuous_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
+#                             'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+#                             'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
+#                             'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
+#                             'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
+# late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
+#                       'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
+#                       'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
 
 #opportunists
 early_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0))
@@ -290,26 +321,34 @@ probiotic <- list('T0(SvR)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0),
                   'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
                   'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
 
-posthoc_categories <- tibble(microbial_signature = c('growth_comparisons',
-                                                     'early_pathogen', 'continuous_pathogen', 'late_pathogen',
-                                                     'early_opportunist', 'continuous_opportunist', 'late_opportunist',
-                                                     'probiotic'),
-                             contrasts = list(bacterial_growth,
-                                              early_pathogen, continuous_pathogen, late_pathogen,
-                                              early_opportunist, continuous_opportunist, late_opportunist,
-                                              probiotic)) %>%
+#Put tests for one/two sided and directionality into bins. Will combine after post-hoc into meaningful categorization
+two_sided_tests <- tibble(microbial_signature = c('growth_comparisons'),
+                          contrasts = list(bacterial_growth),
+                          direction = '=') #=
+right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
+                                              'early_opportunist', 'continuous_opportunist', 'late_opportunist'),
+                      contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
+                                       early_opportunist, continuous_opportunist, late_opportunist),
+                      direction = '>') #>
+left_tests <- tibble(microbial_signature = c('probiotic'),
+                     contrasts = list(probiotic),
+                     direction = '<') #<
+
+posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
   unnest(contrasts) %>%
   mutate(contrast_name = names(contrasts)) %>%
-  group_by(contrast_name, contrasts) %>%
+  group_by(contrast_name, contrasts, direction) %>%
   summarise(signatures = list(c(microbial_signature)),
-            .groups = 'drop')
+            .groups = 'drop') %>%
+  nest(contrast = -direction)
+
 
 #### Model ASV counts ####
 
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
-  cluster_copy(cluster, c('posthoc_categories'))
+  cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
   
   asv_models <- normalized_asv_counts %>%
     nest_by(across(c('asv_id', Kingdom:Species))) %>%
@@ -319,8 +358,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
                      use_weights = FALSE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
-           posthoc = list(emmeans(model, ~treatment) %>%
-                            contrast(method = posthoc_categories$contrasts, adjust = 'none'))) %>%
+           posthoc = list(run_posthoc(model, posthoc_categories))) %>%
     collect() %>%
     select(-re_model, -ends_with('global')) %>%
     ungroup %>% 
@@ -358,7 +396,6 @@ significant_models <- asv_models %>%
   # slice(26) %>%
   rowwise %>%
   mutate(process_postHoc(posthoc)) %>%
-  filter(asv_id %in% otus_to_analyze) %>% #otus in D, T3, T7
   ungroup() %>%
   p_adjust(exclude_cols = c('treatment', 'tank', 'genotype')) #%>% #affects otu filter
 
@@ -374,7 +411,11 @@ bacterial_signature_asv <- significant_models %>%
   mutate(term = str_remove(term, 'fdr_')) %>%
   
   #Select ASVs which fit all characteristics of any given bacterial signature
-  left_join(posthoc_categories, by = c('term' = 'contrast_name')) %>%
+  mutate(direction = str_extract(term, '[><=]'),
+         term = str_remove(term, '_[><=]')) %>%
+  
+  left_join(unnest(posthoc_categories, contrast), 
+            by = c('term' = 'contrast_name', 'direction')) %>%
   filter(signatures != 'growth_comparisons') %>%
   select(-contrasts) %>%
   unnest(signatures) %>%
@@ -411,23 +452,92 @@ comp_upset_bac_strat[is.na(comp_upset_bac_strat)] <- FALSE
 #need to add taxonomy tibble to this doc
 comp_upset_bac_strat <- comp_upset_bac_strat %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
 
-upset(comp_upset_bac_strat,
-      colnames(select(comp_upset_bac_strat, starts_with('late') | starts_with('early') | starts_with('cont'))), 
+upset(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
+      colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+                        select(T7, T3, T0, D, H, late_pathogen, early_pathogen, continuous_opportunist, late_opportunist, early_opportunist)), 
       
       base_annotations=list(
-        'Intersection size'=intersection_size(
-          mapping=aes(fill=Family, col = Family), col = "gray10"
-        ) 
+        'Intersection size'=intersection_size(counts=T, text = aes(size = 6),
+          mapping=aes(fill=Family, col = Family, label = asv_id), col = "gray10"
+        ) +
+          geom_text(size = 3, position = position_stack(vjust = 0.5), col = "gray10")
       ),
-      queries=list(upset_query(set="early_opportunist", color="lightskyblue", fill = "lightskyblue"),
-                   upset_query(set="late_opportunist", color="deepskyblue3", fill = "deepskyblue3"),
-                   upset_query(set="continuous_opportunist", color="#43B3E3", fill = "#43B3E3"),
-                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA"), 
-                   upset_query(set="continuous_pathogen", color="#FF5757", fill = "#FF5757"),
-                   upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1")),
+      queries=list(upset_query(set='D', color="#DF0000", fill = "#DF0000", shape = 16),
+                   upset_query(set='T0', color="#D98EFF", fill = "#D98EFF", shape = 16),
+                   upset_query(set='T3', color="#B21BFF", fill = "#B21BFF", shape = 16),
+                   upset_query(set='T7', color="#650197", fill = "#650197", shape = 16),
+                   upset_query(set='H', color="#0FAB02", fill = "#0FAB02", shape = 16),
+                   upset_query(set="early_opportunist", color="lightskyblue", fill = "lightskyblue", shape = 16),
+                   upset_query(set="late_opportunist", color="deepskyblue3", fill = "deepskyblue3", shape = 16),
+                   upset_query(set="continuous_opportunist", color="#43B3E3", fill = "#43B3E3", shape = 16),
+                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA", shape = 16), 
+                   upset_query(set="continuous_pathogen", color="#FF5757", fill = "#FF5757", shape = 16),
+                   upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1", shape = 16)),
       
-      name='asv_names', width_ratio=0.1, min_size = 0) +
-  ggtitle("Bacterial Strategies - filter after model, before correcting p-value")
+      name='asv_names', width_ratio=0.1, min_size = 0, sort_sets = FALSE) +
+  ggtitle("Bacterial Strategies - testing")
+
+#BETTER
+
+upset(
+  comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
+  colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(T7, T3, T0, D, H, late_pathogen, early_pathogen, continuous_opportunist, late_opportunist, early_opportunist)), 
+  
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6),
+        mapping=aes(fill=Family, col = Family, label = asv_id), col = "gray10"
+    ) +
+      geom_text(size = 3, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        "T7" = "#650197",
+        "T3" = "#B21BFF",
+        "T0" = "#D98EFF",
+        "D" = "darkorange",
+        "H" = "#0FAB02",
+        "late_pathogen" = "#CF0C0C",
+        "early_pathogen" = "#FF7575",
+        "continuous_opportunist" = "royalblue4",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue"
+      )
+    )
+  ),
+  queries=list(
+    upset_query(set = "T7", fill = "#650197"),
+    upset_query(set = "T3", fill = "#B21BFF"),
+    upset_query(set = "T0", fill = "#D98EFF"),
+    upset_query(set = "D", fill = "darkorange"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_pathogen", fill = "#CF0C0C"),
+    upset_query(set = "early_pathogen", fill = "#FF7575"),
+    upset_query(set = "continuous_opportunist", fill = "royalblue4"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 2), "gray97")) +
+  ggtitle("Bacterial Strategies/Presence Data - 0.1%") 
+
+
+# scale_shape_manual(
+#   values=c(
+#     "T7" = "triangle filled",
+#     "T3" = "triangle filled",
+#     "T0" = "triangle filled",
+#     "D" = "triangle filled",
+#     "H" = "triangle filled",
+#     "late_pathogen" = "circle filled",
+#     "early_pathogen" = "circle filled",
+#     "continuous_opportunist" = "circle filled",
+#     "late_opportunist" = "circle filled",
+#     "early_opportunist" = "circle filled"
+#   )
+# )
 
 #need to clean up
 sig_asvs_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
@@ -460,7 +570,7 @@ the_plots1 <- bacterial_signature_asv %>%
                             {. ->> intermed } %>%
                             mutate(graph_cat = ifelse(time == "T0", paste("H", susceptability, sep = "_"), 
                                                       graph_cat)) %>%
-                            slice(rep(1:2, 1)) %>%
+                            dplyr::slice(rep(1:2, 1)) %>%
                             rbind(intermed) %>%
                             mutate(graph_cat = ifelse(is.na(graph_cat), paste("D", susceptability, sep = "_"), 
                                                       graph_cat)) %>%
@@ -512,6 +622,7 @@ the_plots1$combo_plots[[3]]
 the_plots1$combo_plots[[4]]
 the_plots1$combo_plots[[5]]
 the_plots1$combo_plots[[6]]
+the_plots1$combo_plots[[7]]
 
 #original version
 the_plots <- bacterial_signature_asv %>%
