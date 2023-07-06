@@ -1,8 +1,9 @@
 # 16S Florida Tank Analysis
 
-### Microbe Abundances
+## Somewhat Unfiltered Data
+only filtered for 20% prevalence & less than 90% missingness
 
-![plot](./Figures/cu_t037_dh.png)
+![plot](./Figures/cu459.png)
 
 ![plot](./Figures/venn459.png)
 
@@ -11,7 +12,7 @@
 from Vega Thurber et al 2020:
 ![plot](./Figures/vegathurber_dysbiosis.jpeg)
 
-- filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than *100* cpm per sample, must be in D and T3 and T7
+- filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample, must be in D and T3 and T7
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies (w/ directionality)
@@ -28,19 +29,17 @@ from Vega Thurber et al 2020:
 
 ##### Results of Different Levels of Filtering
 
--- in 1% of samples --
-![plot](./Figures/venn1.png)
-![plot](./Figures/bac_strat_cu1.png)
+-- in 0.01% of samples --  
+![plot](./Figures/venn0.01.png)  
+![plot](./Figures/bac_strat_cu0.01.png)  
 
+-- in 0.1% of samples --  
+![plot](./Figures/venn0.1.png)  
+![plot](./Figures/bac_strat_cu0.1.png)  
 
--- in 0.1% of samples --
-![plot](./Figures/venn0.1.png)
-![plot](./Figures/bac_strat_cu0.1.png)
-
--- in 0.01% of samples --
-![plot](./Figures/venn0.01.png)
-![plot](./Figures/bac_strat_cu0.01.png)
-
+-- in 1% of samples --  
+![plot](./Figures/venn1.png)  
+![plot](./Figures/bac_strat_cu1.png)  
 
 #### significant ASVs
 
@@ -68,7 +67,7 @@ from Vega Thurber et al 2020:
 - unfilled circles represent combinations of time, exposure, and susceptibility
 - 2 in top right are T0, middle left are T3, bottom right are T7
 
-#### Exposure:Susceptibility
+### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
