@@ -1,6 +1,7 @@
 # 16S Florida Tank Analysis
 
-### Microbe Abundances
+## Somewhat Unfiltered Data
+only filtered for 20% prevalence & less than 90% missingness
 
 ![plot](./Figures/cu459.png)
 
@@ -11,7 +12,7 @@
 from Vega Thurber et al 2020:
 ![plot](./Figures/vegathurber_dysbiosis.jpeg)
 
-- filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than *100* cpm per sample, must be in D and T3 and T7
+- filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample, must be in D and T3 and T7
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies (w/ directionality)
@@ -68,7 +69,7 @@ from Vega Thurber et al 2020:
 - unfilled circles represent combinations of time, exposure, and susceptibility
 - 2 in top right are T0, middle left are T3, bottom right are T7
 
-#### Exposure:Susceptibility
+### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
