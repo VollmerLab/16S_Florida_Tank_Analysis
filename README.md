@@ -4,7 +4,7 @@
 
 ![plot](./Figures/cu_t037_dh.png)
 
-![plot](./Figures/venn_w_h.png)
+![plot](./Figures/venn459.png)
 
 ## Current Model
 
@@ -14,7 +14,7 @@ from Vega Thurber et al 2020:
 - filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than *100* cpm per sample, must be in D and T3 and T7
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
-- make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
+- make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies (w/ directionality)
 
 **Early Pathogen:** differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T3 between Disease-Exposed Susceptible and all other T3 treatments AND must have a positive slope for Disease-Exposed Susceptible between T3 and T0  
 **Late Pathogen:** differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and all other T7 treatments AND must have a positive slope for Disease-Exposed Susceptible between T7 and T0  
