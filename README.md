@@ -2,7 +2,7 @@
 
 ### Microbe Abundances
 
-![plot](./Figures/cu_t037_dh.png)
+![plot](./Figures/cu459.png)
 
 ![plot](./Figures/venn459.png)
 
