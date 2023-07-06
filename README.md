@@ -60,6 +60,8 @@ from Vega Thurber et al 2020:
 
 #### ASV NMDS by bacterial strategy
 
+![plot](./Figures/asv_nmds_only_dr.png)
+
 ![plot](./Figures/ASV_nmds.png)
 
 - mostly clusters by early/late
