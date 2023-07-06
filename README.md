@@ -32,14 +32,17 @@ from Vega Thurber et al 2020:
 
 **Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
 
+-- in 1% of samples --
 ![plot](./Figures/venn1.png)
-![plot](./Figures/bac_strat_cu1.png)
+![plot](./Figures/bac_strat_cu0.01.png)
 
+-- in 0.1% of samples --
 ![plot](./Figures/venn0.1.png)
 ![plot](./Figures/bac_strat_cu0.1.png)
 
+-- in 0.01% of samples --
 ![plot](./Figures/venn0.01.png)
-![plot](./Figures/bac_strat_cu0.01.png)
+![plot](./Figures/bac_strat_cu1.png)
 
 #### ASV NMDS by bacterial strategy
 
