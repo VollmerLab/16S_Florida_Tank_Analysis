@@ -116,7 +116,7 @@ run_posthoc <- function(model, contrast_list){
 # posthoc <- asv_models$posthoc[[1]]
 process_postHoc <- function(posthoc){
   post_row <- as_tibble(posthoc) %>%
-    rename(tvalue = t.ratio,
+    dplyr::rename(tvalue = t.ratio,
            pvalue = p.value) %>%
     mutate(contrast = str_c(contrast, direction, sep = '_'), .keep = 'unused') %>%
     pivot_wider(names_from = c('contrast'),
@@ -164,6 +164,10 @@ normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_pr
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer) #%>%
   #filter(asv_id %in% otus_to_analyze) #otus in D, T3, T7
   # filter(asv_number <= 200)
+
+taxonomy_tibble <- tax_table(microbiome_data) %>% 
+  as.data.frame %>%
+  as_tibble(rownames = "asv_names")
 
 #
 #### Plot raw data for an ASV ####
