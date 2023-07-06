@@ -29,19 +29,17 @@ from Vega Thurber et al 2020:
 
 ##### Results of Different Levels of Filtering
 
--- in 1% of samples --
-![plot](./Figures/venn1.png)
-![plot](./Figures/bac_strat_cu1.png)
-
+-- in 0.01% of samples --
+![plot](./Figures/venn0.01.png)
+![plot](./Figures/bac_strat_cu0.01.png)
 
 -- in 0.1% of samples --
 ![plot](./Figures/venn0.1.png)
 ![plot](./Figures/bac_strat_cu0.1.png)
 
--- in 0.01% of samples --
-![plot](./Figures/venn0.01.png)
-![plot](./Figures/bac_strat_cu0.01.png)
-
+-- in 1% of samples --
+![plot](./Figures/venn1.png)
+![plot](./Figures/bac_strat_cu1.png)
 
 #### significant ASVs
 
