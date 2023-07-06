@@ -32,37 +32,14 @@ from Vega Thurber et al 2020:
 
 **Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
 
-#### ** NOT FILTERED FOR DOSES OR TIMEPOINTS **
+![plot](./Figures/venn1.png)
+![plot](./Figures/bac_strat_cu1.png)
 
-Applied filters for 20% prevalence, less than 10% missingness, remove ASVs with an average of less than 100 cpm per sample  
-![plot](./Figures/venn_nm_unfiltered.png)
+![plot](./Figures/venn0.1.png)
+![plot](./Figures/bac_strat_cu0.1.png)
 
-ASVs that were significant for treatment (time + exposure + susceptibility)  
-![plot](./Figures/venn_nm_sig_treatment.png)
-
-ASVs that meet the criteria for one of our pathogen/opportunist strategies  
-![plot](./Figures/venn_nm_in_category.png)
-
-the 89 ASVs above into a complex upset by bacterial strategy
-![plot](./Figures/cu_unfiltered_bacterial_strategies.png)
-
-#### **Filtered for D, T3, T7 AFTER running the model, BEFORE p-value adjustments**
-
-![plot](./Figures/venn_bac_strat_dosefilter.png)
-
-![plot](./Figures/cu_bac_strat_dosefilter.png)
-
-#### **Filtered for Diseased Dose, T3, T7 BEFORE running the model**
-Adding the filter for being in D, T3, and T7 before vs. after the model OR the p-value adjustment alters the output  
-
-![plot](./Figures/venn_nm.png)
-
-![plot](./Figures/cu_bacterial_strategies.png)
-
-#### probiotics?
-
-asvs that are on ave more abundant in H than D at both T3 and T7:  
-![plot](./Figures/probiotics_scatter.png)
+![plot](./Figures/venn0.01.png)
+![plot](./Figures/bac_strat_cu0.01.png)
 
 #### ASV NMDS by bacterial strategy
 
