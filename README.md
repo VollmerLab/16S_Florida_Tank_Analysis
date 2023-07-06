@@ -5,32 +5,25 @@
 ![plot](./Figures/cu_t037_dh.png)
 ![plot](./Figures/venn_w_h.png)
 
+## Current Model
+
 from Vega Thurber et al 2020:
 ![plot](./Figures/vegathurber_dysbiosis.jpeg)
 
-
-##### Exposure:Susceptibility
-- category titles are "timepoint_exposure_susceptibility"
-
-![plot](./Figures/microshades_og_susceptibility.png)
-
-
-### Current Model
-
-- filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than 100 cpm per sample
+- filter 20% prevalence, less than 10% missingness, remove ASVs with an average of less than 100 cpm per sample, must be in D and T3 and T7
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
 
-**Early Pathogen:** differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T3 between Disease-Exposed Susceptible and all other T3 treatments  
-**Late Pathogen:** differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and all other T7 treatments  
+**Early Pathogen:** differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T3 between Disease-Exposed Susceptible and all other T3 treatments AND must have a positive slope for Disease-Exposed Susceptible between T3 and T0  
+**Late Pathogen:** differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and all other T7 treatments AND must have a positive slope for Disease-Exposed Susceptible between T7 and T0  
 **Continuous Pathogen:** meets criteria for both early and late pathogens
 
 **Early Opportunist:** differs at T3 between Disease-Exposed and Healthy-Exposed  
 **Late Opportunist:** differs at T7 between Disease-Exposed and Healthy-Exposed  
 **Continuous Opportunist:** meets criteria for both early and late opportunists  
 
-**Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  
+**Probiotic:** differs at T0 between susceptible and resistant AND differs at T3 between Disease-Exposed Susceptible and Disease-Exposed Resistant AND differs at T7 between Disease-Exposed Susceptible and Disease-Exposed Resistant  *(none currently found by this definition)*
 
 -- in 1% of samples --
 ![plot](./Figures/venn1.png)
@@ -44,16 +37,8 @@ from Vega Thurber et al 2020:
 ![plot](./Figures/venn0.01.png)
 ![plot](./Figures/bac_strat_cu1.png)
 
-#### ASV NMDS by bacterial strategy
 
-![plot](./Figures/ASV_nmds.png)
-
-- mostly clusters by early/late
-- unfilled circles represent combinations of time, exposure, and susceptibility
-- 2 in top right are T0, middle left are T3, bottom right are T7
-
-
-##### significant ASVs
+#### significant ASVs
 
 ![plot](./Figures/bac_strat_cp1.png)
 
@@ -67,17 +52,20 @@ from Vega Thurber et al 2020:
 
 ![plot](./Figures/bac_strat_cp6.png)
 
+![plot](./Figures/bac_strat_cp7.png)
 
-### Trees
+#### ASV NMDS by bacterial strategy
 
-only includes ASVs that passed the initial filtering (not the D, T3, T7 filter)
+![plot](./Figures/ASV_nmds.png)
 
-![plot](./Figures/lim_tree_colwell.png)
+- mostly clusters by early/late
+- unfilled circles represent combinations of time, exposure, and susceptibility
+- 2 in top right are T0, middle left are T3, bottom right are T7
 
-![plot](./Figures/lim_tree_franc.png)
+#### Exposure:Susceptibility
+- category titles are "timepoint_exposure_susceptibility"
 
-![plot](./Figures/lim_tree_rhodo.png)
-
+![plot](./Figures/microshades_og_susceptibility.png)
 
 # OLD MODEL FIGURES
 
