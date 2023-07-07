@@ -70,6 +70,12 @@ ASV 369 isn't significant in the other models
 - unfilled circles represent combinations of time, exposure, and susceptibility
 - 2 in top right are T0, middle left are T3, bottom right are T7
 
+### Correlation Tests
+
+![plot](./Figures/disease_correlation_t0.png)
+
+![plot](./Figures/disease_correlation_all.png)
+
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
