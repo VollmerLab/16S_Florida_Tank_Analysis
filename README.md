@@ -62,10 +62,13 @@ ASV 369 isn't significant in the other models
 
 #### ASV NMDS by bacterial strategy
 
-![plot](./Figures/asv_nmds_only_dr.png)
+![plot](./Figures/asv_nmds_only_dr.png)  
+colored dots are ASVs, timepoints are labelled
 
-![plot](./Figures/ASV_nmds.png)
+![plot](./Figures/sample_nmds.png)  
+gray dots are ASVs, colored dots are individual coral fragments
 
+![plot](./Figures/ASV_nmds.png)  
 - mostly clusters by early/late
 - unfilled circles represent combinations of time, exposure, and susceptibility
 - 2 in top right are T0, middle left are T3, bottom right are T7
