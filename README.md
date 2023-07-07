@@ -72,7 +72,7 @@ ASV 369 isn't significant in the other models
 
 ### Correlation Tests
 
-![plot](./Figures/disease_correlation_T0.png)
+![plot](./Figures/disease_correlation_t0.png)
 
 ![plot](./Figures/disease_correlation_all.png)
 
