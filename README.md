@@ -71,10 +71,20 @@ ASV 369 isn't significant in the other models
 - 2 in top right are T0, middle left are T3, bottom right are T7
 
 ### Correlation Tests
+- correlation test (cor.test) between log2cpm abundance and continuous resistance value, p < 0.05
+- INITIAL DATA FILTERS: filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
 
+##### Correlations based only on T0
 ![plot](./Figures/disease_correlation_t0.png)
 
+![plot](./Figures/dr_corr_plots_t0_neg.png)
+![plot](./Figures/dr_corr_plots_t0_pos.png)
+
+##### Correlations based on all timepoints (T0, T3, T7)
 ![plot](./Figures/disease_correlation_all.png)
+
+![plot](./Figures/dr_corr_plots_all_neg.png)
+![plot](./Figures/dr_corr_plots_all_pos.png)
 
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
