@@ -40,8 +40,11 @@ from Vega Thurber et al 2020:
 -- in 1% of samples --  
 ![plot](./Figures/venn1.png)  
 ![plot](./Figures/bac_strat_cu1.png)  
+the 3 candidates:
+![plot](./Figures/plot_1percent.png)  
+ASV 369 isn't significant in the other models
 
-#### significant ASVs
+## significant ASVs - 0.01%
 
 ![plot](./Figures/bac_strat_cp1.png)
 
