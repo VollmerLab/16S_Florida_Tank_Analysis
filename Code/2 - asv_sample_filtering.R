@@ -227,7 +227,7 @@ venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data,
   filter(tank != "homogenate_fragment") %>%
   filter(Abundance > 0) %>%
   mutate(time = if_else(time == 'T0' & tank == "HOMO", exposure, time)) %>%
-  filter(OTU %in% venn_group) %>%
+  #filter(OTU %in% venn_group) %>%
   group_by(time, OTU) %>%
   summarise(n = sum(Abundance),
             .groups = 'drop') %>%
@@ -271,7 +271,7 @@ otu_tmm <- microbiome_data %>%
   filter_missing_groups(metadata, 1) %>%
  
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
-  filter_venn(otus_to_analyze) %>%
+  #filter_venn(otus_to_analyze) %>%
   filter_samples(model_samples) %>% #remove samples not to be analyzed
   filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
 

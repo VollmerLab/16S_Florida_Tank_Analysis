@@ -38,7 +38,7 @@ if(aggregation_level != 'none'){
 mb_data <- microbiome_data %>%
   #subset_samples(time %in% c('T3', 'T7')) %>%
   phyloseq_transform_css %>% #normalizing by column and then log transform
-  phyloseq_filter_prevalence(prev.trh = 0.1) %>% #filter for only 10%+ prevalence
+  phyloseq_filter_prevalence(prev.trh = 0.2) %>% #filter for only 10%+ prevalence
   otu_table %>%
   t #transposes the data (flips the axes)
 
@@ -54,16 +54,19 @@ mb_data <- microbiome_data %>%
 otu_nmds <- metaMDS(mb_data, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
 #plot(otu_nmds)
 
-nmds_plot <- scores(otu_nmds)$sites %>%
+nmds_plot <- x
+  
+  scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
-  ggplot(aes(x = NMDS1, y = NMDS2, colour = final_disease_state, shape = time)) +
+  ggplot(aes(x = -NMDS1, y = NMDS2, color = ifelse(is.na(susceptability), "Homogenate", paste(susceptability,exposure, sep = "_")), shape = time)) +
   geom_point(data = as_tibble(scores(otu_nmds)$species, rownames = aggregation_level),
              colour = 'gray60', size = 0.1, shape = 'circle') +
-  
-  geom_point() +
-  theme_classic()
+  geom_point(size = 3) +
+  scale_color_manual(values = c("purple", "#A70000", "darkgreen", "#048291", "#F75D5D", "chartreuse", "#3DD8EA")) +
+  theme_bw() +
+  labs(color = "Resistance+Exposure")
 
 env_dat <- t(mb_data) %>%
   as.data.frame %>%
