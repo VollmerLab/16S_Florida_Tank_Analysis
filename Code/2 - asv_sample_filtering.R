@@ -350,6 +350,24 @@ full_data <- otu_tmm %>%
 write_csv(full_data, '../intermediate_files/fully_preprocessed_samples.csv.gz')
 n_distinct(full_data$asv_id)
 
+### Output ASV CPMs for doses ####
+homogenate_data <- microbiome_data %>%
+  subset_samples(str_detect(tank, 'HOMO')) %>%
+  otu_table %>%
+  t() %>%
+  as.data.frame %>%
+  as.matrix %>% 
+  DGEList(remove.zeros = FALSE) %>%
+  cpm(log = TRUE, prior.count = 0.5,
+      normalized.lib.sizes = TRUE) %>%
+  as_tibble(rownames = 'asv_id') %>%
+  pivot_longer(cols = -asv_id,
+               names_to = 'sample_id',
+               values_to = 'log2_cpm') %>%
+  filter(asv_id %in% unique(full_data$asv_id)) %>%
+  mutate(exposure = str_extract(sample_id, '[DH]'))
+write_csv(homogenate_data, '../intermediate_files/homogenate_cpm.csv')
+
 #### Plot ASV number vs mean cpm ####
 otu_tmm %>%
   cpm(log = TRUE, prior.count = 0.5,
