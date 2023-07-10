@@ -63,6 +63,7 @@ ASV 369 isn't significant in the other models
 #### ASV NMDS by bacterial strategy
 
 ![plot](./Figures/asv_nmds1.png) 
+ASV as species, sample id as site
 
 ![plot](./Figures/sample_nmds.png)  
 gray dots are ASVs, colored dots are individual coral fragments
