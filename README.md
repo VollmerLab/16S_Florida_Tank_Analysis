@@ -1,6 +1,6 @@
 # 16S Florida Tank Analysis
 
- <h1 style="color:purple;">Hello World</h1>
+ <h1 style={{color: "purple"}}>Hello World</h1>
 
 - not filtered for D/T3/T7, removed anything that was only T3 & T7 or only T3 or only T7  
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
