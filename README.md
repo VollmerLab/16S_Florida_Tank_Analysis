@@ -1,6 +1,6 @@
 # 16S Florida Tank Analysis
 
- `#0969DA`
+
 
 - not filtered for D/T3/T7, removed anything that was only T3 & T7 or only T3 or only T7  
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
@@ -30,32 +30,22 @@ from Vega Thurber et al 2020:
 **Early Pathogen:** Disease-Exposed Susceptible is greater than Disease-Exposed Resistant at T3  
 AND Disease-Exposed Susceptible is greater than the average of all other T3 treatments   
 AND Disease-Exposed Susceptible must be more abundant at T3 than T0  
-
 **Late Pathogen:** Disease-Exposed Susceptible is greater than Disease-Exposed Resistant at T7  
 AND Disease-Exposed Susceptible is greater than the average of all other T7 treatments   
 AND Disease-Exposed Susceptible must be more abundant at T7 than T0  
-
 **Continuous Pathogen:** meets all criteria for both early and late pathogens
 
 **Early Opportunist:** the average of Disease-Exposed is greater than the average of Healthy-Exposed at T3  
 AND Disease-Exposed is more abundant at T3 than T0  
-
 **Late Opportunist:** the average of Disease-Exposed is greater than the average of Healthy-Exposed at T7  
 AND Disease-Exposed is more abundant at T7 than T0  
-
 **Continuous Opportunist:** meets criteria for both early and late opportunists  
 
--- Not Very Helpful --
-
+-- none in T0,T3 and anything in probiotic T7 but not probiotic T7 Strict did not look like a probiotic (all treatments had very similar values in most cases) --
 **Probiotic_T0:** Disease-Exposed Resistant is more abundant than Disease-Exposed Susceptible at T0  
-
 **Probiotic_T3:** Disease-Exposed Resistant is more abundant than Disease-Exposed Susceptible at T3  
-
 **Probiotic_T7:** Disease-Exposed Resistant is more abundant than Disease-Exposed Susceptible at T7  
 
--- none in T0,T3 and anything in probiotic T7 but not probiotic T7 Strict did not look like a probiotic (all treatments had very similar values in most cases) --  
-
--- Better Probiotic Definitions --
 
 **Probiotic_T3_Strict:** Disease-Exposed Resistant is more abundant than Disease-Exposed Susceptible at T3  
 AND Disease-Exposed Resistant is more abundant than all other treatments at T3  
@@ -66,17 +56,15 @@ AND Disease-Exposed Resistant is more abundant than all other treatments at T7
 AND Disease-Exposed Resistant is more abundant at T7 than at T3  
 AND Disease-Exposed Resistant is more abundant at T7 than Resistant at T0  
 
---
-
 **Crasher_T3:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T3  
 **Crasher_T7:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T7    
 
-```diff
-- **Crasher_T3_Strict:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T3  
+-- Found None:
+**Crasher_T3_Strict:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T3  
 AND Disease-Exposed Susceptible is less than the average of all other treatments at T3  
-- **Crasher_T7_Strict:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T7
+**Crasher_T7_Strict:** Susceptible is more abundant at T0 than Disease-Exposed Susceptible is at T7
 AND Disease-Exposed Susceptible is less than the average of all other treatments at T7  
-```
+
 
 ##### Results of Different Levels of Filtering
 
