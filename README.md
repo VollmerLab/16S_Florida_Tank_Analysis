@@ -1,12 +1,13 @@
 # 16S Florida Tank Analysis
 
-
+## New Stuff
 
 - not filtered for D/T3/T7, removed anything that was only T3 & T7 or only T3 or only T7  
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
 
 ![plot](./Figures/comp_upset_bacstrat_7_11_23.png)
 
+removed T3 and T7 from complex upset because all ASVs are present in both
 ![plot](./Figures/comp_upset_bacstrat_origin_7_11_23.png)
 
 ## Somewhat Unfiltered Data
