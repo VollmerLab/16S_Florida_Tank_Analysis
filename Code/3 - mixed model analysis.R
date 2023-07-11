@@ -337,6 +337,8 @@ probiotic_t7_strict <- list('T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
                             'DR(T7-T3)' = c(0, 0, 1, 0, 0, 0, -1, 0, 0, 0),
                             'DR(T7-T0)' = c(1, 0, 0, 0, 0, 0, -1, 0, 0, 0))
 
+rev_probiotic_t0 <- list('T0(SvR)' = c(1, -1, 0, 0, 0, 0, 0, 0, 0, 0))
+
 crasher_t3 <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0))
 crasher_t7 <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
 
@@ -357,8 +359,8 @@ right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_path
                       contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
                                        early_opportunist, continuous_opportunist, late_opportunist),
                       direction = '>') #>
-left_tests <- tibble(microbial_signature = c('crasher_t3', 'crasher_t7', 'probiotic_t3_strict', 'probiotic_t7_strict'),
-                     contrasts = list( crasher_t3, crasher_t7, probiotic_t3_strict, probiotic_t7_strict),
+left_tests <- tibble(microbial_signature = c('crasher_t3', 'crasher_t7', 'probiotic_t3_strict', 'probiotic_t7_strict', 'rev_probiotic_t0'),
+                     contrasts = list( crasher_t3, crasher_t7, probiotic_t3_strict, probiotic_t7_strict, rev_probiotic_t0),
                      direction = '<') #<
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
@@ -618,6 +620,7 @@ sig_fams_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rena
 #### Plot Individual Groupings ####
 
 the_plots1 <- bacterial_signature_asv %>%
+  #filter(asv_id == "ASV_202") %>%
   arrange(signatures) %>%
   group_by(asv_id) %>%
   summarise(signatures = str_c(signatures, collapse = ', ')) %>%
@@ -684,8 +687,8 @@ the_plots1$combo_plots[[3]]
 the_plots1$combo_plots[[4]]
 the_plots1$combo_plots[[5]]
 the_plots1$combo_plots[[6]]
-the_plots1$combo_plots[[7]] 
-the_plots1$combo_plots[[13]]
+the_plots1$combo_plots[[11]] 
+the_plots1$combo_plots[[12]]
 
 #original version
 the_plots <- bacterial_signature_asv %>%
