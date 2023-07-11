@@ -27,7 +27,7 @@ filter_missingness <- function(data, model_samples, prop_missing){
 # max_missing_group <- 0.5
 filter_missing_groups <- function(data, meta, max_missing_group){
   meta <- mutate(metadata, group_var = str_c(time, exposure, susceptability)) %>%
-    select(sample_id, group_var) %>%
+    dplyr::select(sample_id, group_var) %>%
     filter(!is.na(group_var))
   
   keep <- as_tibble(data$counts, rownames = 'gene_id') %>%
@@ -235,7 +235,7 @@ venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data,
   mutate(across(-OTU, ~. > 0)) %>% 
   mutate(T0_H = ifelse(H | T0, TRUE, FALSE))
 
-ggvenn(venn_all_times_and_doses, c('D', 'T0_H', 'T3', 'T7')) + ggtitle("No Filtering - 459 ASVs")
+ggvenn(venn_all_times_and_doses, c('D', 'T0_H', 'T3', 'T7')) #+ ggtitle("No Filtering - 459 ASVs")
 
 upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "asv_names")), 
       c("T7", "T3", "T0", "D", "H"), 
@@ -256,6 +256,12 @@ upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "as
 otus_to_analyze <- filter(otu_timepoint_presence, 
                           (D & T3 & T7)) %>%
   pull(OTU)
+
+not_t3t7_only <- filter(venn_all_times_and_doses, 
+                    !c(!D & !H & !T0 & T3 & T7)) %>%
+  filter(!c(!D & !H & !T0 & !T3 & T7)) %>%
+  filter(!c(!D & !H & !T0 & T3 & !T7)) %>%
+  pull(OTU)
   
 #### Normalize based on all samples & any other filtering ####
 otu_tmm <- microbiome_data %>%
@@ -271,6 +277,7 @@ otu_tmm <- microbiome_data %>%
   filter_missing_groups(metadata, 1) %>%
  
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
+  filter_venn(not_t3t7_only) %>% #remove things that are only in T3 and T7
   #filter_venn(otus_to_analyze) %>%
   filter_samples(model_samples) %>% #remove samples not to be analyzed
   filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample

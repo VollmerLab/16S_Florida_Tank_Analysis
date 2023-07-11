@@ -315,27 +315,49 @@ late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/
 #                       'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
 
 #opportunists
-early_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0))
+early_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0),
+                          'DS.DR(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0))
 continuous_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0),
-                               'T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2))
-late_opportunist <- list('T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2))
+                               'T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2),
+                               'DS.DR(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0),
+                               'DS.DR(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0))
+late_opportunist <- list('T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2),
+                          'DS.DR(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0))
 
+#add in left tests
+probiotic_t0 <- list('T0(SvR)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0))
+probiotic_t3 <- list('T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0))
+probiotic_t7 <- list('T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
 
-probiotic <- list('T0(SvR)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0),
-                  'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-                  'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+probiotic_t3_strict <- list('T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
+                            'T3(DRvHR.DS.HS)' = c(0, 0, -1, 1/3, 1/3, 1/3, 0, 0, 0, 0),
+                            'DR(T3-T0)' = c(0, 1, -1, 0, 0, 0, 0, 0, 0, 0))
+probiotic_t7_strict <- list('T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
+                            'T7(DRvHR.DS.HS)' = c(0, 0, 0, 0, 0, 0, -1, 1/3, 1/3, 1/3),
+                            'DR(T7-T3)' = c(0, 0, 1, 0, 0, 0, -1, 0, 0, 0),
+                            'DR(T7-T0)' = c(1, 0, 0, 0, 0, 0, -1, 0, 0, 0))
+
+crasher_t3 <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0))
+crasher_t7 <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
+
+crasher_t3_strict <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
+                          'T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0))
+crasher_t7_strict <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
+                          'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3))
+
+commensalist <- list('T3vT7' = c(0, 0, 1/4, 1/4, 1/4, 1/4, -1/4, -1/4, -1/4, -1/4))
 
 #Put tests for one/two sided and directionality into bins. Will combine after post-hoc into meaningful categorization
-two_sided_tests <- tibble(microbial_signature = c('growth_comparisons'),
-                          contrasts = list(bacterial_growth),
+two_sided_tests <- tibble(microbial_signature = c('growth_comparisons', 'commensalist'),
+                          contrasts = list(bacterial_growth, commensalist),
                           direction = '=') #=
 right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
                                               'early_opportunist', 'continuous_opportunist', 'late_opportunist'),
                       contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
                                        early_opportunist, continuous_opportunist, late_opportunist),
                       direction = '>') #>
-left_tests <- tibble(microbial_signature = c('probiotic'),
-                     contrasts = list(probiotic),
+left_tests <- tibble(microbial_signature = c('crasher_t3', 'crasher_t7', 'probiotic_t3_strict', 'probiotic_t7_strict'),
+                     contrasts = list( crasher_t3, crasher_t7, probiotic_t3_strict, probiotic_t7_strict),
                      direction = '<') #<
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
@@ -446,7 +468,7 @@ bacterial_signature_asv %>%
   theme_combmatrix(combmatrix.label.make_space = TRUE)
 
 
-# emily comp upset
+#### emily comp upset ####
 
 comp_upset_bac_strat <- bacterial_signature_asv %>%
   pivot_wider(names_from = signatures, values_from = significance)
@@ -603,7 +625,7 @@ the_plots1 <- bacterial_signature_asv %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
       scale_color_manual(aesthetics = "colour1", values = c("#F75D5D", "#A70000"), guide = "legend", 
                          name = "Disease Exposed", labels = c("Susceptible", "Resistant")) +
-      scale_shape_manual(values = c(16, 17, 16, 17), guide = "none") +
+      scale_shape_manual(values = c(17, 16, 17, 16), guide = "none") +
       scale_color_manual(aesthetics = "colour2", values = c("#3DD8EA", "#048291"), guide = "legend", 
                          name = "Healthy Exposed", labels = c("Susceptible", "Resistant")) +
       guides(colour1 = guide_legend(
@@ -626,7 +648,8 @@ the_plots1$combo_plots[[3]]
 the_plots1$combo_plots[[4]]
 the_plots1$combo_plots[[5]]
 the_plots1$combo_plots[[6]]
-the_plots1$combo_plots[[7]]
+the_plots1$combo_plots[[7]] 
+the_plots1$combo_plots[[13]]
 
 #original version
 the_plots <- bacterial_signature_asv %>%
