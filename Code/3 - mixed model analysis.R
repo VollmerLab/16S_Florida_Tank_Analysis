@@ -345,11 +345,12 @@ crasher_t3_strict <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
 crasher_t7_strict <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
                           'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3))
 
+#bad commensalist def
 commensalist <- list('T3vT7' = c(0, 0, 1/4, 1/4, 1/4, 1/4, -1/4, -1/4, -1/4, -1/4))
 
 #Put tests for one/two sided and directionality into bins. Will combine after post-hoc into meaningful categorization
-two_sided_tests <- tibble(microbial_signature = c('growth_comparisons', 'commensalist'),
-                          contrasts = list(bacterial_growth, commensalist),
+two_sided_tests <- tibble(microbial_signature = c('growth_comparisons'),
+                          contrasts = list(bacterial_growth),
                           direction = '=') #=
 right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
                                               'early_opportunist', 'continuous_opportunist', 'late_opportunist'),
@@ -508,62 +509,97 @@ upset(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_i
 upset(
   comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
   colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-             select(T7, T3, T0, D, H, late_pathogen, early_pathogen, continuous_opportunist, late_opportunist, early_opportunist)), 
+             select(T0, D, H, probiotic_t7_strict, crasher_t7, crasher_t3, late_opportunist, early_opportunist, late_pathogen, early_pathogen)), 
   
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6),
-        mapping=aes(fill=Family, col = Family, label = asv_id), col = "gray10"
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+        mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
-      geom_text(size = 3, position = position_stack(vjust = 0.5), col = "gray10")
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
   ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        "T7" = "#650197",
-        "T3" = "#B21BFF",
-        "T0" = "#D98EFF",
-        "D" = "darkorange",
+        #"T7" = "#650197",
+        #"T3" = "#B21BFF",
+        "T0" = "#B21BFF",
+        "D" = "#AE0404",
         "H" = "#0FAB02",
-        "late_pathogen" = "#CF0C0C",
-        "early_pathogen" = "#FF7575",
-        "continuous_opportunist" = "royalblue4",
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        #"continuous_opportunist" = "royalblue4",
         "late_opportunist" = "deepskyblue3",
-        "early_opportunist" = "lightskyblue"
+        "early_opportunist" = "lightskyblue",
+        "crasher_t3" = "#FF9A00",
+        "crasher_t7" = "#BD5E03",
+        "probiotic_t7_strict" = "#49EACC"
       )
     )
   ),
   queries=list(
-    upset_query(set = "T7", fill = "#650197"),
-    upset_query(set = "T3", fill = "#B21BFF"),
-    upset_query(set = "T0", fill = "#D98EFF"),
-    upset_query(set = "D", fill = "darkorange"),
+    #upset_query(set = "T7", fill = "#650197"),
+    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
+    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "D", fill = "#AE0404"),
     upset_query(set = "H", fill = "#0FAB02"),
-    upset_query(set = "late_pathogen", fill = "#CF0C0C"),
-    upset_query(set = "early_pathogen", fill = "#FF7575"),
-    upset_query(set = "continuous_opportunist", fill = "royalblue4"),
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    #upset_query(set = "continuous_opportunist", fill = "royalblue4"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
-    upset_query(set = "early_opportunist", fill = "lightskyblue")
+    upset_query(set = "early_opportunist", fill = "lightskyblue"),
+    upset_query(set = "crasher_t3", fill = "#FF9A00"),
+    upset_query(set = "crasher_t7", fill = "#BD5E03"),
+    upset_query(set = "probiotic_t7_strict", fill = "#49EACC")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 2), "gray97")) +
-  ggtitle("Bacterial Strategies/Presence Data - 0.1%") 
+  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Bacterial Strategies/Presence Data - 0.01%") 
 
+upset(
+  comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
+  colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(probiotic_t7_strict, crasher_t7, crasher_t3, late_opportunist, early_opportunist, late_pathogen, early_pathogen)), 
+  
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        #"continuous_opportunist" = "royalblue4",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue",
+        "crasher_t3" = "#FF9A00",
+        "crasher_t7" = "#BD5E03",
+        "probiotic_t7_strict" = "#49EACC"
+      )
+    )
+  ),
+  queries=list(
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    #upset_query(set = "continuous_opportunist", fill = "royalblue4"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue"),
+    upset_query(set = "crasher_t3", fill = "#FF9A00"),
+    upset_query(set = "crasher_t7", fill = "#BD5E03"),
+    upset_query(set = "probiotic_t7_strict", fill = "#49EACC")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c(rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Bacterial Strategies - 0.01%") 
 
-# scale_shape_manual(
-#   values=c(
-#     "T7" = "triangle filled",
-#     "T3" = "triangle filled",
-#     "T0" = "triangle filled",
-#     "D" = "triangle filled",
-#     "H" = "triangle filled",
-#     "late_pathogen" = "circle filled",
-#     "early_pathogen" = "circle filled",
-#     "continuous_opportunist" = "circle filled",
-#     "late_opportunist" = "circle filled",
-#     "early_opportunist" = "circle filled"
-#   )
-# )
 
 #need to clean up
 sig_asvs_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
