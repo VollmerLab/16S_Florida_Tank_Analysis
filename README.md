@@ -1,5 +1,12 @@
 # 16S Florida Tank Analysis
 
+- not filtered for D/T3/T7, removed anything that was only T3 & T7 or only T3 or only T7  
+- filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
+
+![plot](./Figures/comp_upset_bacstrat_7_11_23.png)
+
+![plot](./Figures/comp_upset_bacstrat_origin_7_11_23.png)
+
 ## Somewhat Unfiltered Data
 only filtered for 20% prevalence & less than 90% missingness
 
@@ -79,12 +86,6 @@ AND Disease-Exposed Susceptible is less than the average of all other treatments
 ![plot](./Figures/venn0.1.png)  
 ![plot](./Figures/bac_strat_cu0.1.png)  
 
--- in 1% of samples --  
-![plot](./Figures/venn1.png)  
-![plot](./Figures/bac_strat_cu1.png)  
-the 3 candidates:
-![plot](./Figures/plot_1percent.png)  
-ASV 369 isn't significant in the other models
 
 ## significant ASVs - 0.01%
 
