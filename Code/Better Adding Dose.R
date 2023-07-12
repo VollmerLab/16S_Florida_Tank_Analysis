@@ -76,4 +76,4 @@ the_plots123 <- bacterial_signature_asv %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
 the_plots123$plot[[1]]
-the_plots123$combo_plots[[12]]
+the_plots123$combo_plots[[10]]

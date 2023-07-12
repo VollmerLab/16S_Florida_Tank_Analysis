@@ -8,11 +8,11 @@ homogenate_models <- homogenate_data %>%
   mutate(homogenate_pred = list(emmeans(lm(log2_cpm ~ exposure, data = data),
                                         ~exposure) %>%
                                   broom::tidy(conf.int = TRUE) %>% mutate(time = "Dose", 
-                                  graph_cat = "dose", c_time = ifelse(exposure == "D", -1.5, -1.3), susceptability = "na",
+                                  graph_cat = "dose", c_time = ifelse(exposure == "D", -1.5, -1.2), susceptability = "na",
                                   facet_lab = "Doses") %>% 
                                   {. ->> set_one } %>% #save data to this var
                                   mutate(std.error = NA, df = NA, conf.low = NA, conf.high = NA, statistic = NA, p.value = NA,
-                                         c_time = c(-1.8, -1), susceptability = NA, exposure = NA) %>% #dummy set to change size of Dose Facet
+                                         c_time = c(-1.8, -0.9), susceptability = NA, exposure = NA) %>% #dummy set to change size of Dose Facet
                                   rbind(set_one))) #recombine them
 
 
