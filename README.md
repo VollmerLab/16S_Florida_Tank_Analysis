@@ -1,8 +1,5 @@
 # 16S Florida Tank Analysis
 
-## New Stuff
-
-- not filtered for D/T3/T7, removed anything that was only T3 & T7 or only T3 or only T7  
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
 
 ![plot](./Figures/comp_upset_bacstrat_7_11_23.png)
@@ -23,6 +20,7 @@ from Vega Thurber et al 2020:
 ![plot](./Figures/vegathurber_dysbiosis.jpeg)
 
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
+- removed anything that was only T3 & T7 or only T3 or only T7  
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
 - treatment is time, exposure, and susceptibility all combined into one descriptor
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
