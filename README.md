@@ -107,16 +107,12 @@ gray dots are ASVs, colored dots are individual coral fragments
 - INITIAL DATA FILTERS: filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
 
 ##### Correlations based only on T0
-![plot](./Figures/disease_correlation_t0.png)
+![plot](./Figures/disease_corr_t0.png)
 
-![plot](./Figures/dr_corr_plots_t0_neg.png)
-![plot](./Figures/dr_corr_plots_t0_pos.png)
+![plot](./Figures/disease_corr_t3.png)  
 
-##### Correlations based on all timepoints (T0, T3, T7)
-![plot](./Figures/disease_correlation_all.png)
+![plot](./Figures/disease_corr_t7.png)  
 
-![plot](./Figures/dr_corr_plots_all_neg.png)
-![plot](./Figures/dr_corr_plots_all_pos.png)
 
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
