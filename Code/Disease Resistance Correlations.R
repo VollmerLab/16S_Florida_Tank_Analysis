@@ -63,7 +63,28 @@ dr_corr_t0_plot <- ggplot(dr_corr_t0) +
     theme(strip.background = element_rect(color="black", linewidth = 1, linetype="solid"),
           legend.position = "none") +
     scale_color_manual(values = c("#EE3434","#34DFAE")) +
-    ggtitle("Significant Correlations - T0")
+    ggtitle("Significant Correlations - T7")
+
+color_facets(dr_corr_t0_plot, c("#EE3434","#34DFAE"))  
+
+
+
+dr_corr_t0_plot <- ggplot(dr_corr_t0 %>% mutate(fam_col = case_when(Family == "Colwelliaceae" ~ "colwell",
+                                                                    Family == "Rhodobacteraceae" ~ "rhodo",
+                                                                    Family == "Flavobacteriaceae" ~ "flavo",
+                                                                    Family == "Vibrionaceae" ~ "vibrio")) %>%
+                            mutate(fam_col = ifelse(is.na(fam_col), "other", fam_col))) +
+                            #mutate(colwell_col = ifelse(Family == "Colwelliaceae", "colwell", pos_neg))) +
+  geom_hline(yintercept = 0) +
+  geom_point(aes(x = fct_reorder(paste(Family, asv_id, sep = " "), estimate), y = estimate, col = fam_col), size = 3) +
+  coord_flip() +
+  facet_wrap(~pos_neg, scales = "free") +
+  theme_bw() +
+  xlab("ASV") +
+  theme(strip.background = element_rect(color="black", linewidth = 1, linetype="solid")) +
+  scale_color_manual(values = c("firebrick1", "orange", "gray", "deepskyblue", "hotpink")) +
+  #scale_color_manual(values = c("darkred", "#EE3434","#34DFAE")) +
+  ggtitle("Significant Correlations - T0")
 
 color_facets(dr_corr_t0_plot, c("#EE3434","#34DFAE"))  
   
@@ -73,8 +94,8 @@ t0_corr <- dr_corr_t0 %>% select(asv_id, pos_neg)
   ### making plots
 
 disease_corr_plots_all <- asv_models %>% 
-  filter(asv_id %in% all_corr$asv_id) %>% #choose t0 or all
-  inner_join(all_corr, by = 'asv_id') %>% #choose t0 or all
+  filter(asv_id %in% t0_corr$asv_id) %>% #choose t0 or all
+  inner_join(t0_corr, by = 'asv_id') %>% #choose t0 or all
   arrange(pos_neg) %>%
   group_by(asv_id) %>%
   rowwise %>%
