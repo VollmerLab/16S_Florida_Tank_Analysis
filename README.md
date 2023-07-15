@@ -106,18 +106,6 @@ ASV as species, sample id as site
 ![plot](./Figures/sample_nmds.png)  
 gray dots are ASVs, colored dots are individual coral fragments
 
-### Correlation Tests
-- correlation test (cor.test) between log2cpm abundance and continuous resistance value, p < 0.05 at each time point
-- INITIAL DATA FILTERS: filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
-
-##### Correlations based only on T0
-![plot](./Figures/disease_corr_t0.png)
-
-![plot](./Figures/disease_corr_t3.png)  
-
-![plot](./Figures/disease_corr_t7.png)  
-
-
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
