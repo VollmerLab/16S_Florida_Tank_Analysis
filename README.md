@@ -73,6 +73,14 @@ AND Disease-Exposed Susceptible is less than the average of all other treatments
 removed T3 and T7 from complex upset because all ASVs are present in both
 ![plot](./Figures/comp_upset_bacstrat_origin_7_11_23.png)
 
+#### Correlation Matrices
+
+Correlations between the 8 putative pathogen candidates identified by our model  
+![plot](./Figures/pathogen_correlations.png)  
+
+Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)  
+![plot](./Figures/colwell_correlations.png)   
+
 
 #### Heritability
 
