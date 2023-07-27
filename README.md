@@ -1,5 +1,6 @@
 # 16S Florida Tank Analysis
 
+
 ### Somewhat Unfiltered Data
 only filtered for 20% prevalence & less than 90% missingness
 
@@ -88,34 +89,22 @@ removed T3 and T7 from complex upset because all ASVs are present in both
 
 ![plot](./Figures/bac_strat_cp7.png)
 
-##### Different Levels of Filtering
+#### Putative Pathogen Candidates
 
--- in 0.01% of samples --  
-![plot](./Figures/venn0.01.png)  
-![plot](./Figures/bac_strat_cu0.01.png)  
+![plot](./Figures/put_pathogens_heritability.png)
 
--- in 0.1% of samples --  
-![plot](./Figures/venn0.1.png)  
-![plot](./Figures/bac_strat_cu0.1.png)  
+![plot](./Figures/put_pathogens_logfold_table.png)
 
-#### ASV NMDS by bacterial strategy
 
-![plot](./Figures/asv_nmds1.png) 
-ASV as species, sample id as site
+#### ASV NMDS by bacterial strategy  
 
-![plot](./Figures/sample_nmds.png)  
-gray dots are ASVs, colored dots are individual coral fragments
+![plot](./Figures/upd_nmds_time_circles.png)  
 
-### Correlation Tests
-- correlation test (cor.test) between log2cpm abundance and continuous resistance value, p < 0.05 at each time point
-- INITIAL DATA FILTERS: filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
+![plot](./Figures/upd_nmds_bacstrat_circles.png)  
 
-##### Correlations based only on T0
-![plot](./Figures/disease_corr_t0.png)
+![plot](./Figures/upd_nmds_bacstrat_circles_zoomed.png)  
 
-![plot](./Figures/disease_corr_t3.png)  
-
-![plot](./Figures/disease_corr_t7.png)  
+![plot](./Figures/pcoa_bacstrat_circles.png)  
 
 
 ### Microbe Abundances
@@ -123,79 +112,10 @@ gray dots are ASVs, colored dots are individual coral fragments
 
 ![plot](./Figures/microshades_og_susceptibility.png)
 
-# OLD MODEL FIGURES
-
-##### Exposure:Final Disease State
-- category titles are "timepoint_exposure_final disease state
-- **removed** samples that were healthy exposed and contracted WBD
-
-![plot](./Figures/microshades_ordergenus.png)
-
-![plot](./Figures/microshades_classfamily.png)
-
-
-### Remaining ASVs:
-##### Sections of interest are 278 and 104 for a total of 305 ASVs
-![plot](./Figures/Venn.png)
-
-
-##### 382 ASVs gets reduced to 304 ASVs because 78 are significant for nothing
-
-![plot](./Figures/comp_upset_full_subset.png)  
-
-#### If you remove ASVs that are only significant for time, only 172 remain:
-##### legend is describing diseased relative to healthy ("up" means it's significantly higher in disease, etc...)
-
-![plot](./Figures/comp_upset_ls.png)
-
-##### only ASVs that are significantly more abundant in D than H:
-###### updates to preprocessing data have increased this subset by 35
-![plot](./Figures/comp_upset_vls.png)
-
-#### Significant ASV Counts by Family
-removed any families where the only significant term in the whole family is time
-![plot](./Figures/signifs_by_family.png)
-
-#### Differences in exposure and final disease state
-![plot](./Figures/fds_exp_diffs.png)
-
-### Most Abundant Families in each Timepoint and Final Disease State intersection
-**aggregated by Family**  
-
-- selected the 20 most abundant Families in each group and ranked 1-20 (1 is most abundant)  
-- removed any Family that is only present in one of the six groups
-
-![plot](./Figures/most_abun_timepoints.png)
-
-
-### Likely Suspects
-*present in T3, T7, and Diseased bait*  
-*AND differs significantly for either final disease state or the interaction of final disease state and time*  
-
-### Very Likely Suspects
-*present in T3, T7, and Diseased bait*   
-*AND differs significantly for either final disease state or the interaction of final disease state and time*  
-*AND significantly more abundant in diseased than healthy*
-
-![plot](./Figures/emmeans_VLS.png)
-
-## Logfold Changes in Bacterial Abundance
-- positive logfold change means more disease
-- LS vs VLS almost perfectly separates by whether it's more abundant at T3 (LS) or T7 (VLS)
-
-![plot](./Figures/logfold_VLS.png)
+# OLD
 
 ### Potential Link between Rickettsiales and Disease
 
 ![plot](./Figures/rickettsiales_corr.png)
 
-### PCoA
-
-![plot](./Figures/pcoa_fds.png)
-
-![plot](./Figures/pcoa_exp.png)
-
-### NMDS
-
-![plot](./Figures/dual_nmds_plots.png)
 
