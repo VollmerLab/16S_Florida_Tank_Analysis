@@ -1,44 +1,23 @@
 
-tgfff <- bacterial_signature_asv %>% 
+clean_bacstrats <- bacterial_signature_asv %>% 
   group_by(asv_id) %>% 
-  reframe(bacstrat = paste(list(signatures)))
+  reframe(bacstrat = paste(list(signatures))) %>%
+  mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
+                              bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",
+                              bacstrat == 'c("early_pathogen", "early_opportunist")' ~ "early_pathogen",
+                              bacstrat == 'c("late_pathogen", "late_opportunist")' ~ "late_pathogen",
+                              bacstrat == "c(\"probiotic_t7_strict\", \"late_opportunist\")" ~ "late_probiotic",
+                              bacstrat == "crasher_t7" ~ "late_crasher",
+                              bacstrat == "probiotic_t7_strict" ~ "late_probiotic",
+                              bacstrat == 'c("early_pathogen", "late_opportunist")' ~ "early_pathogen",
+                              TRUE ~ bacstrat))
 
-
-testnmds <- full_data %>% 
-  mutate(category = paste(time, exposure, susceptability, sep = "_"), .after = asv_id) %>%
-  select(asv_id, category, log2_cpm) %>%
-  group_by(asv_id, category) %>%
-  summarize(ave_cpm = mean(log2_cpm)) %>%
-  mutate(ave_cpm = str_trim(as.numeric(ave_cpm))) %>%
-  pivot_wider(names_from = category, values_from = ave_cpm) %>%
-  left_join(tgfff, by = join_by("asv_id")) %>%
-  filter(!is.na(bacstrat)) %>%
-  select(-bacstrat) %>%
-  as.matrix()
-
-mat_nmds <- as.matrix(testnmds[, -1])
-rownames(mat_nmds) <- testnmds[,1]
-
-test_num_mat <- matrix(as.numeric(mat_nmds),    # Convert to numeric matrix
-       ncol = ncol(mat_nmds))
-
-rownames(test_num_mat) <- rownames(mat_nmds)
-colnames(test_num_mat) <- colnames(mat_nmds)
-
-dist.f <- vegdist(t(test_num_mat), method = "bray")
-
-test_nmds <- metaMDS(dist.f, distance = 'bray', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
-sppscores(test_nmds) <- test_num_mat
-
-metaMDS(t(test_num_mat), distance = 'bray', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE) %>% plot
-
-t(test_num_mat)
 
 #make plot
 scores(test_nmds)$sites %>%
   as_tibble(rownames = 'asv_names') %>%
   #left_join(metadata, by = 'asv_names') %>%
-  left_join(tgfff, by = c('asv_names' = 'asv_id')) %>%
+  left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
   filter(!is.na(bacstrat)) %>%
   #mutate(bacstrat = ifelse(is.na(bacstrat), "disease_unrelated", bacstrat)) %>%
   mutate(shape_determination = ifelse(str_detect(bacstrat, "disease"), 
@@ -72,9 +51,8 @@ scores(test_nmds)$sites %>%
   
   asv_nmds <- full_data %>% 
     select(asv_id, sample_id, log2_cpm) %>%
-    #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
     pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
-    left_join(tgfff, by = join_by("asv_id")) %>%
+    left_join(clean_bacstrats, by = join_by("asv_id")) %>%
     filter(!is.na(bacstrat)) %>%
     select(-bacstrat) %>%
     column_to_rownames('asv_id') %>%
@@ -89,9 +67,8 @@ scores(test_nmds)$sites %>%
   
 suscep <- full_data %>% 
     select(asv_id, sample_id, resistance) %>%
-    #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
     pivot_wider(names_from = sample_id, values_from = resistance) %>%
-    left_join(tgfff, by = join_by("asv_id")) %>%
+    left_join(clean_bacstrats, by = join_by("asv_id")) %>%
     filter(!is.na(bacstrat)) %>%
     select(-bacstrat) %>%
     column_to_rownames('asv_id') %>%
@@ -109,7 +86,7 @@ suscep <- full_data %>%
     select(asv_id, sample_id, log2_cpm) %>%
     #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
     pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
-    left_join(tgfff, by = join_by("asv_id")) %>%
+    left_join(clean_bacstrats, by = join_by("asv_id")) %>%
     filter(!is.na(bacstrat)) %>%
     select(-bacstrat) %>%
     select(!contains("T0")) %>%
@@ -122,7 +99,7 @@ suscep <- full_data %>%
     select(asv_id, sample_id, resistance) %>%
     #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
     pivot_wider(names_from = sample_id, values_from = resistance) %>%
-    left_join(tgfff, by = join_by("asv_id")) %>%
+    left_join(clean_bacstrats, by = join_by("asv_id")) %>%
     filter(!is.na(bacstrat)) %>%
     select(-bacstrat) %>%
     select(!contains("T0")) %>%
@@ -142,7 +119,7 @@ suscep <- full_data %>%
   
    scores(test_nmds)$site %>%
     as_tibble(rownames = 'asv_names') %>%
-    left_join(tgfff, by = c('asv_names' = 'asv_id')) %>%
+    left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
     filter(!is.na(bacstrat)) %>%
     mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
                                   bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",
@@ -207,7 +184,7 @@ suscep <- full_data %>%
    
    scores(test_nmds)$site %>%
      as_tibble(rownames = 'asv_names') %>%
-     left_join(tgfff, by = c('asv_names' = 'asv_id')) %>%
+     left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
      filter(!is.na(bacstrat)) %>%
      mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
                                  bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",
@@ -277,39 +254,8 @@ suscep <- full_data %>%
    
    
    
+
    
-   
-   
-   data(iris)
-   ii <- iris[,c(1:4)]
-   i.sp<-iris[,c(5)]
-   library(vegan)
-   i.dist <- vegdist(ii, method="euclidean")
-   i.mds <- metaMDS(i.dist, try=50)
-   plot(i.mds, display="sites",type="n",
-        xlab="Axis 1", ylab="Axis 2",
-        main="Iris species")
-   # add color
-   iris$Species
-   iris$col<-c(rep("red",50),rep("green",50),rep("blue",50))
-   points(i.mds, display="sites",
-          pch=21, cex=1,
-          bg=iris$col
-   )
-   text(x=-2.5, y=3,paste("Stress=",round(i.mds$stress,4)))
-   legend("topright",
-          legend=unique(iris$Species),
-          pch=21,
-          pt.bg=unique(iris$col)
-   )
-   
-   
-   i.obs <- ii
-   i.spp <- data.frame(species=iris[,5])
-   head(i.obs)
-   head(i.spp)
-   d.manova <- adonis(i.obs ~ species, method = "euclidean", data= i.spp)
-   d.manova
    
 
    
@@ -321,7 +267,7 @@ suscep <- full_data %>%
    
    pcoa$points %>%
      as_tibble(rownames = 'asv_names') %>%
-     left_join(tgfff, by = c('asv_names' = 'asv_id')) %>%
+     left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
      filter(!is.na(bacstrat)) %>%
      mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
                                  bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",

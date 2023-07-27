@@ -14,6 +14,7 @@ library(relayer) #devtools::install_github("clauswilke/relayer")
 library(ComplexUpset)
 library(corrplot)
 library(Hmisc)
+library(broom.mixed)
 library(tidyverse)
 
 refit_models <- FALSE
@@ -707,11 +708,240 @@ the_plots <- bacterial_signature_asv %>%
 #view the plots
 the_plots$combo_plots[[1]]
 
-#### Emily Work Zone ####
+#### Bac Strat NMDS and PCOA ####
 
-# heritability
+asv_nmds <- full_data %>% 
+  select(asv_id, sample_id, log2_cpm) %>%
+  pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
+  left_join(clean_bacstrats, by = join_by("asv_id")) %>%
+  filter(!is.na(bacstrat)) %>%
+  select(-bacstrat) %>%
+  column_to_rownames('asv_id') %>%
+  t() %>%
+  as.matrix()
 
-library(broom.mixed)
+test_nmds <- metaMDS(t(asv_nmds), distance = 'bray', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
+sppscores(test_nmds) <- t(asv_nmds)
+
+#shepard plot
+plot(test_nmds$diss, test_nmds$dist)
+
+suscep <- full_data %>% 
+  select(asv_id, sample_id, resistance) %>%
+  pivot_wider(names_from = sample_id, values_from = resistance) %>%
+  left_join(clean_bacstrats, by = join_by("asv_id")) %>%
+  filter(!is.na(bacstrat)) %>%
+  select(-bacstrat) %>%
+  column_to_rownames('asv_id') %>%
+  t() %>%
+  as.matrix()
+
+#adonis2 fails but adonis works
+perm.results <- vegan::adonis(asv_nmds ~ suscep, method="bray",perm=999)
+perm.results$aov.tab #p value less than 0.05
+
+
+#plot species or site alone
+plot(test_nmds, "species")
+orditorp(test_nmds, "species")
+
+
+## NMDS with 95% CI around TIMEPOINTS
+
+scores(test_nmds)$site %>%
+  as_tibble(rownames = 'asv_names') %>%
+  left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
+  filter(!is.na(bacstrat)) %>%
+  mutate(shape_determination = case_when(
+    str_detect(bacstrat, "path")  ~ "pathogen",
+    str_detect(bacstrat, "opp")  ~ "opportunist",
+    str_detect(bacstrat, "crash")  ~ "crasher",
+    str_detect(bacstrat, "pro")  ~ "probiotic"
+  )) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
+                 mutate(exp_conditions = str_split(none, "_")) %>%
+                 rowwise() %>%
+                 mutate(time = exp_conditions[1], exposure = exp_conditions[2], resist = exp_conditions[3]), 
+               geom = "polygon", alpha = 0.1, level = 0.95, aes(col = time, fill = time)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
+               mutate(exp_conditions = str_split(none, "_")) %>%
+               rowwise() %>%
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], resist = exp_conditions[3]),
+             size = 1, aes(color = time, shape = exposure)) +
+  geom_point(aes(col = bacstrat, shape = shape_determination), size = 4) + #alpha = shape_determination
+  geom_text(aes(label = parse_number(asv_names)), size = 3) +
+  scale_shape_manual(values = c(
+    "opportunist" = 16,
+    "pathogen" = 17,
+    "crasher" = 15,
+    "probiotic" = 8,
+    "H" = 6,
+    "D" = 4,
+    "REP1" = 3
+  )) +
+  scale_fill_manual(values = c(
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10"
+  ), guide = "none") +
+  scale_color_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2",
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10"
+  )) +
+  guides(color = guide_legend(override.aes = list(fill = NA))) +
+  theme_bw()
+
+
+## NMDS with 95% CI around BACTERIAL STRATEGIES
+
+scores(test_nmds)$site %>%
+  as_tibble(rownames = 'asv_names') %>%
+  left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
+  filter(!is.na(bacstrat)) %>%
+  mutate(shape_determination = case_when(
+    str_detect(bacstrat, "path")  ~ "pathogen",
+    str_detect(bacstrat, "opp")  ~ "opportunist",
+    str_detect(bacstrat, "crash")  ~ "crasher",
+    str_detect(bacstrat, "pro")  ~ "probiotic"
+  )) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  stat_ellipse(geom = "polygon", alpha = 0.1, level = 0.95, aes(col = bacstrat, fill = bacstrat)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
+               mutate(exp_conditions = str_split(none, "_")) %>%
+               rowwise() %>%
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], resist = exp_conditions[3]),
+             size = 1, aes(color = time, shape = exposure)) +
+  geom_point(aes(col = bacstrat, shape = shape_determination), size = 4) + #alpha = shape_determination
+  geom_text(aes(label = parse_number(asv_names)), size = 3) +
+  scale_shape_manual(values = c(
+    "opportunist" = 16,
+    "pathogen" = 17,
+    "crasher" = 15,
+    "probiotic" = 8,
+    "H" = 6,
+    "D" = 4,
+    "REP1" = 3
+  )) +
+  scale_fill_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2"
+  ), guide = "none") +
+  scale_color_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2",
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10"
+  )) +
+  guides(color = guide_legend(override.aes = list(fill = NA))) +
+  theme_bw() #+
+  ylim(-0.3, 0.3) +
+  xlim(-0.3, 0.25)
+
+
+## PCOA with 95% CI around BACTERIAL STRATEGIES
+
+bacstrat_dist_mat <- vegdist(t(asv_nmds))
+bacstrat_pcoa <- cmdscale (bacstrat_dist_mat, eig = TRUE)
+ordiplot (bacstrat_pcoa, display = 'sites', type = 'text')
+
+bacstrat_pcoa$points %>%
+  as_tibble(rownames = 'asv_names') %>%
+  left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
+  filter(!is.na(bacstrat)) %>%
+  mutate(shape_determination = case_when(
+    str_detect(bacstrat, "path")  ~ "pathogen",
+    str_detect(bacstrat, "opp")  ~ "opportunist",
+    str_detect(bacstrat, "crash")  ~ "crasher",
+    str_detect(bacstrat, "pro")  ~ "probiotic"
+  )) %>%
+  ggplot(aes(x = V1, y = V2)) +
+  stat_ellipse(geom = "polygon", alpha = 0.1, level = 0.95, aes(col = bacstrat, fill = bacstrat)) +
+  geom_point(aes(col = bacstrat, shape = shape_determination), size = 4) + 
+  geom_text(aes(label = parse_number(asv_names)), size = 3) +
+  scale_shape_manual(values = c(
+    "opportunist" = 16,
+    "pathogen" = 17,
+    "crasher" = 15,
+    "probiotic" = 8,
+    "H" = 6,
+    "D" = 4,
+    "REP1" = 3
+  )) +
+  scale_fill_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2"
+  ), guide = "none") +
+  scale_color_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2",
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10"
+  )) +
+  guides(color = guide_legend(override.aes = list(fill = NA))) +
+  theme_bw() #+
+  ylim(-0.3, 0.3) +
+  xlim(-0.3, 0.25)
+
+
+#### Emily Miscellaneous ####
+
+    ## Access all ASVs in a given bacterial strategy:
+  
+asvs_by_signature <- bacterial_signature_asv %>%
+  arrange(signatures) %>%
+  group_by(asv_id) %>%
+  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
+  mutate(signatures = case_when(
+        signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
+        signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
+        signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
+        signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
+        signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
+        signatures == "crasher_t7" ~ "late_crasher",
+        signatures == "probiotic_t7_strict" ~ "late_probiotic",
+        TRUE ~ signatures)) %>%
+  filter(signatures == "late_pathogen") %>%
+  #filter(signatures %in% c("continuous_crasher", "late_crasher")) %>%
+  pull(asv_id)
+  
+  
+    ## heritability (random effect of genotype)
 
 heritable_asvs <- asv_models %>%
   rowwise() %>%
@@ -719,33 +949,19 @@ heritable_asvs <- asv_models %>%
          %>% filter(group == "genotype") %>% pull(estimate), .after = asv_id) %>%
   filter(heritability > 0)
 
+#make formattable chart of heritability scores:
 heritable_asvs %>% arrange(desc(heritability)) %>% filter(asv_id %in% asvs_by_signature) %>%
   select(Family, Genus, asv_id, heritability) %>% 
   mutate(heritability = round(heritability, 3)) %>%
   formattable(align = c("c", "c", "c", "c"), list(
     area(col = 4) ~ color_tile("lavender", "purple2")
-  )) %>%
+  )) #%>%
   export_formattable("../Figures/put_pathogens_heritability.png")
 
-#logfold changes
+  
+    ##logfold change between D and H
 
-asvs_by_signature <- bacterial_signature_asv %>%
-  #filter(asv_id %in% c("ASV_202", "ASV_85", "ASV_142", "ASV_132", "ASV_439")) %>%
-  arrange(signatures) %>%
-  group_by(asv_id) %>%
-  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
-  mutate(signatures = case_when(signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
-                                signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
-                                signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
-                                signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
-                                signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
-                                signatures == "crasher_t7" ~ "late_crasher",
-                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
-                                TRUE ~ signatures)) %>%
-  filter(signatures == "late_pathogen") %>%
-  #filter(signatures %in% c("continuous_crasher", "late_crasher")) %>%
-  pull(asv_id)
-
+#make formattable chart showing logfold change of D compared to H at Dose and T7
 significant_models %>%
   filter(asv_id %in% asvs_by_signature) %>%
   select(asv_id, data) %>%
@@ -770,44 +986,10 @@ significant_models %>%
   export_formattable("../Figures/put_pathogens_logfold_table.png")
 
 
+    ## lm models predicting w T0
+  #TAKEAWAY: T0 abundance cannot predict disease resistance
 
-#find asvs that are on ave more abundant in H than D at both T3 and T7 - possible probiotics
-poss_probiotic_list <- normalized_asv_counts %>% 
-  filter(time != "T0") %>% 
-  filter(exposure == "D", susceptability == "S") %>%
-  group_by(asv_id, time, final_disease_state) %>%
-  summarize(aveval = mean(log2_cpm)) %>%
-  ungroup() %>%
-  group_by(asv_id, time) %>%
-  reframe(diff_H_D = aveval[final_disease_state == "H"] - aveval[final_disease_state == "D"]) %>%
-  mutate(diff_H_D = diff_H_D > 0) %>%
-  ungroup() %>%
-  group_by(asv_id) %>%
-  filter(all(diff_H_D)) %>%
-  pull(asv_id)
-
-normalized_asv_counts %>%
-  filter(asv_id %in% poss_probiotic_list) %>%
-  mutate(treatmenttype = paste(exposure, final_disease_state, susceptability, sep = "_")) %>%
-  filter(treatmenttype %in% c("D_D_S", "D_H_S")) %>%
-  ggplot() +
-  geom_jitter(aes(time, log2_cpm, col = treatmenttype, alpha = treatmenttype)) +
-  scale_color_manual(values = c("gray", "red")) +
-  scale_alpha_manual(values = c(0.5, 1)) +
-  facet_wrap(~asv_id) +
-  theme_bw()
-
-# alpha diversity
-
-alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
-  as_tibble(rownames = 'sample_id') %>%
-  inner_join(metadata, by = 'sample_id') %>%
-  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
-
-
-# lm models predicting w T0
-
-ttstt <- full_data %>%
+t0_prediction_lms <- full_data %>%
   filter(time == "T0") %>%
   group_by(asv_id) %>%
   reframe(model = list(lm(log2_cpm ~ susceptability) %>% broom::tidy() %>% 
@@ -815,18 +997,15 @@ ttstt <- full_data %>%
   unnest(model) %>%
   filter(p.value < 0.05)
 
-bacterial_signature_asv %>% filter(asv_id %in% ttstt$asv_id)
-
-#T0 abundance cannot predict disease resistance
+bacterial_signature_asv %>% filter(asv_id %in% t0_prediction_lms$asv_id)
 
 
-#correlation
+    ## Correlation Matrices
 
-
+#corr matrix for 8 putative pathogen candidates only
 
 asv_corr <- full_data %>% 
   select(asv_id, sample_id, Family, log2_cpm) %>%
-  #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
   pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
   mutate(combo_name = paste(Family, asv_id, sep = "_"), .after = asv_id) %>%
   left_join(tgfff, by = join_by("asv_id")) %>%
@@ -837,17 +1016,13 @@ asv_corr <- full_data %>%
   t() %>%
   as.matrix()
 
+asv_corr_mat <- rcorr(asv_corr, type = c("pearson","spearman"))
 
-test <- rcorr(asv_corr, type = c("pearson","spearman"))
-
-corrplot(test$r, type="upper", order="hclust", 
-         p.mat = test$P, sig.level = 0.05, insig = "blank")
-
-col<- colorRampPalette(c("blue", "white", "red"))(20)
-
-heatmap(x = test$r, col = rainbow(10), symm = TRUE)
+corrplot(asv_corr_mat$r, type="upper", order="hclust", 
+         p.mat = asv_corr_mat$P, sig.level = 0.05, insig = "blank")
 
 
+# corr matrix for All Colwelliaceae Thalassotaleas
 
 colwell_corr <- full_data %>% 
   filter(Genus == "Thalassotalea") %>%
@@ -857,12 +1032,12 @@ colwell_corr <- full_data %>%
   t() %>%
   as.matrix()
 
-
 colwell_test <- rcorr(colwell_corr, type = c("pearson","spearman"))
 
 corrplot(colwell_test$r, type="upper", order="hclust", 
          p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
 
+#look at scores of 0.8 and above only:
 
 colwell_test_0.8 <- colwell_test$r
 
@@ -872,8 +1047,14 @@ corrplot(colwell_test_0.8, type="upper", order="hclust",
          p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
 
 
+# alpha diversity
 
+alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
+  as_tibble(rownames = 'sample_id') %>%
+  inner_join(metadata, by = 'sample_id') %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
 
+#[WORK IN PROGRESS]
 
 
 #### JASON Work Zone ####
