@@ -74,6 +74,12 @@ removed T3 and T7 from complex upset because all ASVs are present in both
 ![plot](./Figures/comp_upset_bacstrat_origin_7_11_23.png)
 
 
+#### Heritability
+
+heritability of the crashers (could indicate compromised host if high heritability)  
+
+![plot](./Figures/crashers_heritability.png)  
+
 #### Putative Pathogen Candidates
 
 ![plot](./Figures/put_pathogens_heritability.png)
