@@ -1,8 +1,16 @@
 the_plots12 <- bacterial_signature_asv %>%
-  filter(asv_id %in% c("ASV_161", "ASV_84", "ASV_142")) %>%
+  #filter(asv_id %in% c("ASV_202", "ASV_85", "ASV_142", "ASV_132", "ASV_439")) %>%
   arrange(signatures) %>%
   group_by(asv_id) %>%
   summarise(signatures = str_c(signatures, collapse = ', ')) %>%
+  mutate(signatures = case_when(signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
+                                signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
+                                signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
+                                signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
+                                signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
+                                signatures == "crasher_t7" ~ "late_crasher",
+                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
+                                TRUE ~ signatures)) %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
   rowwise %>%
@@ -27,7 +35,7 @@ the_plots12 <- bacterial_signature_asv %>%
                                                              graph_cat == "H_R" ~ c_time + 0.35))) %>%
                             mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
   left_join(homogenate_models, by = join_by(asv_id)) %>%
-  mutate(plot_info = list(rbind(plot_info, homogenate_pred))) %>%
+  mutate(plot_info = list(rbind(plot_info, homogenate_pred) %>% mutate(sig_p = ifelse(p.value < 0.05, "sig", "nonsig")))) %>%
   #mutate(plot_info = list(rbind(plot_info, buffer_space))) %>%
   rowwise() %>%
   mutate(plot = list(
@@ -44,6 +52,8 @@ the_plots12 <- bacterial_signature_asv %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
       (geom_point(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), size = 3, aes(colour2 = graph_cat, pch = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
+      
+      geom_point(data = (plot_info %>% filter(exposure == "p_val")), size = 5, col = "gray20", pch = "*", aes(alpha = sig_p)) +
       
       (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & susceptability == "na")), size = 3.7, aes(colour3 = exposure), shape = "diamond") %>%
          rename_geom_aes(new_aes = c("colour" = "colour3"))) +
@@ -65,6 +75,7 @@ the_plots12 <- bacterial_signature_asv %>%
         colour3 = guide_legend(
           override.aes=list(linetype = c(0, 0)))) +
       scale_x_continuous(breaks=c(0, 3, 7)) +
+      scale_alpha_manual(values = c("sig" = 1, "nonsig" = 0), guide = "none") +
       scale_linetype_manual(values = c(1, 6, 1, 6), guide = "none") +
       theme_bw() +
       xlab("Time") +
@@ -76,4 +87,4 @@ the_plots12 <- bacterial_signature_asv %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
 the_plots12$plot[[1]]
-the_plots12$combo_plots[[1]]
+the_plots12$combo_plots[[9]]

@@ -719,6 +719,48 @@ the_plots$plots[[6]]
 
 #### Emily Work Zone ####
 
+#logfold changes
+
+asvs_by_signature <- bacterial_signature_asv %>%
+  #filter(asv_id %in% c("ASV_202", "ASV_85", "ASV_142", "ASV_132", "ASV_439")) %>%
+  arrange(signatures) %>%
+  group_by(asv_id) %>%
+  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
+  mutate(signatures = case_when(signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
+                                signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
+                                signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
+                                signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
+                                signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
+                                signatures == "crasher_t7" ~ "late_crasher",
+                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
+                                TRUE ~ signatures)) %>%
+  filter(signatures == "late_pathogen") %>%
+  pull(asv_id)
+
+significant_models %>%
+  filter(asv_id %in% asvs_by_signature) %>%
+  select(asv_id, data) %>%
+  unnest(data) %>%
+  select(asv_id, sample_id, log2_cpm, exposure, time) %>%
+  rbind(homogenate_data %>%
+          mutate(time = "dose")) %>%
+  filter(time %in% c("dose", "T7")) %>%
+  group_by(asv_id, time, exposure) %>%
+  reframe(ave_val = mean(log2_cpm)) %>%
+  ungroup() %>%
+  group_by(asv_id, time) %>%
+  reframe(logfold_change = ave_val[exposure == "D"] - ave_val[exposure == "H"]) %>%
+  mutate(logfold_change = round(logfold_change, 2)) %>%
+  pivot_wider(names_from = time, values_from = logfold_change) %>%
+  select(asv_id, dose, T7) %>%
+  filter(!is.na(dose) & !is.na(T7)) %>%
+  rename("asv_id" = "ASV", "dose" = "Dose Logfold Change", "T7" = "T7 Logfold Change") %>%
+  formattable(align = c("l", "c", "c"), list(
+    area(col = c(2,3)) ~ color_tile("white", "firebrick1")
+  )) %>%
+  export_formattable("../Figures/put_pathogens_logfold_table.png")
+
+
 #find asvs that are on ave more abundant in H than D at both T3 and T7 - possible probiotics
 poss_probiotic_list <- normalized_asv_counts %>% 
   filter(time != "T0") %>% 

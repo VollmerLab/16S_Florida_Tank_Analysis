@@ -227,7 +227,7 @@ venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data,
   filter(tank != "homogenate_fragment") %>%
   filter(Abundance > 0) %>%
   mutate(time = if_else(time == 'T0' & tank == "HOMO", exposure, time)) %>%
-  #filter(OTU %in% venn_group) %>%
+  filter(OTU %in% venn_group) %>%
   group_by(time, OTU) %>%
   summarise(n = sum(Abundance),
             .groups = 'drop') %>%
@@ -235,7 +235,7 @@ venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data,
   mutate(across(-OTU, ~. > 0)) %>% 
   mutate(T0_H = ifelse(H | T0, TRUE, FALSE))
 
-ggvenn(venn_all_times_and_doses, c('D', 'T0_H', 'T3', 'T7')) #+ ggtitle("No Filtering - 459 ASVs")
+ggvenn(venn_all_times_and_doses, c('D', 'T0_H', 'T3', 'T7')) + ggtitle("Minimal Filtering")
 
 upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "asv_names")), 
       c("T7", "T3", "T0", "D", "H"), 
@@ -251,7 +251,7 @@ upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "as
                    upset_query(set='H', color="#0FAB02", fill = "#0FAB02")),
       
       name='asv_names', width_ratio=0.1, min_size = 1, sort_sets = FALSE) + 
-  ggtitle("No Filtering - 459 ASVs")
+  ggtitle("Minimal Filtering")
 
 otus_to_analyze <- filter(otu_timepoint_presence, 
                           (D & T3 & T7)) %>%
