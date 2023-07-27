@@ -73,21 +73,6 @@ AND Disease-Exposed Susceptible is less than the average of all other treatments
 removed T3 and T7 from complex upset because all ASVs are present in both
 ![plot](./Figures/comp_upset_bacstrat_origin_7_11_23.png)
 
-## significant ASVs - 0.01%
-
-![plot](./Figures/bac_strat_cp1.png)
-
-![plot](./Figures/bac_strat_cp2.png)
-
-![plot](./Figures/bac_strat_cp3.png)
-
-![plot](./Figures/bac_strat_cp4.png)
-
-![plot](./Figures/bac_strat_cp5.png)
-
-![plot](./Figures/bac_strat_cp6.png)
-
-![plot](./Figures/bac_strat_cp7.png)
 
 #### Putative Pathogen Candidates
 
@@ -98,12 +83,16 @@ removed T3 and T7 from complex upset because all ASVs are present in both
 
 #### ASV NMDS by bacterial strategy  
 
+95% confidence interval around timepoints  
 ![plot](./Figures/upd_nmds_time_circles.png)  
 
+95% confidence interval around different bacterial strategies  
 ![plot](./Figures/upd_nmds_bacstrat_circles.png)  
 
+the above plot, but zoomed in to show the majority of the points (orange ellipse no longer visible bc of zoom)  
 ![plot](./Figures/upd_nmds_bacstrat_circles_zoomed.png)  
 
+PCOA with 95% confidence intervals  
 ![plot](./Figures/pcoa_bacstrat_circles.png)  
 
 
