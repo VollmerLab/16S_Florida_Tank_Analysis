@@ -81,6 +81,9 @@ Correlations between the 8 putative pathogen candidates identified by our model
 Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)  
 ![plot](./Figures/colwell_correlations.png)   
 
+only correlations 0.8 and above   
+![plot](./Figures/colwell_correlations_0.80.png)   
+
 
 #### Heritability
 
@@ -88,11 +91,11 @@ heritability of the crashers (could indicate compromised host if high heritabili
 
 ![plot](./Figures/crashers_heritability.png)  
 
-#### Putative Pathogen Candidates
+#### Putative Pathogen Candidates  
 
-![plot](./Figures/put_pathogens_heritability.png)
+![plot](./Figures/put_pathogens_heritability.png)  
 
-![plot](./Figures/put_pathogens_logfold_table.png)
+![plot](./Figures/put_pathogens_logfold_table.png)  
 
 
 #### ASV NMDS by bacterial strategy  
