@@ -96,8 +96,15 @@ removed T3 and T7 from complex upset because all ASVs are present in both
 ![plot](./Figures/put_pathogens_logfold_table.png)
 
 
-#### ASV NMDS by bacterial strategy
+#### ASV NMDS by bacterial strategy  
 
+![plot](./Figures/upd_nmds_time_circles.png)  
+
+![plot](./Figures/upd_nmds_bacstrat_circles.png)  
+
+![plot](./Figures/upd_nmds_bacstrat_circles_zoomed.png)  
+
+![plot](./Figures/pcoa_bacstrat_circles.png)  
 
 
 ### Microbe Abundances
