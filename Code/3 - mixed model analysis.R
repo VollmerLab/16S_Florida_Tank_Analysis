@@ -12,6 +12,8 @@ library(qvalue)
 library(patchwork)
 library(relayer) #devtools::install_github("clauswilke/relayer")
 library(ComplexUpset)
+library(corrplot)
+library(Hmisc)
 library(tidyverse)
 
 refit_models <- FALSE
@@ -168,6 +170,9 @@ normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_pr
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
   as.data.frame %>%
   as_tibble(rownames = "asv_names")
+
+homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv', show_col_types = FALSE)
+
 
 #
 #### Plot raw data for an ASV ####
@@ -471,42 +476,18 @@ bacterial_signature_asv %>%
   theme_combmatrix(combmatrix.label.make_space = TRUE)
 
 
-#### emily comp upset ####
+#### Complex Upset for Bacterial Strategies ####
 
+#prep for comp upset
 comp_upset_bac_strat <- bacterial_signature_asv %>%
   pivot_wider(names_from = signatures, values_from = significance)
 
 comp_upset_bac_strat[is.na(comp_upset_bac_strat)] <- FALSE
 
-#need to add taxonomy tibble to this doc
 comp_upset_bac_strat <- comp_upset_bac_strat %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
 
-upset(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
-      colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-                        select(T7, T3, T0, D, H, late_pathogen, early_pathogen, continuous_opportunist, late_opportunist, early_opportunist)), 
-      
-      base_annotations=list(
-        'Intersection size'=intersection_size(counts=T, text = aes(size = 6),
-          mapping=aes(fill=Family, col = Family, label = asv_id), col = "gray10"
-        ) +
-          geom_text(size = 3, position = position_stack(vjust = 0.5), col = "gray10")
-      ),
-      queries=list(upset_query(set='D', color="#DF0000", fill = "#DF0000", shape = 16),
-                   upset_query(set='T0', color="#D98EFF", fill = "#D98EFF", shape = 16),
-                   upset_query(set='T3', color="#B21BFF", fill = "#B21BFF", shape = 16),
-                   upset_query(set='T7', color="#650197", fill = "#650197", shape = 16),
-                   upset_query(set='H', color="#0FAB02", fill = "#0FAB02", shape = 16),
-                   upset_query(set="early_opportunist", color="lightskyblue", fill = "lightskyblue", shape = 16),
-                   upset_query(set="late_opportunist", color="deepskyblue3", fill = "deepskyblue3", shape = 16),
-                   upset_query(set="continuous_opportunist", color="#43B3E3", fill = "#43B3E3", shape = 16),
-                   upset_query(set="early_pathogen", color="#FFAAAA", fill = "#FFAAAA", shape = 16), 
-                   upset_query(set="continuous_pathogen", color="#FF5757", fill = "#FF5757", shape = 16),
-                   upset_query(set="late_pathogen", color="firebrick1", fill = "firebrick1", shape = 16)),
-      
-      name='asv_names', width_ratio=0.1, min_size = 0, sort_sets = FALSE) +
-  ggtitle("Bacterial Strategies - testing")
 
-#BETTER
+### Upset - bacterial strategies and ASV Presence Data
 
 upset(
   comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
@@ -558,7 +539,10 @@ upset(
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
   stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-  ggtitle("Bacterial Strategies/Presence Data - 0.01%") 
+  ggtitle("Bacterial Strategies/Presence Data") 
+
+
+### Upset - just bacterial strategies
 
 upset(
   comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
@@ -600,30 +584,52 @@ upset(
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
   stripes = c(rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-  ggtitle("Bacterial Strategies - 0.01%") 
+  ggtitle("Bacterial Strategies") 
 
 
-#need to clean up
-sig_asvs_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
-  pull(asv_id) %>% unique()
 
-asvs_opp <- comp_upset_bac_strat %>% filter(late_opportunist | early_opportunist | continuous_opportunist) %>%
-  select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% pull(asv_id) %>% unique()
+#### Plot Bacterial Strategy Groupings ####
 
-asvs_path <- comp_upset_bac_strat %>% filter(!asv_id %in% asvs_opp) %>%
-  select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% pull(asv_id) %>% unique()
+## Prep Data for Homogenate Dose Panel
 
-sig_fams_nm <- comp_upset_bac_strat %>% select(colnames(taxonomy_tibble %>% rename("asv_id" = asv_names))) %>% 
-  pull(Family) %>% unique()
+homogenate_models <- homogenate_data %>%
+  #filter(asv_id %in% c('ASV_142', 'ASV_202', 'ASV_84', 'ASV_96', 'ASV_165', 'ASV_85',"ASV_132", "ASV_439")) %>% 
+  nest_by(asv_id) %>%
+  mutate(em_model = list(emmeans(lm(log2_cpm ~ exposure, data = data),
+                                 ~exposure))) %>%
+  mutate(dose_pairwise = em_model %>%
+           contrast('pairwise', adjust = 'fdr') %>%
+           broom::tidy(conf.int = TRUE) %>% pull(p.value)) %>%
+  mutate(homogenate_pred = list(em_model %>%
+                                  broom::tidy(conf.int = TRUE) %>% mutate(time = "Dose", 
+                                                                          graph_cat = "dose", c_time = ifelse(exposure == "D", -1.5, -1.2), susceptability = "na",
+                                                                          facet_lab = "Doses") %>% 
+                                  {. ->> set_one } %>% #save data to this var
+                                  mutate(std.error = NA, df = NA, conf.low = NA, conf.high = NA, statistic = NA, p.value = dose_pairwise,
+                                         c_time = c(-1.8, -0.9), susceptability = NA, exposure = NA) %>% #dummy set to change size of Dose Facet
+                                  rbind(set_one) %>%
+                                  {. ->> set_two } %>%
+                                  arrange(desc(estimate)) %>%
+                                  dplyr::slice(1) %>%
+                                  mutate(exposure = "p_val", c_time = -1.35, estimate = estimate + 3) %>%
+                                  rbind(set_two)
+                                
+  )) #recombine them
 
+## Make Fancy Plots
 
-#### Plot Individual Groupings ####
-
-the_plots1 <- bacterial_signature_asv %>%
-  #filter(asv_id == "ASV_202") %>%
+the_plots <- bacterial_signature_asv %>%
   arrange(signatures) %>%
   group_by(asv_id) %>%
   summarise(signatures = str_c(signatures, collapse = ', ')) %>%
+  mutate(signatures = case_when(signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
+                                signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
+                                signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
+                                signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
+                                signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
+                                signatures == "crasher_t7" ~ "late_crasher",
+                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
+                                TRUE ~ signatures)) %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
   rowwise %>%
@@ -640,16 +646,18 @@ the_plots1 <- bacterial_signature_asv %>%
                             mutate(graph_cat = ifelse(is.na(graph_cat), paste("D", susceptability, sep = "_"), 
                                                       graph_cat)) %>%
                             mutate(c_time = parse_number(time)) %>%
+                            mutate(facet_lab = "Experimental") %>%
                             mutate(c_time = ifelse(time == "T0", ifelse(susceptability == "S", c_time - 0.1, c_time + 0.1),
                                                    case_when(graph_cat == "D_S" ~ c_time - 0.35,
                                                              graph_cat == "H_S" ~ c_time - 0.15,
                                                              graph_cat == "D_R" ~ c_time + 0.15,
                                                              graph_cat == "H_R" ~ c_time + 0.35))) %>%
                             mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
+  left_join(homogenate_models, by = join_by(asv_id)) %>%
+  mutate(plot_info = list(rbind(plot_info, homogenate_pred) %>% mutate(sig_p = ifelse(p.value < 0.05, "sig", "nonsig")))) %>%
   rowwise() %>%
   mutate(plot = list(
-    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                 shape = graph_cat)) +
+    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("D_S", "D_R"))), aes(colour1 = graph_cat, linetype = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), aes(colour2 = graph_cat, linetype = graph_cat)) %>%
@@ -662,60 +670,42 @@ the_plots1 <- bacterial_signature_asv %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
       (geom_point(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), size = 3, aes(colour2 = graph_cat, pch = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
+      
+      geom_point(data = (plot_info %>% filter(exposure == "p_val")), size = 5, col = "gray20", pch = "*", aes(alpha = sig_p)) +
+      
+      (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & susceptability == "na")), size = 3.7, aes(colour3 = exposure), shape = "diamond") %>%
+         rename_geom_aes(new_aes = c("colour" = "colour3"))) +
+      (geom_errorbar(data = (plot_info %>% filter(graph_cat == "dose" & susceptability == "na")), width = 0, aes(colour3 = exposure)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour3"))) + 
+      (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & is.na(exposure))), size = 3, shape = 1, col = "black", alpha = 0)) +
+      
       scale_color_manual(aesthetics = "colour1", values = c("#F75D5D", "#A70000"), guide = "legend", 
                          name = "Disease Exposed", labels = c("Susceptible", "Resistant")) +
+      scale_color_manual(aesthetics = "colour3", values = c("#F10A0A", "#29A5B2"), guide = "legend", 
+                         name = "Doses", labels = c("Diseased", "Healthy")) +
       scale_shape_manual(values = c(17, 16, 17, 16), guide = "none") +
       scale_color_manual(aesthetics = "colour2", values = c("#3DD8EA", "#048291"), guide = "legend", 
                          name = "Healthy Exposed", labels = c("Susceptible", "Resistant")) +
       guides(colour1 = guide_legend(
         override.aes=list(linetype = c(6, 1), shape = c(16, 17))),
         colour2 = guide_legend(
-          override.aes=list(linetype = c(6, 1), shape = c(16, 17)))) +
+          override.aes=list(linetype = c(6, 1), shape = c(16, 17))),
+        colour3 = guide_legend(
+          override.aes=list(linetype = c(0, 0)))) +
       scale_x_continuous(breaks=c(0, 3, 7)) +
+      scale_alpha_manual(values = c("sig" = 1, "nonsig" = 0), guide = "none") +
       scale_linetype_manual(values = c(1, 6, 1, 6), guide = "none") +
       theme_bw() +
       xlab("Time") +
       ylab(expression("Normalized log"[2]*" (cpm)")) +
-      labs(title = str_c(Family, " ", Genus, " (", asv_id, ")", sep = "")) 
+      labs(title = str_c(Family, " ", Genus, " (", asv_id, ")", sep = "")) +
+      facet_grid(cols = vars(facet_lab), space = "free", scales = "free_x")
   )) %>%
   group_by(signatures) %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
-the_plots1$combo_plots[[1]]
-the_plots1$combo_plots[[2]]
-the_plots1$combo_plots[[3]]
-the_plots1$combo_plots[[4]]
-the_plots1$combo_plots[[5]]
-the_plots1$combo_plots[[6]]
-the_plots1$combo_plots[[11]] 
-the_plots1$combo_plots[[12]]
-
-#original version
-the_plots <- bacterial_signature_asv %>%
-  arrange(signatures) %>%
-  group_by(asv_id) %>%
-  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
-  inner_join(significant_models,
-             by = 'asv_id') %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
-  group_by(signatures) %>%
-  summarise(plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
-
-the_plots$plots[[1]]
-the_plots$plots[[2]]
-the_plots$plots[[3]]
-the_plots$plots[[4]]
-the_plots$plots[[5]]
-the_plots$plots[[6]]
-
+#view the plots
+the_plots$combo_plots[[1]]
 
 #### Emily Work Zone ####
 
@@ -831,19 +821,19 @@ bacterial_signature_asv %>% filter(asv_id %in% ttstt$asv_id)
 
 
 #correlation
-library("Hmisc")
+
 
 
 asv_corr <- full_data %>% 
   select(asv_id, sample_id, Family, log2_cpm) %>%
   #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
   pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
-  mutate(combo_name = paste(Family, asv_id, sep = "_"))
+  mutate(combo_name = paste(Family, asv_id, sep = "_"), .after = asv_id) %>%
   left_join(tgfff, by = join_by("asv_id")) %>%
   filter(!is.na(bacstrat)) %>%
   filter(bacstrat %in% c('c("late_pathogen", "late_opportunist")', "late_pathogen")) %>%
-  select(-bacstrat) %>%
-  column_to_rownames('asv_id') %>%
+  select(-c(bacstrat, asv_id, Family)) %>%
+  column_to_rownames('combo_name') %>%
   t() %>%
   as.matrix()
 
@@ -852,6 +842,11 @@ test <- rcorr(asv_corr, type = c("pearson","spearman"))
 
 corrplot(test$r, type="upper", order="hclust", 
          p.mat = test$P, sig.level = 0.05, insig = "blank")
+
+col<- colorRampPalette(c("blue", "white", "red"))(20)
+
+heatmap(x = test$r, col = rainbow(10), symm = TRUE)
+
 
 
 colwell_corr <- full_data %>% 
@@ -868,9 +863,20 @@ colwell_test <- rcorr(colwell_corr, type = c("pearson","spearman"))
 corrplot(colwell_test$r, type="upper", order="hclust", 
          p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
 
-library("corrplot")
 
-#### Work Zone ####
+colwell_test_0.8 <- colwell_test$r
+
+colwell_test_0.8[colwell_test_0.8 < 0.8] <- 0
+
+corrplot(colwell_test_0.8, type="upper", order="hclust", 
+         p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
+
+
+
+
+
+
+#### JASON Work Zone ####
 tmp <- filter(significant_models, 
               `fdr_DS(T7-T3)` < 0.05,
               `fdr_T7(DSvHR.DR.HS)` < 0.05,

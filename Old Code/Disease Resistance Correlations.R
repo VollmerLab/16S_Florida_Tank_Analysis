@@ -43,13 +43,14 @@ color_facets(dr_corr_all_plot, c("#EE3434","#34DFAE"))
 #T0 only
   
 dr_corr_t0 <- full_data %>%
-    filter(time == "T0") %>%
+    filter(time == "T7") %>%
     group_by(asv_id) %>%
     filter(length(unique(zapsmall(log2_cpm))) > 1) %>%
     summarize(corr_val = broom::tidy(cor.test(log2_cpm, resistance))) %>%
     left_join(taxonomy_tibble %>% select(asv_names, Family, Genus), by = c("asv_id" = "asv_names")) %>%
     unnest(corr_val) %>%
     select(-c(method, alternative)) %>%
+    mutate(p.value = p.adjust(p.value, 'fdr')) %>%
     filter(p.value < 0.05) %>%
     mutate(pos_neg = ifelse(estimate < 0, "Negative Correlation", "Positive Correlation"))
   
@@ -63,7 +64,7 @@ dr_corr_t0_plot <- ggplot(dr_corr_t0) +
     theme(strip.background = element_rect(color="black", linewidth = 1, linetype="solid"),
           legend.position = "none") +
     scale_color_manual(values = c("#EE3434","#34DFAE")) +
-    ggtitle("Significant Correlations - T7")
+    ggtitle("Significant Correlations - T0")
 
 color_facets(dr_corr_t0_plot, c("#EE3434","#34DFAE"))  
 
@@ -84,7 +85,7 @@ dr_corr_t0_plot <- ggplot(dr_corr_t0 %>% mutate(fam_col = case_when(Family == "C
   theme(strip.background = element_rect(color="black", linewidth = 1, linetype="solid")) +
   scale_color_manual(values = c("firebrick1", "orange", "gray", "deepskyblue", "hotpink")) +
   #scale_color_manual(values = c("darkred", "#EE3434","#34DFAE")) +
-  ggtitle("Significant Correlations - T0")
+  ggtitle("Significant Correlations - T7")
 
 color_facets(dr_corr_t0_plot, c("#EE3434","#34DFAE"))  
   
