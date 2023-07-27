@@ -83,12 +83,16 @@ removed T3 and T7 from complex upset because all ASVs are present in both
 
 #### ASV NMDS by bacterial strategy  
 
+95% confidence interval around timepoints  
 ![plot](./Figures/upd_nmds_time_circles.png)  
 
+95% confidence interval around different bacterial strategies  
 ![plot](./Figures/upd_nmds_bacstrat_circles.png)  
 
+the above plot, but zoomed in to show the majority of the points (orange ellipse no longer visible bc of zoom)  
 ![plot](./Figures/upd_nmds_bacstrat_circles_zoomed.png)  
 
+PCOA with 95% confidence intervals  
 ![plot](./Figures/pcoa_bacstrat_circles.png)  
 
 
