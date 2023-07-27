@@ -719,6 +719,24 @@ the_plots$plots[[6]]
 
 #### Emily Work Zone ####
 
+# heritability
+
+library(broom.mixed)
+
+heritable_asvs <- asv_models %>%
+  rowwise() %>%
+  mutate(heritability = model %>% broom.mixed::tidy("ran_pars") 
+         %>% filter(group == "genotype") %>% pull(estimate), .after = asv_id) %>%
+  filter(heritability > 0)
+
+heritable_asvs %>% arrange(desc(heritability)) %>% filter(asv_id %in% asvs_by_signature) %>%
+  select(Family, Genus, asv_id, heritability) %>% 
+  mutate(heritability = round(heritability, 3)) %>%
+  formattable(align = c("c", "c", "c", "c"), list(
+    area(col = 4) ~ color_tile("lavender", "purple2")
+  )) %>%
+  export_formattable("../Figures/put_pathogens_heritability.png")
+
 #logfold changes
 
 asvs_by_signature <- bacterial_signature_asv %>%
@@ -735,6 +753,7 @@ asvs_by_signature <- bacterial_signature_asv %>%
                                 signatures == "probiotic_t7_strict" ~ "late_probiotic",
                                 TRUE ~ signatures)) %>%
   filter(signatures == "late_pathogen") %>%
+  #filter(signatures %in% c("continuous_crasher", "late_crasher")) %>%
   pull(asv_id)
 
 significant_models %>%
@@ -759,6 +778,7 @@ significant_models %>%
     area(col = c(2,3)) ~ color_tile("white", "firebrick1")
   )) %>%
   export_formattable("../Figures/put_pathogens_logfold_table.png")
+
 
 
 #find asvs that are on ave more abundant in H than D at both T3 and T7 - possible probiotics
@@ -786,6 +806,69 @@ normalized_asv_counts %>%
   scale_alpha_manual(values = c(0.5, 1)) +
   facet_wrap(~asv_id) +
   theme_bw()
+
+# alpha diversity
+
+alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
+  as_tibble(rownames = 'sample_id') %>%
+  inner_join(metadata, by = 'sample_id') %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+
+
+# lm models predicting w T0
+
+ttstt <- full_data %>%
+  filter(time == "T0") %>%
+  group_by(asv_id) %>%
+  reframe(model = list(lm(log2_cpm ~ susceptability) %>% broom::tidy() %>% 
+                         filter(term == "susceptability1"))) %>%
+  unnest(model) %>%
+  filter(p.value < 0.05)
+
+bacterial_signature_asv %>% filter(asv_id %in% ttstt$asv_id)
+
+#T0 abundance cannot predict disease resistance
+
+
+#correlation
+library("Hmisc")
+
+
+asv_corr <- full_data %>% 
+  select(asv_id, sample_id, Family, log2_cpm) %>%
+  #mutate(log2_cpm = str_trim(as.numeric(log2_cpm))) %>%
+  pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
+  mutate(combo_name = paste(Family, asv_id, sep = "_"))
+  left_join(tgfff, by = join_by("asv_id")) %>%
+  filter(!is.na(bacstrat)) %>%
+  filter(bacstrat %in% c('c("late_pathogen", "late_opportunist")', "late_pathogen")) %>%
+  select(-bacstrat) %>%
+  column_to_rownames('asv_id') %>%
+  t() %>%
+  as.matrix()
+
+
+test <- rcorr(asv_corr, type = c("pearson","spearman"))
+
+corrplot(test$r, type="upper", order="hclust", 
+         p.mat = test$P, sig.level = 0.05, insig = "blank")
+
+
+colwell_corr <- full_data %>% 
+  filter(Genus == "Thalassotalea") %>%
+  select(asv_id, sample_id, log2_cpm) %>%
+  pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
+  column_to_rownames('asv_id') %>%
+  t() %>%
+  as.matrix()
+
+
+colwell_test <- rcorr(colwell_corr, type = c("pearson","spearman"))
+
+corrplot(colwell_test$r, type="upper", order="hclust", 
+         p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
+
+library("corrplot")
 
 #### Work Zone ####
 tmp <- filter(significant_models, 
