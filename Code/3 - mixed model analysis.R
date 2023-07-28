@@ -594,7 +594,6 @@ upset(
 ## Prep Data for Homogenate Dose Panel
 
 homogenate_models <- homogenate_data %>%
-  #filter(asv_id %in% c('ASV_142', 'ASV_202', 'ASV_84', 'ASV_96', 'ASV_165', 'ASV_85',"ASV_132", "ASV_439")) %>% 
   nest_by(asv_id) %>%
   mutate(em_model = list(emmeans(lm(log2_cpm ~ exposure, data = data),
                                  ~exposure))) %>%
@@ -630,6 +629,7 @@ the_plots <- bacterial_signature_asv %>%
                                 signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
                                 signatures == "crasher_t7" ~ "late_crasher",
                                 signatures == "probiotic_t7_strict" ~ "late_probiotic",
+                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen"
                                 TRUE ~ signatures)) %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
@@ -709,6 +709,19 @@ the_plots <- bacterial_signature_asv %>%
 the_plots$combo_plots[[1]]
 
 #### Bac Strat NMDS and PCOA ####
+
+clean_bacstrats <- bacterial_signature_asv %>% 
+  group_by(asv_id) %>% 
+  reframe(bacstrat = paste(list(signatures))) %>%
+  mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
+                              bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",
+                              bacstrat == 'c("early_pathogen", "early_opportunist")' ~ "early_pathogen",
+                              bacstrat == 'c("late_pathogen", "late_opportunist")' ~ "late_pathogen",
+                              bacstrat == "c(\"probiotic_t7_strict\", \"late_opportunist\")" ~ "late_probiotic",
+                              bacstrat == "crasher_t7" ~ "late_crasher",
+                              bacstrat == "probiotic_t7_strict" ~ "late_probiotic",
+                              bacstrat == 'c("early_pathogen", "late_opportunist")' ~ "early_pathogen",
+                              TRUE ~ bacstrat))
 
 asv_nmds <- full_data %>% 
   select(asv_id, sample_id, log2_cpm) %>%
@@ -1052,8 +1065,7 @@ simple_comp_upset <- clean_bacstrats %>%
   left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
 
 
-### Upset - bacterial strategies and ASV Presence Data
-
+### Upset - bacterial strategies
 
 upset(
   simple_comp_upset,
@@ -1092,12 +1104,185 @@ upset(
     upset_query(set = "late_crasher", fill = "#BD5E03"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c(rep(c("gray91", "gray97"), 4))) +
-  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  name='ASVs', width_ratio=0.1, min_size = 0) + #, sort_sets = FALSE
   ggtitle("Bacterial Strategies") 
 
+### Upset - bacterial strategies and Presence Data
+
+upset(
+  simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
+  colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(T0, D, H, starts_with("cont"), starts_with("late"), starts_with("early"))),
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        #"T7" = "#650197",
+        #"T3" = "#B21BFF",
+        "T0" = "#B21BFF",
+        "D" = "#AE0404",
+        "H" = "#0FAB02",
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        "continuous_pathogen" = "firebrick4",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue",
+        "continuous_crasher" = "#FF9A00",
+        "late_crasher" = "#BD5E03",
+        "late_probiotic" = "#49EACC"
+      )
+    )
+  ),
+  queries=list(
+    #upset_query(set = "T7", fill = "#650197"),
+    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
+    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "D", fill = "#AE0404"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    upset_query(set = "continuous_pathogen", fill = "firebrick4"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue"),
+    upset_query(set = "continuous_crasher", fill = "#FF9A00"),
+    upset_query(set = "late_crasher", fill = "#BD5E03"),
+    upset_query(set = "late_probiotic", fill = "#49EACC")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Bacterial Strategies/Presence Data") 
+
+
+### Pathogens Only
+
+pathogen_upset <- upset(
+  simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% 
+    filter(continuous_pathogen | early_pathogen | late_pathogen),
+  colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(T0, D, H, continuous_pathogen, late_pathogen, early_pathogen)),
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+    scale_fill_manual(values = c(
+      "Colwelliaceae" = "#CE2220",
+      "Flavobacteriaceae" = "#E67F33",
+      "Fokiniaceae" = "#7EB875",
+      "Francisellaceae" = "#D0B541",
+      "Oligoflexaceae" = "#57A2AC",
+      "P13-46" = "#7C4942",
+      "Hyphomonadaceae" = "#4E78C4",
+      "Puniceicoccaceae" = "#B997C7", 
+      "Rhodobacteraceae" = "#824D99",
+      "Sphingomonadaceae" = "pink"
+    ))
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        #"T7" = "#650197",
+        #"T3" = "#B21BFF",
+        "T0" = "#B21BFF",
+        "D" = "#AE0404",
+        "H" = "#0FAB02",
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        "continuous_pathogen" = "firebrick4"
+      )
+    )
+  ),
+  queries=list(
+    #upset_query(set = "T7", fill = "#650197"),
+    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
+    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "D", fill = "#AE0404"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    upset_query(set = "continuous_pathogen", fill = "firebrick4")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Putative Pathogen Candidates Only") 
+
+
+
+opportunist_upset <- upset(
+  simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% mutate(Family = factor(Family)) %>%
+    filter(early_opportunist | late_opportunist),
+  colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(T0, D, H, late_opportunist, early_opportunist)),
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      scale_fill_manual(values = c(
+        "Colwelliaceae" = "#CE2220",
+        "Flavobacteriaceae" = "#E67F33",
+        "Fokiniaceae" = "#7EB875",
+        "Francisellaceae" = "#D0B541",
+        "Oligoflexaceae" = "#57A2AC",
+        "P13-46" = "#7C4942",
+        "Hyphomonadaceae" = "#4E78C4",
+        "Puniceicoccaceae" = "#B997C7", 
+        "Rhodobacteraceae" = "#824D99",
+        "Sphingomonadaceae" = "pink"
+      ))
+  ),
   
+ 
+  
+  
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        #"T7" = "#650197",
+        #"T3" = "#B21BFF",
+        "T0" = "#B21BFF",
+        "D" = "#AE0404",
+        "H" = "#0FAB02",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue"
+      )
+    )
+  ),
+  queries=list(
+    #upset_query(set = "T7", fill = "#650197"),
+    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
+    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "D", fill = "#AE0404"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Putative Opportunist Candidates Only") 
+
+
+
+wrap_plots(pathogen_upset, opportunist_upset) + 
+  plot_layout(guides = 'collect')
+
+
+
+#& plot_annotation(title = signatures)
 
 
 #### JASON Work Zone ####
