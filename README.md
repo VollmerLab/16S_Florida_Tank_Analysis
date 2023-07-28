@@ -68,6 +68,8 @@ AND Disease-Exposed Susceptible is less than the average of all other treatments
 
 ##### Model Results:
 
+![plot](./Figures/simplified_comp_upset.png)  
+
 ![plot](./Figures/comp_upset_bacstrat_7_11_23.png)
 
 removed T3 and T7 from complex upset because all ASVs are present in both
