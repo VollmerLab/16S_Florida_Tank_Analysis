@@ -728,6 +728,7 @@ asv_nmds <- full_data %>%
   pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
   left_join(clean_bacstrats, by = join_by("asv_id")) %>%
   filter(!is.na(bacstrat)) %>%
+  filter(!bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
   select(-bacstrat) %>%
   column_to_rownames('asv_id') %>%
   t() %>%
@@ -815,9 +816,8 @@ scores(test_nmds)$site %>%
   theme_bw()
 
 
-## NMDS with 95% CI around BACTERIAL STRATEGIES
 
-scores(test_nmds)$site %>%
+facet_nmds_t3 <- scores(test_nmds)$site %>%
   as_tibble(rownames = 'asv_names') %>%
   left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
   filter(!is.na(bacstrat)) %>%
@@ -828,51 +828,162 @@ scores(test_nmds)$site %>%
     str_detect(bacstrat, "pro")  ~ "probiotic"
   )) %>%
   ggplot(aes(x = NMDS1, y = NMDS2)) +
-  stat_ellipse(geom = "polygon", alpha = 0.1, level = 0.95, aes(col = bacstrat, fill = bacstrat)) +
-  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
-               mutate(exp_conditions = str_split(none, "_")) %>%
+  stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+                 left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+                 mutate(exp_conditions = str_split(sample_id, "_")) %>%
+                 rowwise() %>%
+                 mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+                 mutate(exp_res = paste(exposure, susceptability, sep = "_")) %>%
+                 filter(time == "T3"), 
+               geom = "polygon", alpha = 0.1, level = 0.95, aes(col = exp_res, fill = exp_res, linetype = exp_res)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+               left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+               mutate(exp_conditions = str_split(sample_id, "_")) %>%
                rowwise() %>%
-               mutate(time = exp_conditions[1], exposure = exp_conditions[2], resist = exp_conditions[3]),
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+               mutate(exp_res = paste(exposure, susceptability, sep = "_")),
              size = 1, aes(color = time, shape = exposure)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+               left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+               mutate(exp_conditions = str_split(sample_id, "_")) %>%
+               rowwise() %>%
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+               mutate(exp_res = paste(exposure, susceptability, sep = "_")) %>%
+               filter(time == "T3"),
+             size = 1, aes(color = exp_res, shape = exposure)) +
   geom_point(aes(col = bacstrat, shape = shape_determination), size = 4) + #alpha = shape_determination
   geom_text(aes(label = parse_number(asv_names)), size = 3) +
+  scale_linetype_manual(values = c(
+    "D_S" = "dashed",
+    "H_S" = "dashed",
+    "D_R" = "solid",
+    "H_R" = "solid"
+  ), guide = "none") +
   scale_shape_manual(values = c(
     "opportunist" = 16,
     "pathogen" = 17,
     "crasher" = 15,
-    "probiotic" = 8,
+    "probiotic" = 18,
     "H" = 6,
     "D" = 4,
-    "REP1" = 3
+    "REP1" = 7
   )) +
   scale_fill_manual(values = c(
-    "continuous_crasher" = "sandybrown",
-    "continuous_pathogen" = "firebrick4",
-    "late_crasher" = "darkorange2",
-    "late_probiotic" = "aquamarine",
-    "early_pathogen" = "hotpink",
-    "late_pathogen" = "firebrick1",
-    "early_opportunist" = "deepskyblue3",
-    "late_opportunist" = "royalblue2"
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10",
+    "D_S" = "#F75D5D",
+    "H_S" = "#3DD8EA",
+    "D_R" = "#A70000",
+    "H_R" = "#048291"
   ), guide = "none") +
   scale_color_manual(values = c(
     "continuous_crasher" = "sandybrown",
     "continuous_pathogen" = "firebrick4",
     "late_crasher" = "darkorange2",
-    "late_probiotic" = "aquamarine",
+    "late_probiotic" = "aquamarine2",
     "early_pathogen" = "hotpink",
     "late_pathogen" = "firebrick1",
     "early_opportunist" = "deepskyblue3",
     "late_opportunist" = "royalblue2",
     "T0" = "gray80",
-    "T3" = "gray40",
-    "T7" = "gray10"
+    "T3" = "gray55",
+    "T7" = "gray55",
+    "D_S" = "#F75D5D",
+    "H_S" = "#3DD8EA",
+    "D_R" = "#A70000",
+    "H_R" = "#048291"
   )) +
   guides(color = guide_legend(override.aes = list(fill = NA))) +
-  theme_bw() #+
-  ylim(-0.3, 0.3) +
-  xlim(-0.3, 0.25)
+  theme_bw() +
+  ylim(-0.26, 0.245) +
+  xlim(-0.25, 0.33) +
+  ggtitle("T3")
 
+facet_nmds_t7 <- scores(test_nmds)$site %>%
+  as_tibble(rownames = 'asv_names') %>%
+  left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
+  filter(!is.na(bacstrat)) %>%
+  mutate(shape_determination = case_when(
+    str_detect(bacstrat, "path")  ~ "pathogen",
+    str_detect(bacstrat, "opp")  ~ "opportunist",
+    str_detect(bacstrat, "crash")  ~ "crasher",
+    str_detect(bacstrat, "pro")  ~ "probiotic"
+  )) %>%
+  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+                 left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+                 mutate(exp_conditions = str_split(sample_id, "_")) %>%
+                 rowwise() %>%
+                 mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+                 mutate(exp_res = paste(exposure, susceptability, sep = "_")) %>%
+                 filter(time == "T7"), 
+               geom = "polygon", alpha = 0.1, level = 0.95, aes(col = exp_res, fill = exp_res, linetype = exp_res)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+               left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+               mutate(exp_conditions = str_split(sample_id, "_")) %>%
+               rowwise() %>%
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+               mutate(exp_res = paste(exposure, susceptability, sep = "_")),
+             size = 1, aes(color = time, shape = exposure)) +
+  geom_point(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
+               left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
+               mutate(exp_conditions = str_split(sample_id, "_")) %>%
+               rowwise() %>%
+               mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+               mutate(exp_res = paste(exposure, susceptability, sep = "_")) %>%
+               filter(time == "T7"),
+             size = 1, aes(color = exp_res, shape = exposure)) +
+  geom_point(aes(col = bacstrat, shape = shape_determination), size = 4) + #alpha = shape_determination
+  geom_text(aes(label = parse_number(asv_names)), size = 3) +
+  scale_linetype_manual(values = c(
+    "D_S" = "dashed",
+    "H_S" = "dashed",
+    "D_R" = "solid",
+    "H_R" = "solid"
+  ), guide = "none") +
+  scale_shape_manual(values = c(
+    "opportunist" = 16,
+    "pathogen" = 17,
+    "crasher" = 15,
+    "probiotic" = 18,
+    "H" = 6,
+    "D" = 4,
+    "REP1" = 7
+  )) +
+  scale_fill_manual(values = c(
+    "T0" = "gray80",
+    "T3" = "gray40",
+    "T7" = "gray10",
+    "D_S" = "#F75D5D",
+    "H_S" = "#3DD8EA",
+    "D_R" = "#A70000",
+    "H_R" = "#048291"
+  ), guide = "none") +
+  scale_color_manual(values = c(
+    "continuous_crasher" = "sandybrown",
+    "continuous_pathogen" = "firebrick4",
+    "late_crasher" = "darkorange2",
+    "late_probiotic" = "aquamarine2",
+    "early_pathogen" = "hotpink",
+    "late_pathogen" = "firebrick1",
+    "early_opportunist" = "deepskyblue3",
+    "late_opportunist" = "royalblue2",
+    "T0" = "gray80",
+    "T3" = "gray55",
+    "T7" = "gray55",
+    "D_S" = "#F75D5D",
+    "H_S" = "#3DD8EA",
+    "D_R" = "#A70000",
+    "H_R" = "#048291"
+  )) +
+  guides(color = guide_legend(override.aes = list(fill = NA))) +
+  theme_bw() +
+  ylim(-0.26, 0.245) +
+  xlim(-0.25, 0.33) +
+  ggtitle("T7")
+
+wrap_plots(facet_nmds_t3, facet_nmds_t7) + plot_layout(guides = 'collect')
 
 ## PCOA with 95% CI around BACTERIAL STRATEGIES
 
@@ -1019,10 +1130,13 @@ asv_corr <- full_data %>%
 
 asv_corr_mat <- rcorr(asv_corr, type = c("pearson","spearman"))
 
+
+
 corrplot(asv_corr_mat$r, type="upper", order="hclust", 
-         p.mat = asv_corr_mat$P, sig.level = 0.05, insig = "blank")
+         p.mat = asv_corr_mat$P, sig.level = 0.05, insig = "blank",
+         col.lim = c(0,1), col = rep(brewer.pal(11,"Spectral"), 2), tl.col = "gray20")
 
-
+brewer.pal(11,"Spectral")
 # corr matrix for All Colwelliaceae Thalassotaleas
 
 colwell_corr <- full_data %>% 
@@ -1036,17 +1150,9 @@ colwell_corr <- full_data %>%
 colwell_test <- rcorr(colwell_corr, type = c("pearson","spearman"))
 
 corrplot(colwell_test$r, type="upper", order="hclust", 
-         p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
-
-#look at scores of 0.8 and above only:
-
-colwell_test_0.8 <- colwell_test$r
-
-colwell_test_0.8[colwell_test_0.8 < 0.8] <- 0
-
-corrplot(colwell_test_0.8, type="upper", order="hclust", 
-         p.mat = colwell_test$P, sig.level = 0.05, insig = "blank")
-
+         p.mat = colwell_test$P, sig.level = 0.05, insig = "blank",
+         #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
+         col.lim = c(-0.2,1), col = c(rep("gray30", 6), brewer.pal(11,"Spectral")), tl.col = "gray20")
 
 # alpha diversity
 
