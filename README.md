@@ -83,9 +83,6 @@ Correlations between the 8 putative pathogen candidates identified by our model
 Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)  
 ![plot](./Figures/colwell_correlations.png)   
 
-only correlations 0.8 and above   
-![plot](./Figures/colwell_correlations_0.80.png)   
-
 
 #### Heritability
 
