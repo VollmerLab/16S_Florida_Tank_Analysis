@@ -480,21 +480,21 @@ bacterial_signature_asv %>%
 #### Complex Upset for Bacterial Strategies ####
 
 #prep for comp upset
-comp_upset_bac_strat <- bacterial_signature_asv %>%
-  pivot_wider(names_from = signatures, values_from = significance)
-
-comp_upset_bac_strat[is.na(comp_upset_bac_strat)] <- FALSE
-
-comp_upset_bac_strat <- comp_upset_bac_strat %>% left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
+comp_upset_bac_strat <- bacterial_signature_asv %>% 
+  pivot_wider(names_from = signatures, values_from = significance) %>%
+  mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .))) %>% 
+  left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
 
 
 ### Upset - bacterial strategies and ASV Presence Data
+
+#  colnames(simple_comp_upset %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)))))
 
 upset(
   comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
   colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T0, D, H, probiotic_t7_strict, crasher_t7, crasher_t3, late_opportunist, early_opportunist, late_pathogen, early_pathogen)), 
-  
+
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
@@ -923,20 +923,8 @@ bacstrat_pcoa$points %>%
 
     ## Access all ASVs in a given bacterial strategy:
   
-asvs_by_signature <- bacterial_signature_asv %>%
-  arrange(signatures) %>%
-  group_by(asv_id) %>%
-  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
-  mutate(signatures = case_when(
-        signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
-        signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
-        signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
-        signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
-        signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
-        signatures == "crasher_t7" ~ "late_crasher",
-        signatures == "probiotic_t7_strict" ~ "late_probiotic",
-        TRUE ~ signatures)) %>%
-  filter(signatures == "late_pathogen") %>%
+asvs_by_signature <- clean_bacstrats %>%
+  filter(bacstrat == "late_pathogen") %>%
   #filter(signatures %in% c("continuous_crasher", "late_crasher")) %>%
   pull(asv_id)
   
@@ -1055,6 +1043,61 @@ alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
 
 #[WORK IN PROGRESS]
+
+#### Simplified Complex Upset ####
+simple_comp_upset <- clean_bacstrats %>% 
+  mutate(sig = TRUE) %>%
+  pivot_wider(names_from = bacstrat, values_from = sig) %>%
+  mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .))) %>% 
+  left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
+
+
+### Upset - bacterial strategies and ASV Presence Data
+
+
+upset(
+  simple_comp_upset,
+  colnames(simple_comp_upset %>%
+             select(starts_with("cont"), starts_with("late"), starts_with("early"))), 
+  
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        "continuous_pathogen" = "firebrick4",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue",
+        "continuous_crasher" = "#FF9A00",
+        "late_crasher" = "#BD5E03",
+        "late_probiotic" = "#49EACC"
+      )
+    )
+  ),
+  queries=list(
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    upset_query(set = "continuous_pathogen", fill = "firebrick4"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue"),
+    upset_query(set = "continuous_crasher", fill = "#FF9A00"),
+    upset_query(set = "late_crasher", fill = "#BD5E03"),
+    upset_query(set = "late_probiotic", fill = "#49EACC")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c(rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Bacterial Strategies") 
+
+  
 
 
 #### JASON Work Zone ####
