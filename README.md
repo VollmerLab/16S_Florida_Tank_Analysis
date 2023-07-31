@@ -24,7 +24,7 @@ from Vega Thurber et al 2020:
 - filter 20% prevalence, less than 90% missingness, remove ASVs with an average of less than *100* cpm per sample
 - removed anything that was only T3 & T7 or only T3 or only T7  
 - lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
-- treatment is time, exposure, and susceptibility all combined into one descriptor
+- treatment is time, exposure, and tank all combined into one descriptor
 - examine fdr corrected p-values for treatment, genotype, and tank: only keep ASVs w/ significant effect of treatment
 - make planned comparisons, then group ASVs into early/late/continuous and probiotic/opportunist/pathogen based on expected profiles for those strategies
 
