@@ -102,11 +102,8 @@ heritability of the crashers (could indicate compromised host if high heritabili
 95% confidence interval around timepoints  
 ![plot](./Figures/upd_nmds_time_circles.png)  
 
-95% confidence interval around different bacterial strategies  
-![plot](./Figures/upd_nmds_bacstrat_circles.png)  
-
-the above plot, but zoomed in to show the majority of the points (orange ellipse no longer visible bc of zoom)  
-![plot](./Figures/upd_nmds_bacstrat_circles_zoomed.png)  
+95% confidence interval around exposure + resistance combos, faceted by timepoint
+![plot](./Figures/faceted_nmds.png)  
 
 PCOA with 95% confidence intervals  
 ![plot](./Figures/pcoa_bacstrat_circles.png)  
