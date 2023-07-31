@@ -1228,7 +1228,7 @@ all_metrics_tp %>%
     #Index values range from near 0 (1/s) (patchy or skewed) to 1 (even), and the index 
     #is relatively unaffected by sites with very few individuals.
 #pielou is shannon diversity index value divided by the maximum possible shannon diversity index given
-    #complete evenness (proportion 0 to 1)
+    #complete evenness (proportion 0 to 1) - closer to 1 is closer to complete evenness
 #evar is based on the variance in abundance over the species taken over log abundance
     #so proportional differences are compared, then converted to a 0-1 scale by arctan
 #bulla gives equal weight to all species regardless of abundance so it's 

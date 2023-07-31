@@ -1154,12 +1154,111 @@ corrplot(colwell_test$r, type="upper", order="hclust",
          #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
          col.lim = c(-0.2,1), col = c(rep("gray30", 6), brewer.pal(11,"Spectral")), tl.col = "gray20")
 
-# alpha diversity
+#### alpha diversity ####
 
 alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
   inner_join(metadata, by = 'sample_id') %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
+
+mod_alpha_tab <- alpha_table %>%
+  filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
+  mutate(treatment = str_c(time, exposure, susceptability, sep = '_')) %>%
+  pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
+               names_to = 'metric',
+               values_to = 'alpha_div_value') %>%
+  select(-c(retain_sample, final_disease_state, clone_group)) %>%
+  nest_by(metric) %>%
+  summarise(alpha_model = list(lmer(alpha_div_value ~ treatment + 
+                                (1 | genotype) + (1 | tank), data = data))) %>% 
+  rowwise() %>% 
+  mutate(sig_terms = list(anova(alpha_model) %>% 
+                            rownames_to_column(var = "sig_term") %>% 
+                            as_tibble() %>% 
+                            rename(`Pr(>F)` = "p_val") %>%
+                            mutate(fdr_p_val = p.adjust(p_val, method = 'fdr')) %>%
+                            filter(fdr_p_val < 0.05) %>%
+                            filter(sig_term != "time") %>%
+                            pull(sig_term))) %>%
+  filter(length(sig_terms) > 0) %>%
+  select(-sig_terms) %>%
+  mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
+           
+## figuring out the fig
+
+alpha_graphs <- mod_alpha_tab %>%
+  rowwise() %>%
+  mutate(plot_info = list(emmeans(alpha_model, ~treatment) %>%
+                          broom::tidy(conf.int = TRUE) %>%
+                          separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
+                          mutate(graph_cat = ifelse(time == "T0", NA, 
+                                                    paste(exposure, susceptability, sep = "_"))) %>%
+                          {. ->> intermed } %>%
+                          mutate(graph_cat = ifelse(time == "T0", paste("H", susceptability, sep = "_"), 
+                                                    graph_cat)) %>%
+                          dplyr::slice(rep(1:2, 1)) %>%
+                          rbind(intermed) %>%
+                          mutate(graph_cat = ifelse(is.na(graph_cat), paste("D", susceptability, sep = "_"), 
+                                                    graph_cat)) %>%
+                          mutate(c_time = parse_number(time)) %>%
+                          mutate(facet_lab = "Experimental") %>%
+                          mutate(c_time = ifelse(time == "T0", ifelse(susceptability == "S", c_time - 0.1, c_time + 0.1),
+                                                 case_when(graph_cat == "D_S" ~ c_time - 0.35,
+                                                           graph_cat == "H_S" ~ c_time - 0.15,
+                                                           graph_cat == "D_R" ~ c_time + 0.15,
+                                                           graph_cat == "H_R" ~ c_time + 0.35))) %>%
+                          mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
+  rowwise() %>%
+  mutate(plot = list(
+    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
+      (geom_line(data = (plot_info %>% filter(graph_cat %in% c("D_S", "D_R"))), aes(colour1 = graph_cat, linetype = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
+      (geom_line(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), aes(colour2 = graph_cat, linetype = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour2"))) +
+      (geom_errorbar(data = (plot_info %>% filter(graph_cat %in% c("D_S", "D_R"))), width = 0, aes(colour1 = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
+      (geom_errorbar(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), width = 0, aes(colour2 = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour2"))) +
+      (geom_point(data = (plot_info %>% filter(graph_cat %in% c("D_S", "D_R"))), size = 3, aes(colour1 = graph_cat, pch = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
+      (geom_point(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), size = 3, aes(colour2 = graph_cat, pch = graph_cat)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour2"))) +
+      
+      
+      (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & susceptability == "na")), size = 3.7, aes(colour3 = exposure), shape = "diamond") %>%
+         rename_geom_aes(new_aes = c("colour" = "colour3"))) +
+      (geom_errorbar(data = (plot_info %>% filter(graph_cat == "dose" & susceptability == "na")), width = 0, aes(colour3 = exposure)) %>%
+         rename_geom_aes(new_aes = c("colour" = "colour3"))) + 
+      (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & is.na(exposure))), size = 3, shape = 1, col = "black", alpha = 0)) +
+      
+      scale_color_manual(aesthetics = "colour1", values = c("#F75D5D", "#A70000"), guide = "legend", 
+                         name = "Disease Exposed", labels = c("Susceptible", "Resistant")) +
+      scale_color_manual(aesthetics = "colour3", values = c("#F10A0A", "#29A5B2"), guide = "legend", 
+                         name = "Doses", labels = c("Diseased", "Healthy")) +
+      scale_shape_manual(values = c(17, 16, 17, 16), guide = "none") +
+      scale_color_manual(aesthetics = "colour2", values = c("#3DD8EA", "#048291"), guide = "legend", 
+                         name = "Healthy Exposed", labels = c("Susceptible", "Resistant")) +
+      guides(colour1 = guide_legend(
+        override.aes=list(linetype = c(6, 1), shape = c(16, 17))),
+        colour2 = guide_legend(
+          override.aes=list(linetype = c(6, 1), shape = c(16, 17))),
+        colour3 = guide_legend(
+          override.aes=list(linetype = c(0, 0)))) +
+      scale_x_continuous(breaks=c(0, 3, 7)) +
+      
+      scale_linetype_manual(values = c(1, 6, 1, 6), guide = "none") +
+      theme_bw() +
+      xlab("Time") +
+      ylab(expression("Normalized log"[2]*" (cpm)")) +
+      labs(title = metric)
+  )) %>%
+  group_by(alpha_type) %>%
+  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = alpha_type)))
+
+
+alpha_graphs$combo_plots[[5]]
+
+
 
 #[WORK IN PROGRESS]
 
@@ -1280,6 +1379,7 @@ pathogen_upset <- upset(
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      ylim(0, 8) +
     scale_fill_manual(values = c(
       "Colwelliaceae" = "#CE2220",
       "Flavobacteriaceae" = "#E67F33",
