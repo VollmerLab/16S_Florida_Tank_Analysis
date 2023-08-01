@@ -12,6 +12,72 @@
 ![plot](./Figures/alpha_div4.png)  
 ![plot](./Figures/alpha_div5.png)  
 
+
+#observed is observed species richness
+#chao1 is nonparametric method for estimating the number of species in a community,
+    #based on the concept that rare species infer the most information about the number of missing species
+    #particularly useful for data sets skewed toward the low-abundance species
+
+#dominance
+
+#dbp is the relative abundance of the most abundant species of the sample.
+    #Index gives values in interval 0 to 1, where bigger value represent greater dominance
+#dmn is the sum of relative abundances of the two most abundant species of the sample
+#absolute index equals to the absolute abundance of the most dominant n species of the sample
+    #(specify the number with the argument ntaxa)
+#relative index equals to the relative abundance of the most dominant n species of the sample
+    #(specify the number with the argument ntaxa). This index gives values in interval 0 to 1
+#simpson's lambda is the probability that two randomly chosen individuals belongs to the same species.
+    #The higher the probability, the greater the dominance
+#core_abundance is the sum of relative abundances of core species in the sample.
+    #Index gives values in interval 0 to 1, where bigger value represent greater dominance
+    #Core species are species that are most abundant in all samples
+#gini measures how unevenly abundances are distributed
+    #If there is small group of species that represent large portion of total abundance of microbes,
+    #the inequality is large and Gini index closer to 1. If all species has equally large abundances,
+    #the equality is perfect and Gini index equals 0
+
+#Rarity and low abundance
+
+#log_modulo_skewness is a rarity index that characterizes the concentration of species at low abundance.
+    #It uses the skewness of the frequency distribution of arithmetic abundance classes
+#low abundance gives the concentration of species at low abundance, or the relative proportion of rare
+    #species in [0,1].The species that are below the indicated detection threshold are considered rare.
+    # #use "detection = " (ex: detection = 0.2/100)
+    #Note that population prevalence is not considered. If the detection argument is a vector,
+    #then a data.frame is returned, one column for each detection threshold.
+#rare abundance gives the relative proportion of rare species in the interval [0,1].
+    #(rare = those that are not part of the core microbiota)
+    #This is the complement (1-x) of the core abundance. The rarity function provides the
+    #abundance of the least abundant taxa within each sample, regardless of the population prevalence.
+
+#Diversity
+
+#inverse_simpson is an indication of the richness in a community with uniform evenness that would have
+    #the same level of diversity, calculated as 1/lambda where lambda is the simpson index
+#gini-simpson measures the probability that two randomly selected individuals belong to different species
+    #1 - lambda where lambda is the simpson index
+#shannon shows how diverse the species in a given community are
+    #It rises with the number of species and the evenness of their abundance
+#fisher's alpha describes mathematically the relationship between the number of species
+    #and the number of individuals in those species
+#coverage gives the number of groups needed to have a given proportion of the ecosystem occupied
+    #(by default is 0.5 ie 50%)
+
+#Evenness
+
+#camargo's compares proportions of individuals between sites, with 1 being even and 0 being patchy
+    #relatively unaffected by sites with very few organisms, and is unaffected by site richness
+#simpson's evenness is a variant of the reciprocal Simpson index
+    #Index values range from near 0 (1/s) (patchy or skewed) to 1 (even), and the index
+    #is relatively unaffected by sites with very few individuals.
+#pielou is shannon diversity index value divided by the maximum possible shannon diversity index given
+    #complete evenness (proportion 0 to 1) - closer to 1 is closer to complete evenness
+#evar is based on the variance in abundance over the species taken over log abundance
+    #so proportional differences are compared, then converted to a 0-1 scale by arctan
+#bulla gives equal weight to all species regardless of abundance so it's
+    #sensitive to the presence of rare species
+
 ## Other Analysis
 
 ### Somewhat Unfiltered Data
