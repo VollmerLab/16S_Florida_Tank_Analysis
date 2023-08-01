@@ -46,6 +46,7 @@
 #core_abundance is the sum of relative abundances of core species in the sample.
     #Index gives values in interval 0 to 1, where bigger value represent greater dominance
     #Core species are species that are most abundant in all samples
+    #Relative proportion of the core species that exceed detection level 0.2% in over 50% of the samples
 
 #gini measures how unevenly abundances are distributed
     #If there is small group of species that represent large portion of total abundance of microbes,
