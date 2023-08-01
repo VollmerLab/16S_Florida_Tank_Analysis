@@ -779,7 +779,14 @@ adonis2(asvs_dist ~ as.factor(nmds_sample_metadat$time), method="bray",perm=999)
 # SIG: time - 0.001; exposure - 0.001; tank - 0.001
 # NON-SIG: susceptibility - 0.054 (discrete DR); resistance - 0.992 (cont DR); genotype - 1
 
+trial_nmds_sample_metadat <- nmds_sample_metadat %>%
+  mutate(ex_res = paste(exposure, susceptability, sep = "_")) %>%
+  mutate(treatment = str_c(time, exposure, susceptability, sep = '_'))
 
+dispersion<-betadisper(asvs_dist, group=trial_nmds_sample_metadat$treatment)
+permutest(dispersion)
+anova(dispersion)
+plot(dispersion, hull=FALSE, ellipse=TRUE)
 
 #plot species or site alone
 plot(test_nmds, "species")
