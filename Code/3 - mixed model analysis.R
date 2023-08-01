@@ -740,23 +740,6 @@ sppscores(test_nmds) <- t(asv_nmds)
 #shepard plot
 plot(test_nmds$diss, test_nmds$dist)
 
-suscep <- full_data %>% 
-  select(asv_id, sample_id, resistance) %>%
-  pivot_wider(names_from = sample_id, values_from = resistance) %>%
-  left_join(clean_bacstrats, by = join_by("asv_id")) %>%
-  filter(!is.na(bacstrat)) %>%
-  select(-bacstrat) %>%
-  column_to_rownames('asv_id') %>%
-  t() %>%
-  as.matrix()
-
-#adonis2 fails but adonis works
-perm.results <- vegan::adonis(asv_nmds ~ suscep, method="bray",perm=999)
-perm.results$aov.tab #p value less than 0.05
-
-#better version below - diff results though ?
-
-
 # permanova
 
 nmds_sample_metadat <- full_data %>% 
@@ -773,11 +756,15 @@ asv_nmds_no_colnames <- nmds_sample_metadat %>%
 
 asvs_dist <- vegdist(asv_nmds_no_colnames, method='bray')
 
-adonis2(asvs_dist ~ as.factor(nmds_sample_metadat$time), method="bray",perm=999)
-
+adonis2(asvs_dist ~ time * (exposure + susceptability) + genotype + tank, data = nmds_sample_metadat, perm=999)
 
 # SIG: time - 0.001; exposure - 0.001; tank - 0.001
 # NON-SIG: susceptibility - 0.054 (discrete DR); resistance - 0.992 (cont DR); genotype - 1
+
+set.seed(0830)
+
+adonis2(asvs_dist ~ genotype + time + tank, data = nmds_sample_metadat, perm=999)
+
 
 trial_nmds_sample_metadat <- nmds_sample_metadat %>%
   mutate(ex_res = paste(exposure, susceptability, sep = "_")) %>%
@@ -787,6 +774,8 @@ dispersion<-betadisper(asvs_dist, group=trial_nmds_sample_metadat$treatment)
 permutest(dispersion)
 anova(dispersion)
 plot(dispersion, hull=FALSE, ellipse=TRUE)
+
+
 
 #plot species or site alone
 plot(test_nmds, "species")
@@ -875,7 +864,7 @@ facet_nmds_t3 <- scores(test_nmds)$site %>%
     str_detect(bacstrat, "crash")  ~ "crasher",
     str_detect(bacstrat, "pro")  ~ "probiotic"
   )) %>%
-  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  ggplot(aes(x = -NMDS1, y = NMDS2)) +
   stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
                  left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
                  mutate(exp_conditions = str_split(sample_id, "_")) %>%
@@ -945,7 +934,8 @@ facet_nmds_t3 <- scores(test_nmds)$site %>%
   guides(color = guide_legend(override.aes = list(fill = NA))) +
   theme_bw() +
   ylim(-0.26, 0.245) +
-  xlim(-0.25, 0.33) +
+  xlim(-0.33, 0.25) +
+  xlab("NMDS1") +
   ggtitle("T3")
 
 facet_nmds_t7 <- scores(test_nmds)$site %>%
@@ -958,7 +948,7 @@ facet_nmds_t7 <- scores(test_nmds)$site %>%
     str_detect(bacstrat, "crash")  ~ "crasher",
     str_detect(bacstrat, "pro")  ~ "probiotic"
   )) %>%
-  ggplot(aes(x = NMDS1, y = NMDS2)) +
+  ggplot(aes(x = -NMDS1, y = NMDS2)) +
   stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = "sample_id") %>% 
                  left_join((full_data %>% select(sample_id, susceptability) %>% distinct()), by = join_by("sample_id")) %>%
                  mutate(exp_conditions = str_split(sample_id, "_")) %>%
@@ -1028,7 +1018,8 @@ facet_nmds_t7 <- scores(test_nmds)$site %>%
   guides(color = guide_legend(override.aes = list(fill = NA))) +
   theme_bw() +
   ylim(-0.26, 0.245) +
-  xlim(-0.25, 0.33) +
+  xlim(-0.33, 0.25) +
+  xlab("NMDS1") +
   ggtitle("T7")
 
 wrap_plots(facet_nmds_t3, facet_nmds_t7) + plot_layout(guides = 'collect')
