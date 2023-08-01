@@ -1,5 +1,14 @@
 # 16S Florida Tank Analysis
 
+## Alpha Diversity
+
+![plot](./Figures/alpha_div1.png)  
+![plot](./Figures/alpha_div2.png)  
+![plot](./Figures/alpha_div3.png)  
+![plot](./Figures/alpha_div4.png)  
+![plot](./Figures/alpha_div5.png)  
+
+## Other Analysis
 
 ### Somewhat Unfiltered Data
 only filtered for 20% prevalence & less than 90% missingness
