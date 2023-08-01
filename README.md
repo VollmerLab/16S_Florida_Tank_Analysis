@@ -203,9 +203,11 @@ heritability of the crashers (could indicate compromised host if high heritabili
 
 #### ASV NMDS by bacterial strategy  
 
-95% confidence intervals around significant factors (susceptibility only marginally sig)  
+95% confidence intervals around significant factors 
 ![plot](./Figures/sig_ellipses_nmds.png)  
-pvals: time (0.001); exposure (0.001); tank (0.001); susceptibility (0.054)
+![plot](./Figures/adonis_sig_table.png)
+
+![plot](./Figures/betadisper_plot.png.png)   
 
 95% confidence interval around exposure + resistance combos, faceted by timepoint
 ![plot](./Figures/faceted_nmds.png)  
