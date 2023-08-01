@@ -755,6 +755,33 @@ perm.results <- vegan::adonis(asv_nmds ~ suscep, method="bray",perm=999)
 perm.results$aov.tab #p value less than 0.05
 
 
+
+# permanova
+
+nmds_sample_metadat <- full_data %>% 
+  left_join(clean_bacstrats, by = join_by("asv_id")) %>%
+  filter(!is.na(bacstrat)) %>%
+  filter(!bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
+  select(-c(bacstrat, weight, read_count, reads,lib.size, norm.factors, retain_sample)) %>%
+  select(-(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
+  pivot_wider(names_from = asv_id, values_from = log2_cpm)
+
+
+
+asv_nmds_no_colnames <- nmds_sample_metadat %>% 
+  select(starts_with("ASV_")) %>%
+  as.matrix()
+
+asvs_dist <- vegdist(asv_nmds_no_colnames, method='bray')
+
+adonis2(asvs_dist ~ as.factor(nmds_sample_metadat$time), method="bray",perm=999)
+
+# SIG: time - 0.001; exposure - 0.001; tank - 0.001
+# NON-SIG: susceptability - 0.054 (discrete DR); resistance - 0.992 (cont DR); genotype - 1
+
+
+
+
 #plot species or site alone
 plot(test_nmds, "species")
 orditorp(test_nmds, "species")
@@ -1154,7 +1181,7 @@ corrplot(colwell_test$r, type="upper", order="hclust",
          #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
          col.lim = c(-0.2,1), col = c(rep("gray30", 6), brewer.pal(11,"Spectral")), tl.col = "gray20")
 
-#### alpha diversity ####
+#### Alpha Diversity ####
 
 alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -1258,9 +1285,6 @@ alpha_graphs <- mod_alpha_tab %>%
 
 alpha_graphs$combo_plots[[5]]
 
-
-
-#[WORK IN PROGRESS]
 
 #### Simplified Complex Upset ####
 simple_comp_upset <- clean_bacstrats %>% 
