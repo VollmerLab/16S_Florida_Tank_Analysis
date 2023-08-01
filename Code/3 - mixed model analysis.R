@@ -754,6 +754,7 @@ suscep <- full_data %>%
 perm.results <- vegan::adonis(asv_nmds ~ suscep, method="bray",perm=999)
 perm.results$aov.tab #p value less than 0.05
 
+#better version below - diff results though ?
 
 
 # permanova
@@ -766,8 +767,6 @@ nmds_sample_metadat <- full_data %>%
   select(-(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
   pivot_wider(names_from = asv_id, values_from = log2_cpm)
 
-
-
 asv_nmds_no_colnames <- nmds_sample_metadat %>% 
   select(starts_with("ASV_")) %>%
   as.matrix()
@@ -776,9 +775,9 @@ asvs_dist <- vegdist(asv_nmds_no_colnames, method='bray')
 
 adonis2(asvs_dist ~ as.factor(nmds_sample_metadat$time), method="bray",perm=999)
 
-# SIG: time - 0.001; exposure - 0.001; tank - 0.001
-# NON-SIG: susceptability - 0.054 (discrete DR); resistance - 0.992 (cont DR); genotype - 1
 
+# SIG: time - 0.001; exposure - 0.001; tank - 0.001
+# NON-SIG: susceptibility - 0.054 (discrete DR); resistance - 0.992 (cont DR); genotype - 1
 
 
 
@@ -789,7 +788,9 @@ orditorp(test_nmds, "species")
 
 ## NMDS with 95% CI around TIMEPOINTS
 
-scores(test_nmds)$site %>%
+resist_cats <- full_data %>% select(sample_id, susceptability) %>% distinct()
+
+pan3 <- scores(test_nmds)$site %>%
   as_tibble(rownames = 'asv_names') %>%
   left_join(clean_bacstrats, by = c('asv_names' = 'asv_id')) %>%
   filter(!is.na(bacstrat)) %>%
@@ -803,8 +804,9 @@ scores(test_nmds)$site %>%
   stat_ellipse(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
                  mutate(exp_conditions = str_split(none, "_")) %>%
                  rowwise() %>%
-                 mutate(time = exp_conditions[1], exposure = exp_conditions[2], resist = exp_conditions[3]), 
-               geom = "polygon", alpha = 0.1, level = 0.95, aes(col = time, fill = time)) +
+                 mutate(time = exp_conditions[1], exposure = exp_conditions[2], tank = exp_conditions[3]) %>%
+                 left_join(resist_cats, by = join_by("none" == "sample_id")), 
+               geom = "polygon", alpha = 0.1, level = 0.95, aes(col = exposure, fill = exposure)) +
   geom_point(data = as_tibble(scores(test_nmds)$species, rownames = aggregation_level) %>% 
                mutate(exp_conditions = str_split(none, "_")) %>%
                rowwise() %>%
@@ -824,7 +826,12 @@ scores(test_nmds)$site %>%
   scale_fill_manual(values = c(
     "T0" = "gray80",
     "T3" = "gray40",
-    "T7" = "gray10"
+    "T7" = "gray10",
+    "D" = "red",
+    "H" = "lightskyblue",
+    "REP1" = "lightgreen",
+    "S" = "#3DD8EA",
+    "R" = "#048291"
   ), guide = "none") +
   scale_color_manual(values = c(
     "continuous_crasher" = "sandybrown",
@@ -837,11 +844,18 @@ scores(test_nmds)$site %>%
     "late_opportunist" = "royalblue2",
     "T0" = "gray80",
     "T3" = "gray40",
-    "T7" = "gray10"
+    "T7" = "gray10",
+    "D" = "red",
+    "H" = "lightskyblue",
+    "REP1" = "lightgreen",
+    "S" = "#3DD8EA",
+    "R" = "#048291"
   )) +
   guides(color = guide_legend(override.aes = list(fill = NA))) +
-  theme_bw()
+  theme_bw() +
+  ggtitle("Exposure")
 
+pan1 | pan2 | pan3
 
 
 facet_nmds_t3 <- scores(test_nmds)$site %>%
