@@ -207,7 +207,7 @@ heritability of the crashers (could indicate compromised host if high heritabili
 ![plot](./Figures/sig_ellipses_nmds.png)  
 ![plot](./Figures/adonis_sig_table.png)
 
-![plot](./Figures/betadisper_plot.png.png)   
+![plot](./Figures/betadisper_plot.png)   
 
 95% confidence interval around exposure + resistance combos, faceted by timepoint
 ![plot](./Figures/faceted_nmds.png)  
