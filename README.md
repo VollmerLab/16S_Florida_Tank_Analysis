@@ -2,6 +2,10 @@
 
 ## Alpha Diversity
 
+- lmer model with formula of "log2_cpm ~ treatment + (1 | genotype) + (1 | tank)"
+- treatment is time, exposure, and susceptibility all combined into one descriptor
+- all significant for treatment (only one alpha div metric wasn't sig so not included here)
+
 ![plot](./Figures/alpha_div1.png)  
 ![plot](./Figures/alpha_div2.png)  
 ![plot](./Figures/alpha_div3.png)  
