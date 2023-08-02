@@ -190,10 +190,11 @@ Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)
 
 #### Heritability
 
-heritability of the crashers (could indicate compromised host if high heritability)  
+top 10 highest heritability scores
 
 ![plot](./Figures/top10_heritability.png)  
 
+heritability of putative pathogen candidates
 
 ![plot](./Figures/put_pathogens_heritability.png)  
 
