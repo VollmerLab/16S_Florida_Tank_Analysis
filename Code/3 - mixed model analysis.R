@@ -1088,7 +1088,7 @@ bacstrat_pcoa$points %>%
   
 asvs_by_signature <- clean_bacstrats %>%
   filter(bacstrat == "late_pathogen") %>%
-  #filter(signatures %in% c("continuous_crasher", "late_crasher")) %>%
+  #filter(bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
   pull(asv_id)
   
   
@@ -1096,18 +1096,23 @@ asvs_by_signature <- clean_bacstrats %>%
 
 heritable_asvs <- asv_models %>%
   rowwise() %>%
-  mutate(heritability = model %>% broom.mixed::tidy("ran_pars") 
-         %>% filter(group == "genotype") %>% pull(estimate), .after = asv_id) %>%
-  filter(heritability > 0)
+  mutate(heritability_percent = model %>% broom.mixed::tidy("ran_pars") %>%
+                               mutate(variance = estimate^2, tot_var = sum(variance)) %>% 
+                               filter(group == "genotype") %>% mutate(herit = 100*variance/tot_var) %>%
+                               pull(herit), .after = asv_id) %>%
+  filter(heritability_percent > 0)
+
 
 #make formattable chart of heritability scores:
-heritable_asvs %>% arrange(desc(heritability)) %>% filter(asv_id %in% asvs_by_signature) %>%
-  select(Family, Genus, asv_id, heritability) %>% 
-  mutate(heritability = round(heritability, 3)) %>%
+heritable_asvs %>% arrange(desc(heritability_percent)) %>% #filter(asv_id %in% asvs_by_signature) %>%
+  filter(heritability_percent > 0.1) %>%
+  select(Family, Genus, asv_id, heritability_percent) %>% 
+  mutate(heritability_percent = round(heritability_percent, 3)) %>%
+  #head(10) %>%
   formattable(align = c("c", "c", "c", "c"), list(
-    area(col = 4) ~ color_tile("lavender", "purple2")
+    area(col = 4) ~ color_tile("#FFEBF9", "hotpink")
   )) #%>%
-  export_formattable("../Figures/put_pathogens_heritability.png")
+  export_formattable("../Figures/top10_heritability.png")
 
   
     ##logfold change between D and H
