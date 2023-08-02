@@ -192,13 +192,10 @@ Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)
 
 heritability of the crashers (could indicate compromised host if high heritability)  
 
-![plot](./Figures/crashers_heritability.png)  
+![plot](./Figures/top10_heritability.png)  
 
-#### Putative Pathogen Candidates  
 
 ![plot](./Figures/put_pathogens_heritability.png)  
-
-![plot](./Figures/put_pathogens_logfold_table.png)  
 
 
 #### ASV NMDS by bacterial strategy  
