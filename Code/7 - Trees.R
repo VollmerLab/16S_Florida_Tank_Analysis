@@ -60,6 +60,7 @@ make_tree <- function(asv_data, nboot = 100, make_plot = FALSE){
   return(list(prelim_tree = prelim_tree, bootstraps = bootstrapping))
 }
 
+
 make_tree_plot <- function(tree_output, taxonomy_tibble, fam_name){
   
   # plotBS(midpoint(tree_output$prelim_tree$tree), tree_output$bootstraps)
@@ -73,17 +74,25 @@ make_tree_plot <- function(tree_output, taxonomy_tibble, fam_name){
     #          by = c('tip.label' = 'asv_names')) %>%
     # filter(!str_detect(label, 'ASV'))
     as.treedata() %>%
-    #mutate(likely_color = ifelse(tip.label %in% very_likely_asvs, "very likely", 
-    #                             ifelse(tip.label %in% likely_asvs, "likely", "unlikely"))) %>%
-    mutate(likely_color = ifelse(tip.label %in% asvs_opp, "opportunist", 
-                                 ifelse(tip.label %in% asvs_path, "pathogen", "other"))) %>%
+    #mutate(likely_color = ifelse(tip.label %in% asvs_opp, "opportunist", 
+    #                             ifelse(tip.label %in% asvs_path, "pathogen", "other"))) %>%
+    left_join(clean_bacstrats %>% filter(!bacstrat %in% c("late_crasher","continuous_crasher")), by = c('tip.label' = 'asv_id')) %>%
+    mutate(bacstrat = ifelse(is.na(bacstrat), "other", bacstrat)) %>%
     left_join(taxonomy_tibble %>% select(asv_names, Family, Genus, Species), by = c('tip.label' = 'asv_names')) %>%
     ggtree(ladderize = TRUE, layout = 'rectangular') +
     geom_text(aes(label = ifelse(str_detect(tip.label, 'ASV'), paste(Genus, " (", parse_number(tip.label), ")", 
-                                                                     sep = ""),tip.label), colour = likely_color), hjust = 0) +
+                                                                     sep = ""),tip.label), colour = bacstrat), hjust = 0) +
     geom_text(aes(label = boot_support), hjust = 0) + 
     #scale_color_manual(values = c("very likely" = "red", "likely" = "orange", "unlikely" = "black")) +
-    scale_color_manual(values = c("pathogen" = "firebrick2", "opportunist" = "deepskyblue", "other" = "black")) +
+    scale_color_manual(values = c(
+        "early_pathogen" = "hotpink",
+        "late_opportunist" = "royalblue2",
+        "late_probiotic" = "aquamarine3",
+        "early_opportunist" = "deepskyblue3",
+        "late_pathogen" = "firebrick1",
+        "continuous_pathogen" = "firebrick4",
+        "other" = "black"
+        )) +
     theme(legend.position='top', 
           legend.justification='left',
           legend.direction='horizontal') +
@@ -141,30 +150,28 @@ taxonomy_tibble <- tax_table(microbiome_data) %>%
 
 #### Trees ####
 
-import_fams <- read_rds("../intermediate_files/families_of_interest.rds")
-likely_families <- import_fams[[1]]
-very_likely_families <- import_fams[[2]]
+kept_asvs <- full_data %>% pull(asv_id) %>% unique()
 
-import_asvs <- read_rds("../intermediate_files/important_asvs.rds")
-likely_asvs <- import_asvs[[1]]
-very_likely_asvs <- import_asvs[[2]]
+important_asvs <- clean_bacstrats %>% pull(asv_id) %>% unique()
 
-asvs_path
-asvs_opp
+important_families <- clean_bacstrats %>% 
+  left_join(taxonomy_tibble, by = join_by("asv_id" == "asv_names")) %>% 
+  pull(Family) %>% unique()
+
 
 #format data for becoming a tree
 current_fam <- enframe(sequences, name = 'asv_names', value = 'sequence') %>%
   left_join(taxonomy_tibble, by = 'asv_names') %>%
-  filter(asv_names %in% relevant_asvs) %>%
+  filter(asv_names %in% kept_asvs) %>% #only make trees w ASVs that passed filtering
   rowwise() %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
-  filter(Family %in% sig_fams_nm) %>%
+  filter(Family %in% important_families) %>%
   rowwise %>%
   mutate(n_asv = nrow(data)) %>%
   ungroup %>%
-  filter(n_asv > 2)
+  filter(n_asv > 3)
 
-current_fam <- current_fam %>% filter(Family %in% c("Terasakiellaceae"))
+current_fam <- current_fam %>% filter(Family %in% c("Francisellaceae"))
 
   # cluster <- new_cluster(parallel::detectCores() - 1)
   # cluster_library(cluster, c('dplyr', 'msa', 'Biostrings', 'ape', 'phangorn', 'magrittr', 'treedataverse'))
@@ -173,7 +180,7 @@ current_fam <- current_fam %>% filter(Family %in% c("Terasakiellaceae"))
 plot_list <- current_fam %>%
   unnest(data) %>%
   left_join(full_metadata, by = join_by(asv_names), multiple = "all") %>%
-  mutate(asv_names = paste(Genus, " ", Species, " (", asv_names, ")", sep = "")) %>%
+  mutate(asv_names = paste(asv_names, " (", Genus, " ", Species, ")", sep = "")) %>%
   rowwise() %>%
   nest(data = c(Genus, Species, asv_names, sequence)) %>%
   filter(!is.na(final_disease_state)) %>% ### the metadata for the ones w all NAs were removed by prev filter
@@ -185,6 +192,7 @@ plot_list <- current_fam %>%
          tree_plot = list(possibly(make_tree_plot, otherwise = NULL)(forest, taxonomy_tibble, Family))) %>%
   #collect %>%
   identity()
+
 
 #write_rds(plot_list, "../intermediate_files/family_trees.rds")
 

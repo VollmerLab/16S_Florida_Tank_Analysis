@@ -8,3 +8,4 @@ intermediate_files/plot_model_iter2.rds
 intermediate_files/mixed_model_results.rds.gz
 Old Code/asv_aov_and_plots.rds
 Code/likely_suspects_list.rds
+Data/SILVA_SSU_r138_2019.RData

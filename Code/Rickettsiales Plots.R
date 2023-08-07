@@ -104,7 +104,7 @@ rick_plots <- asv_models %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = Genus)))
 
 #view the plots
-rick_plots$combo_plots[[3]]
+rick_plots$combo_plots[[2]]
 
 
 

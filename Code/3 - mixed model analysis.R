@@ -773,9 +773,57 @@ trial_nmds_sample_metadat <- nmds_sample_metadat %>%
 dispersion<-betadisper(asvs_dist, group=trial_nmds_sample_metadat$treatment)
 permutest(dispersion)
 anova(dispersion)
-plot(dispersion, hull=FALSE, ellipse=TRUE)
+plot(dispersion, hull=FALSE, ellipse=TRUE, conf = 0.95)
 
 
+test <- nmds_sample_metadat %>%
+  select(sample_id, starts_with("ASV_")) %>%
+  column_to_rownames("sample_id") %>%
+  as.matrix()
+
+test_dist <- vegdist(test, method='bray')
+
+asvs_pcoa <- cmdscale (test_dist, eig = TRUE)
+ordiplot (asvs_pcoa, display = 'sites', type = 'text')
+
+
+
+bd_pcoa_data <- asvs_pcoa$points %>%
+  as_tibble(rownames = 'sample_id') %>%
+  left_join(full_data %>% select(sample_id, time, exposure, susceptability, tank, genotype) %>%
+              mutate(treatment = paste(time, exposure, susceptability, sep = "_")) %>%
+              mutate(shape_determ = paste(exposure, susceptability, sep = "_")) %>%
+              distinct(), by = join_by("sample_id"))
+
+bd_pcoa_centroid <- bd_pcoa_data %>% 
+  group_by(treatment) %>%
+  summarize(V1 = mean(V1), V2 = mean(V2))
+
+bd_pcoa_arms <- bd_pcoa_data %>% 
+  group_by(treatment) %>%
+  mutate(V1_cent = mean(V1), V2_cent = mean(V2))
+
+# better version of betadisper plot
+bd_pcoa_arms %>%
+  ggplot(aes(x = V1, y = V2, xend = V1_cent, yend = V2_cent)) +
+  stat_ellipse(level = 0.95, aes(col = treatment)) +
+  geom_point(aes(col = treatment, shape = susceptability), size = 2) + 
+  geom_segment(aes(col = treatment)) +
+  scale_color_brewer(palette = "Paired", direction = -1) +
+  scale_shape_manual(values = c(
+    "R" = 17,
+    "S" = 16
+  )) + 
+  geom_text(data = bd_pcoa_centroid, 
+            aes(label = treatment, x = V1, y = V2), col = "black", inherit.aes = FALSE) +
+  theme_bw()
+
+#plot centroid locations
+bd_pcoa_data %>%
+  ggplot(aes(x = V1, y = V2)) +
+  stat_ellipse(geom = "polygon", alpha = 0.1, level = 0.95, aes(col = treatment, fill = treatment)) +
+  geom_point(aes(col = treatment, shape = shape_determ), size = 4) + 
+  geom_point(data = bd_pcoa_centroid, pch = "*")
 
 #plot species or site alone
 plot(test_nmds, "species")
