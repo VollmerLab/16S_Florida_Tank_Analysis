@@ -203,23 +203,16 @@ heritability of putative pathogen candidates
 
 95% confidence intervals around significant factors 
 ![plot](./Figures/sig_ellipses_nmds.png)  
-![plot](./Figures/adonis_sig_table.png)
 
-![plot](./Figures/betadisper_plot.png)   
+![plot](./Figures/ggplot_betadisper_pcoa.png)   
 
 95% confidence interval around exposure + resistance combos, faceted by timepoint
 ![plot](./Figures/faceted_nmds.png)  
-
-PCOA with 95% confidence intervals  
-![plot](./Figures/pcoa_bacstrat_circles.png)  
-
 
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
-
-# OLD
 
 ### Potential Link between Rickettsiales and Disease
 
