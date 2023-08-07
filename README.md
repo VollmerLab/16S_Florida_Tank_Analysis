@@ -190,10 +190,11 @@ Correlations between all ASVs of the genus Thalassotalea (Colwelliaceaes)
 
 #### Heritability
 
-heritability of the crashers (could indicate compromised host if high heritability)  
+top 10 highest heritability scores
 
 ![plot](./Figures/top10_heritability.png)  
 
+heritability of putative pathogen candidates
 
 ![plot](./Figures/put_pathogens_heritability.png)  
 
@@ -202,23 +203,16 @@ heritability of the crashers (could indicate compromised host if high heritabili
 
 95% confidence intervals around significant factors 
 ![plot](./Figures/sig_ellipses_nmds.png)  
-![plot](./Figures/adonis_sig_table.png)
 
-![plot](./Figures/betadisper_plot.png)   
+![plot](./Figures/ggplot_betadisper_pcoa.png)   
 
 95% confidence interval around exposure + resistance combos, faceted by timepoint
 ![plot](./Figures/faceted_nmds.png)  
-
-PCOA with 95% confidence intervals  
-![plot](./Figures/pcoa_bacstrat_circles.png)  
-
 
 ### Microbe Abundances
 - category titles are "timepoint_exposure_susceptibility"
 
 ![plot](./Figures/microshades_og_susceptibility.png)
-
-# OLD
 
 ### Potential Link between Rickettsiales and Disease
 
