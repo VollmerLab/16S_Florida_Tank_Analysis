@@ -1353,6 +1353,8 @@ alpha_graphs$combo_plots[[5]]
 
 #### Simplified Complex Upset ####
 simple_comp_upset <- clean_bacstrats %>% 
+  filter(!bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
+  filter(!asv_id %in% c("ASV_112", "ASV_288", "ASV_131", "ASV_15", "ASV_127")) %>% #pathogens not in D dose
   mutate(sig = TRUE) %>%
   pivot_wider(names_from = bacstrat, values_from = sig) %>%
   mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .))) %>% 
@@ -1371,7 +1373,26 @@ upset(
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
-      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      ylim(0, 19) +
+      scale_fill_manual(values = c(
+        "Arenicellaceae" = "#BF4728",
+        "Bdellovibrionaceae" = "#B6908B",
+        "Cellvibrionaceae" = "#B5CAF0",
+        "Colwelliaceae" = "#CE2220",
+        "Cryomorphaceae" = "#EBDEA4",
+        "Crocinitomicaceae" = "#306A26",
+        "Flavobacteriaceae" = "#E67F33",
+        "Fokiniaceae" = "#7EB875",
+        "Francisellaceae" = "#D0B541",
+        "Oligoflexaceae" = "#57A2AC",
+        "P13-46" = "#7C4942",
+        "Hyphomonadaceae" = "#4E78C4",
+        "Puniceicoccaceae" = "#B997C7", 
+        "Rhodobacteraceae" = "#824D99",
+        "Saprospiraceae" = "#992572",
+        "Sphingomonadaceae" = "#F3B4DE"
+      ))
   ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
@@ -1379,11 +1400,11 @@ upset(
       values=c(
         "late_pathogen" = "#FF1E1E",
         "early_pathogen" = "#FF9797",
-        "continuous_pathogen" = "firebrick4",
+        #"continuous_pathogen" = "firebrick4",
         "late_opportunist" = "deepskyblue3",
         "early_opportunist" = "lightskyblue",
-        "continuous_crasher" = "#FF9A00",
-        "late_crasher" = "#BD5E03",
+        #"continuous_crasher" = "#FF9A00",
+        #"late_crasher" = "#BD5E03",
         "late_probiotic" = "#49EACC"
       )
     )
@@ -1391,11 +1412,11 @@ upset(
   queries=list(
     upset_query(set = "late_pathogen", fill = "#FF1E1E"),
     upset_query(set = "early_pathogen", fill = "#FF9797"),
-    upset_query(set = "continuous_pathogen", fill = "firebrick4"),
+    #upset_query(set = "continuous_pathogen", fill = "firebrick4"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue"),
-    upset_query(set = "continuous_crasher", fill = "#FF9A00"),
-    upset_query(set = "late_crasher", fill = "#BD5E03"),
+    #upset_query(set = "continuous_crasher", fill = "#FF9A00"),
+    #upset_query(set = "late_crasher", fill = "#BD5E03"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0) + #, sort_sets = FALSE
@@ -1412,7 +1433,25 @@ upset(
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
-      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      scale_fill_manual(values = c(
+        "Arenicellaceae" = "#BF4728",
+        "Bdellovibrionaceae" = "#B6908B",
+        "Cellvibrionaceae" = "#B5CAF0",
+        "Colwelliaceae" = "#CE2220",
+        "Cryomorphaceae" = "#EBDEA4",
+        "Crocinitomicaceae" = "#306A26",
+        "Flavobacteriaceae" = "#E67F33",
+        "Fokiniaceae" = "#7EB875",
+        "Francisellaceae" = "#D0B541",
+        "Oligoflexaceae" = "#57A2AC",
+        "P13-46" = "#7C4942",
+        "Hyphomonadaceae" = "#4E78C4",
+        "Puniceicoccaceae" = "#B997C7", 
+        "Rhodobacteraceae" = "#824D99",
+        "Saprospiraceae" = "#992572",
+        "Sphingomonadaceae" = "#F3B4DE"
+      ))
   ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
@@ -1428,8 +1467,8 @@ upset(
         "continuous_pathogen" = "firebrick4",
         "late_opportunist" = "deepskyblue3",
         "early_opportunist" = "lightskyblue",
-        "continuous_crasher" = "#FF9A00",
-        "late_crasher" = "#BD5E03",
+        #"continuous_crasher" = "#FF9A00",
+        #"late_crasher" = "#BD5E03",
         "late_probiotic" = "#49EACC"
       )
     )
@@ -1445,8 +1484,8 @@ upset(
     upset_query(set = "continuous_pathogen", fill = "firebrick4"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue"),
-    upset_query(set = "continuous_crasher", fill = "#FF9A00"),
-    upset_query(set = "late_crasher", fill = "#BD5E03"),
+    #upset_query(set = "continuous_crasher", fill = "#FF9A00"),
+    #upset_query(set = "late_crasher", fill = "#BD5E03"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
@@ -1459,18 +1498,23 @@ upset(
 
 pathogen_upset <- upset(
   simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% 
-    filter(continuous_pathogen | early_pathogen | late_pathogen),
+    filter(early_pathogen | late_pathogen),
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-             select(T0, D, H, continuous_pathogen, late_pathogen, early_pathogen)),
+             select(T7, T3, T0, D, H, late_pathogen, early_pathogen)),
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
-      ylim(0, 8) +
+      ylim(0,6) +
     scale_fill_manual(values = c(
+      "Arenicellaceae" = "#BF4728",
+      "Bdellovibrionaceae" = "#B6908B",
+      "Cellvibrionaceae" = "#B5CAF0",
       "Colwelliaceae" = "#CE2220",
+      "Cryomorphaceae" = "#EBDEA4",
+      "Crocinitomicaceae" = "#306A26",
       "Flavobacteriaceae" = "#E67F33",
       "Fokiniaceae" = "#7EB875",
       "Francisellaceae" = "#D0B541",
@@ -1479,36 +1523,35 @@ pathogen_upset <- upset(
       "Hyphomonadaceae" = "#4E78C4",
       "Puniceicoccaceae" = "#B997C7", 
       "Rhodobacteraceae" = "#824D99",
-      "Sphingomonadaceae" = "pink"
+      "Saprospiraceae" = "#992572",
+      "Sphingomonadaceae" = "#F3B4DE"
     ))
   ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        #"T7" = "#650197",
-        #"T3" = "#B21BFF",
-        "T0" = "#B21BFF",
+        "T7" = "#650197",
+        "T3" = "#B21BFF",
+        "T0" = "#D98EFF",
         "D" = "#AE0404",
         "H" = "#0FAB02",
         "late_pathogen" = "#FF1E1E",
-        "early_pathogen" = "#FF9797",
-        "continuous_pathogen" = "firebrick4"
+        "early_pathogen" = "#FF9797"
       )
     )
   ),
   queries=list(
-    #upset_query(set = "T7", fill = "#650197"),
-    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
-    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "T7", fill = "#650197"),
+    upset_query(set = "T3", fill = "#B21BFF"),
+    upset_query(set = "T0", fill = "#D98EFF"),
     upset_query(set = "D", fill = "#AE0404"),
     upset_query(set = "H", fill = "#0FAB02"),
     upset_query(set = "late_pathogen", fill = "#FF1E1E"),
-    upset_query(set = "early_pathogen", fill = "#FF9797"),
-    upset_query(set = "continuous_pathogen", fill = "firebrick4")
+    upset_query(set = "early_pathogen", fill = "#FF9797")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85", "gray85")) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Putative Pathogen Candidates Only") 
 
@@ -1518,15 +1561,21 @@ opportunist_upset <- upset(
   simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% mutate(Family = factor(Family)) %>%
     filter(early_opportunist | late_opportunist),
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-             select(T0, D, H, late_opportunist, early_opportunist)),
+             select(T7, T3, T0, D, H, late_opportunist, early_opportunist)),
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      ylim(0, 9) +
       scale_fill_manual(values = c(
+        "Arenicellaceae" = "#BF4728",
+        "Bdellovibrionaceae" = "#B6908B",
+        "Cellvibrionaceae" = "#B5CAF0",
         "Colwelliaceae" = "#CE2220",
+        "Cryomorphaceae" = "#EBDEA4",
+        "Crocinitomicaceae" = "#306A26",
         "Flavobacteriaceae" = "#E67F33",
         "Fokiniaceae" = "#7EB875",
         "Francisellaceae" = "#D0B541",
@@ -1535,7 +1584,8 @@ opportunist_upset <- upset(
         "Hyphomonadaceae" = "#4E78C4",
         "Puniceicoccaceae" = "#B997C7", 
         "Rhodobacteraceae" = "#824D99",
-        "Sphingomonadaceae" = "pink"
+        "Saprospiraceae" = "#992572",
+        "Sphingomonadaceae" = "#F3B4DE"
       ))
   ),
   
@@ -1546,9 +1596,9 @@ opportunist_upset <- upset(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        #"T7" = "#650197",
-        #"T3" = "#B21BFF",
-        "T0" = "#B21BFF",
+        "T7" = "#650197",
+        "T3" = "#B21BFF",
+        "T0" = "#D98EFF",
         "D" = "#AE0404",
         "H" = "#0FAB02",
         "late_opportunist" = "deepskyblue3",
@@ -1557,16 +1607,17 @@ opportunist_upset <- upset(
     )
   ),
   queries=list(
-    #upset_query(set = "T7", fill = "#650197"),
-    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
-    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "T7", fill = "#650197"),
+    upset_query(set = "T3", fill = "#B21BFF"), 
+    upset_query(set = "T0", fill = "#D98EFF"),
     upset_query(set = "D", fill = "#AE0404"),
     upset_query(set = "H", fill = "#0FAB02"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85", "gray85")) +
+  #stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Putative Opportunist Candidates Only") 
 
@@ -1575,6 +1626,70 @@ opportunist_upset <- upset(
 wrap_plots(pathogen_upset, opportunist_upset) + 
   plot_layout(guides = 'collect')
 
+
+# probiotic complex upset
+
+probiotic_upset <- upset(
+  simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% mutate(Family = factor(Family)) %>%
+    filter(late_probiotic),
+  colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+             select(T7, T3, T0, D, H, late_probiotic)),
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      ylim(0, 8) +
+      scale_fill_manual(values = c(
+        "Arenicellaceae" = "#BF4728",
+        "Bdellovibrionaceae" = "#B6908B",
+        "Cellvibrionaceae" = "#B5CAF0",
+        "Colwelliaceae" = "#CE2220",
+        "Cryomorphaceae" = "#EBDEA4",
+        "Crocinitomicaceae" = "#306A26",
+        "Flavobacteriaceae" = "#E67F33",
+        "Fokiniaceae" = "#7EB875",
+        "Francisellaceae" = "#D0B541",
+        "Oligoflexaceae" = "#57A2AC",
+        "P13-46" = "#7C4942",
+        "Hyphomonadaceae" = "#4E78C4",
+        "Puniceicoccaceae" = "#B997C7", 
+        "Rhodobacteraceae" = "#824D99",
+        "Saprospiraceae" = "#992572",
+        "Sphingomonadaceae" = "#F3B4DE"
+      ))
+  ),
+  
+  
+  
+  
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        "T7" = "#650197",
+        "T3" = "#B21BFF",
+        "T0" = "#D98EFF",
+        "D" = "#AE0404",
+        "H" = "#0FAB02",
+        "late_probiotic" = "#49EACC"
+      )
+    )
+  ),
+  queries=list(
+    upset_query(set = "T7", fill = "#650197"),
+    upset_query(set = "T3", fill = "#B21BFF"), 
+    upset_query(set = "T0", fill = "#D98EFF"),
+    upset_query(set = "D", fill = "#AE0404"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_probiotic", fill = "#49EACC")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85")) +
+  #stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Putative Probiotic Candidates Only")
 
 
 #& plot_annotation(title = signatures)
