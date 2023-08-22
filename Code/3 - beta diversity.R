@@ -54,9 +54,7 @@ mb_data <- microbiome_data %>%
 otu_nmds <- metaMDS(mb_data, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
 #plot(otu_nmds)
 
-nmds_plot <- x
-  
-  scores(otu_nmds)$sites %>%
+nmds_plot <- scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   left_join(metadata, by = 'sample_id') %>%
   
@@ -91,14 +89,16 @@ env_arrows <- env_model$vectors$arrows %>%
 nmds_plot + 
   geom_segment(data = env_arrows, aes(xend = 0, yend = 0, x = NMDS1 / 5, y = NMDS2 / 5),
                inherit.aes = FALSE) +
-  geom_text(data = filter(env_arrows, str_detect(Order, 'Rick')), aes(x = NMDS1 / 5, y = NMDS2 / 5, label = Order),
+  geom_text(data = env_arrows, aes(x = NMDS1 / 5, y = NMDS2 / 5, label = Order),
+            inherit.aes = FALSE)
+  geom_text(data = filter(env_arrows, str_detect(Order, 'Franc')), aes(x = NMDS1 / 5, y = NMDS2 / 5, label = Order),
             inherit.aes = FALSE)
 
 scores(otu_nmds)$sites %>%
   as_tibble(rownames = 'sample_id') %>%
   filter(NMDS1 < -2)
 
-adonis2(mb_data ~ time + exposure + final_disease_state, data = filter(metadata, time %in% c('T3', 'T7')), 
+adonis2(mb_data ~ time + exposure + susceptability, data = filter(metadata, time %in% c('T3', 'T7')), 
         permutations = 999, method = 'bray', by = NULL)
 
 adonis2(mb_data ~ time + exposure + final_disease_state, data = filter(metadata, time %in% c('T3', 'T7')), 
@@ -110,6 +110,16 @@ adonis2(mb_data ~ time * exposure * final_disease_state - time:exposure:final_di
 adonis2(mb_data ~ time * exposure * final_disease_state - time:exposure:final_disease_state - exposure:final_disease_state, data = filter(metadata, time %in% c('T3', 'T7')), 
         permutations = 999, method = 'bray', by = 'terms')
 
+
+adon_metadat <- metadata %>% mutate(treatment = paste(time, exposure, susceptability, sep = "_"))
+
+adonis2(mb_data ~ treatment, data = adon_metadat, 
+        permutations = 999, method = 'bray', by = 'margin')
+
+adon_nmds <- adonis_pairwise(x = adon_metadat %>% mutate(treatment = factor(treatment)) %>% as.data.frame(), dd = vegdist(mb_data), group.var = "treatment")
+
+
+adon_nmds$Adonis.tab
 
 tmp_data <- filter(metadata, time %in% c('T3', 'T7')) %>%
   mutate(fragment_id = str_c(exposure, tank, genotype, sep = '_')) 

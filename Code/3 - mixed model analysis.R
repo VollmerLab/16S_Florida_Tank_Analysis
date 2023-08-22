@@ -156,6 +156,60 @@ p_adjust <- function(df, exclude_cols = NA_character_){
 
 cluster_copy(cluster, c('fit_model', 'process_model', 'process_postHoc'))
 
+# complicated functions for setting axis limits of faceted graphs
+# https://stackoverflow.com/questions/63550588/ggplot2coord-cartesian-on-facets
+UniquePanelCoords <- ggplot2::ggproto(
+  "UniquePanelCoords", ggplot2::CoordCartesian,
+  
+  num_of_panels = 1,
+  panel_counter = 1,
+  panel_ranges = NULL,
+  
+  setup_layout = function(self, layout, params) {
+    self$num_of_panels <- length(unique(layout$PANEL))
+    self$panel_counter <- 1
+    layout
+  },
+  
+  setup_panel_params =  function(self, scale_x, scale_y, params = list()) {
+    if (!is.null(self$panel_ranges) & length(self$panel_ranges) != self$num_of_panels)
+      stop("Number of panel ranges does not equal the number supplied")
+    
+    train_cartesian <- function(scale, limits, name, given_range = NULL) {
+      if (is.null(given_range)) {
+        expansion <- ggplot2:::default_expansion(scale, expand = self$expand)
+        range <- ggplot2:::expand_limits_scale(scale, expansion,
+                                               coord_limits = self$limits[[name]])
+      } else {
+        range <- given_range
+      }
+      
+      out <- list(
+        ggplot2:::view_scale_primary(scale, limits, range),
+        sec = ggplot2:::view_scale_secondary(scale, limits, range),
+        arrange = scale$axis_order(),
+        range = range
+      )
+      names(out) <- c(name, paste0(name, ".", names(out)[-1]))
+      out
+    }
+    
+    cur_panel_ranges <- self$panel_ranges[[self$panel_counter]]
+    if (self$panel_counter < self$num_of_panels)
+      self$panel_counter <- self$panel_counter + 1
+    else
+      self$panel_counter <- 1
+    
+    c(train_cartesian(scale_x, self$limits$x, "x", cur_panel_ranges$x),
+      train_cartesian(scale_y, self$limits$y, "y", cur_panel_ranges$y))
+  }
+)
+
+coord_panel_ranges <- function(panel_ranges, expand = TRUE, default = FALSE, clip = "on") {
+  ggplot2::ggproto(NULL, UniquePanelCoords, panel_ranges = panel_ranges, 
+                   expand = expand, default = default, clip = clip)
+}
+
 #
 #### Data ####
 normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
@@ -616,6 +670,14 @@ homogenate_models <- homogenate_data %>%
                                 
   )) #recombine them
 
+#set up zero line
+
+add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>% unnest(homogenate_pred) %>% 
+  dplyr::slice(1:4) %>% mutate(across(everything(), ~NA)) %>% 
+  mutate(facet_lab = c("Doses", "Experimental", "Doses", "Experimental"), c_time = c(-5, -5, 10, 10), 
+         estimate = c(5.15, 5.25, 5.15, 5.25)) %>%
+  mutate(sig_p = NA, time = "zero_lines")
+
 ## Make Fancy Plots
 
 the_plots <- bacterial_signature_asv %>%
@@ -629,7 +691,7 @@ the_plots <- bacterial_signature_asv %>%
                                 signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
                                 signatures == "crasher_t7" ~ "late_crasher",
                                 signatures == "probiotic_t7_strict" ~ "late_probiotic",
-                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen"
+                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
                                 TRUE ~ signatures)) %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
@@ -656,9 +718,12 @@ the_plots <- bacterial_signature_asv %>%
                             mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
   left_join(homogenate_models, by = join_by(asv_id)) %>%
   mutate(plot_info = list(rbind(plot_info, homogenate_pred) %>% mutate(sig_p = ifelse(p.value < 0.05, "sig", "nonsig")))) %>%
+  mutate(plot_info = list(rbind(plot_info, add_zero_lines))) %>%
   rowwise() %>%
   mutate(plot = list(
     ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
+      geom_line(data = plot_info %>% filter(time == "zero_lines"), col = "gray45") +
+      
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("D_S", "D_R"))), aes(colour1 = graph_cat, linetype = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("H_S", "H_R"))), aes(colour2 = graph_cat, linetype = graph_cat)) %>%
@@ -700,13 +765,17 @@ the_plots <- bacterial_signature_asv %>%
       xlab("Time") +
       ylab(expression("Normalized log"[2]*" (cpm)")) +
       labs(title = str_c(Family, " ", Genus, " (", asv_id, ")", sep = "")) +
-      facet_grid(cols = vars(facet_lab), space = "free", scales = "free_x")
+      facet_grid(cols = vars(facet_lab), space = "free") + #scales = "free_x"
+      coord_panel_ranges(panel_ranges = list(
+        list(x=c(-1.8, -0.9)), # Dose Panel
+        list(x=c(-0.75, 8)) # Experimental Panel
+      ))
   )) %>%
   group_by(signatures) %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
 #view the plots
-the_plots$combo_plots[[1]]
+the_plots$combo_plots[[6]]
 
 #### Bac Strat NMDS and PCOA ####
 
@@ -786,6 +855,25 @@ test_dist <- vegdist(test, method='bray')
 asvs_pcoa <- cmdscale (test_dist, eig = TRUE)
 ordiplot (asvs_pcoa, display = 'sites', type = 'text')
 
+testadon <- adonis2(test_dist ~ exposure*susceptability, data = nmds_sample_metadat, perm=999)
+
+anova(testadon)
+
+library(EcolUtils)
+
+nmds_sample_metadat <- nmds_sample_metadat %>% mutate(across(time:susceptability, ~as.factor(.x))) %>% ungroup() 
+
+nmds_sample_metadat$susceptability = as.factor(nmds_sample_metadat$susceptability)
+
+
+ttti <- nmds_sample_metadat %>% mutate(treatment = paste(time, exposure, susceptability, sep = "_"), .after = susceptability) %>% as.data.frame()
+
+ttti$treatment = as.factor(ttti$treatment)
+
+tst <- adonis_pairwise(x = ttti, dd = test_dist, group.var = "treatment")
+
+tst$Adonis.tab
+tst$Betadisper.tab
 
 
 bd_pcoa_data <- asvs_pcoa$points %>%
@@ -1246,6 +1334,30 @@ corrplot(colwell_test$r, type="upper", order="hclust",
          #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
          col.lim = c(-0.2,1), col = c(rep("gray30", 6), brewer.pal(11,"Spectral")), tl.col = "gray20")
 
+#late pathogens and opportunists
+
+
+late_corr <- full_data %>% 
+  select(asv_id, sample_id, Family, log2_cpm) %>%
+  pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
+  mutate(combo_name = paste(Family, parse_number(asv_id), sep = "_"), .after = asv_id) %>%
+  left_join(tgfff, by = join_by("asv_id")) %>%
+  filter(!is.na(bacstrat)) %>%
+  filter(bacstrat %in% c('c("late_pathogen", "late_opportunist")', "late_pathogen", "late_opportunist")) %>%
+  mutate(combo_name = ifelse(bacstrat == "late_opportunist", paste(combo_name, "_O"), paste(combo_name, "_P"))) %>%
+  select(-c(bacstrat, asv_id, Family)) %>%
+  column_to_rownames('combo_name') %>%
+  t() %>%
+  as.matrix()
+
+late_test <- rcorr(late_corr, type = c("pearson","spearman"))
+
+corrplot(late_test$r, type="upper", order="hclust", 
+         p.mat = late_test$P, sig.level = 0.05, insig = "blank",
+         #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
+         col.lim = c(-0.3,1), col = c(rep("gray30", 5), brewer.pal(11,"Spectral")), tl.col = "gray20")
+
+
 #### Alpha Diversity ####
 
 alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
@@ -1351,6 +1463,133 @@ alpha_graphs <- mod_alpha_tab %>%
 alpha_graphs$combo_plots[[5]]
 
 
+### other model type for alpha div
+
+metrics_to_use <- c("diversity_gini_simpson", "dominance_absolute", 
+                    "dominance_core_abundance", "evenness_camargo", "rarity_log_modulo_skewness")
+
+t3t7_alpha_models <- alpha_table %>%
+  filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
+  mutate(treatment = str_c(time, exposure, susceptability, sep = '_')) %>%
+  pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment", "retain_sample"),
+               names_to = 'metric',
+               values_to = 'alpha_div_value') %>%
+  select(-c(final_disease_state, clone_group, retain_sample)) %>%
+  filter(time %in% c("T3", "T7")) %>%
+  nest_by(metric) %>%
+  summarise(t3t7_model = list(lmer(alpha_div_value ~ time*exposure*susceptability + 
+                                      (1 | genotype) + (1 | tank), data = data)))
+
+t0_alpha_models <- alpha_table %>%
+  filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
+  mutate(treatment = str_c(time, exposure, susceptability, sep = '_')) %>%
+  pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment", "retain_sample"),
+               names_to = 'metric',
+               values_to = 'alpha_div_value') %>%
+  select(-c(final_disease_state, clone_group, retain_sample)) %>%
+  filter(time %in% c("T0")) %>%
+  nest_by(metric) %>%
+  summarise(t0_model = list(lm(alpha_div_value ~ susceptability, data = data))) 
+
+t3t7_sig_terms <- t3t7_alpha_models %>%
+  rowwise() %>% 
+  mutate(sig_terms = list(anova(t3t7_model) %>% 
+                            rownames_to_column(var = "sig_term") %>% 
+                            as_tibble() %>% 
+                            rename("p_val" = `Pr(>F)`) %>%
+                            mutate(fdr_p_val = p.adjust(p_val, method = 'fdr')) %>%
+                            filter(fdr_p_val < 0.05) %>%
+                            filter(sig_term != "time") %>%
+                            pull(sig_term))) %>%
+  filter(length(sig_terms) > 0) %>%
+  mutate(int_term = ifelse(length(sig_terms) == 2, sig_terms[[2]], sig_terms)) %>%
+  mutate(other_term = ifelse(length(sig_terms) == 2, sig_terms[[1]], NA))
+
+t0_plot_prep <- t0_alpha_models %>%
+  filter(metric %in% metrics_to_use) %>%
+  filter(metric != "rarity_log_modulo_skewness") %>%
+  rowwise() %>%
+  mutate(t0_plot_info = list(emmeans(t0_model, ~susceptability) %>%
+                            cld(Letters = letters) %>% # , adjust = 'fdr' ??
+                            broom::tidy(conf.int = TRUE) %>%
+                            mutate(.group = str_trim(.group)) %>%
+                            mutate(c_time = 0) %>%
+                            mutate(time = NA, exposure = NA, facet_lab = "Field") %>%
+                            mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
+  )) 
+
+t3t7_plot_prep <- t3t7_sig_terms %>%
+  filter(metric %in% metrics_to_use) %>%
+  filter(metric != "rarity_log_modulo_skewness") %>%
+  left_join(t0_plot_prep, by = join_by("metric")) %>%
+  mutate(t3t7_plot_info = list(emmeans(t3t7_model, ~time*exposure) %>%
+                            cld(Letters = LETTERS) %>% # , adjust = 'fdr' ??
+                            broom::tidy(conf.int = TRUE) %>%
+                            mutate(.group = str_trim(.group)) %>%
+                            mutate(c_time = parse_number(time)) %>%
+                            mutate(susceptability = NA, facet_lab = "Experimental") %>%
+                            mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
+  )) %>%
+  mutate(both_plot_infos = list(rbind(t0_plot_info, t3t7_plot_info)))
+  
+
+slrp <- t3t7_plot_prep %>%
+  rowwise() %>%
+  mutate(plot = list(
+    ggplot(data = both_plot_infos, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
+      geom_point(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
+                 aes(col = exposure, pch = exposure, size = exposure), position = position_dodge(0.5)) +
+      geom_point(data = both_plot_infos %>% filter(facet_lab == "Field"), 
+                 aes(col = susceptability, pch = susceptability, size = susceptability), position = position_dodge(0.5)) +
+      geom_errorbar(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
+                 aes(col = exposure), width = 0, position = position_dodge(0.5)) +
+      geom_errorbar(data = both_plot_infos %>% filter(facet_lab == "Field"), 
+                 aes(col = susceptability), width = 0, position = position_dodge(0.5)) +
+      
+      geom_line(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
+                aes(col = exposure, linetype = exposure), position = position_dodge(0.5)) +
+      geom_text(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
+                aes(y = conf.high, label = .group, col = exposure),
+                position = position_dodge(0.5), vjust = -1, show.legend = FALSE) +
+      geom_text(data = both_plot_infos %>% filter(facet_lab == "Field"), 
+                aes(y = conf.high, label = .group, col = susceptability),
+                position = position_dodge(0.5), vjust = -1, show.legend = FALSE) +
+      theme_bw() +
+      scale_x_continuous(breaks = seq(0,7,1)) +
+      scale_color_manual(values = c(
+        "D" = "firebrick1",
+        "H" = "seagreen2",
+        "R" = "purple",
+        "S" = "orange2"
+      )) +
+      scale_shape_manual(values = c(
+        "D" = "diamond",
+        "H" = "square",
+        "R" = "triangle",
+        "S" = "circle"
+      )) +
+      scale_size_manual(values = c(
+        "D" = 3.5,
+        "H" = 2.5,
+        "R" = 2.5,
+        "S" = 2.5
+      )) +
+      scale_linetype_manual(values = c(6,1), guide = "none") +
+      facet_grid(cols = vars(facet_lab), scales = "free", space = "free") +
+      ggtitle(paste(metric, " (exposure:time)")) +
+      guides(color = guide_legend(
+        override.aes=list(linetype = c(6, 1, 0, 0), shape = c("diamond", "square", "triangle", "circle"))))
+  )) %>%
+  group_by(int_term) %>%
+  summarise(time_exp_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect')))
+
+
+slrp$time_exp_plots
+
+
+
+
+
 #### Simplified Complex Upset ####
 simple_comp_upset <- clean_bacstrats %>% 
   filter(!bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
@@ -1369,12 +1608,15 @@ upset(
              select(starts_with("cont"), starts_with("late"), starts_with("early"))), 
   
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+    ' '=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 19) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background = element_blank(), axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
       scale_fill_manual(values = c(
         "Arenicellaceae" = "#BF4728",
         "Bdellovibrionaceae" = "#B6908B",
@@ -1419,7 +1661,11 @@ upset(
     #upset_query(set = "late_crasher", fill = "#BD5E03"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0) + #, sort_sets = FALSE
+  name='ASVs', width_ratio=0.1, min_size = 0, wrap=TRUE, stripes = "white",
+  set_sizes=(
+    upset_set_size(filter_intersections=TRUE)
+    + theme(axis.ticks.x=element_line())
+  )) + #, sort_sets = FALSE
   ggtitle("Bacterial Strategies") 
 
 ### Upset - bacterial strategies and Presence Data
@@ -1429,11 +1675,14 @@ upset(
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T0, D, H, starts_with("cont"), starts_with("late"), starts_with("early"))),
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+    ' '=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background = element_blank(), axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
       scale_fill_manual(values = c(
         "Arenicellaceae" = "#BF4728",
         "Bdellovibrionaceae" = "#B6908B",
@@ -1464,7 +1713,7 @@ upset(
         "H" = "#0FAB02",
         "late_pathogen" = "#FF1E1E",
         "early_pathogen" = "#FF9797",
-        "continuous_pathogen" = "firebrick4",
+        #"continuous_pathogen" = "firebrick4",
         "late_opportunist" = "deepskyblue3",
         "early_opportunist" = "lightskyblue",
         #"continuous_crasher" = "#FF9A00",
@@ -1481,14 +1730,18 @@ upset(
     upset_query(set = "H", fill = "#0FAB02"),
     upset_query(set = "late_pathogen", fill = "#FF1E1E"),
     upset_query(set = "early_pathogen", fill = "#FF9797"),
-    upset_query(set = "continuous_pathogen", fill = "firebrick4"),
+    #upset_query(set = "continuous_pathogen", fill = "firebrick4"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue"),
     #upset_query(set = "continuous_crasher", fill = "#FF9A00"),
     #upset_query(set = "late_crasher", fill = "#BD5E03"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE, wrap=TRUE,
+  set_sizes=(
+    upset_set_size(filter_intersections=TRUE)
+    + theme(axis.ticks.x=element_line())
+  ),
   stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Bacterial Strategies/Presence Data") 
@@ -1502,12 +1755,15 @@ pathogen_upset <- upset(
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T7, T3, T0, D, H, late_pathogen, early_pathogen)),
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+    ' '=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0,6) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background = element_blank(), axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
     scale_fill_manual(values = c(
       "Arenicellaceae" = "#BF4728",
       "Bdellovibrionaceae" = "#B6908B",
@@ -1550,12 +1806,17 @@ pathogen_upset <- upset(
     upset_query(set = "late_pathogen", fill = "#FF1E1E"),
     upset_query(set = "early_pathogen", fill = "#FF9797")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85", "gray85")) +
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE, wrap=TRUE,
+  set_sizes=(
+    upset_set_size(filter_intersections=TRUE)
+    + theme(axis.ticks.x=element_line()) +
+      scale_y_reverse(breaks = seq(15, 0, -5))
+  ),
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "white", "white")) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Putative Pathogen Candidates Only") 
 
-
+pathogen_upset
 
 opportunist_upset <- upset(
   simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% mutate(Family = factor(Family)) %>%
@@ -1563,12 +1824,15 @@ opportunist_upset <- upset(
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T7, T3, T0, D, H, late_opportunist, early_opportunist)),
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+    ' '=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 9) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background = element_blank(), axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
       scale_fill_manual(values = c(
         "Arenicellaceae" = "#BF4728",
         "Bdellovibrionaceae" = "#B6908B",
@@ -1615,13 +1879,17 @@ opportunist_upset <- upset(
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85", "gray85")) +
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE, wrap=TRUE,
+  set_sizes=(
+    upset_set_size(filter_intersections=TRUE)
+    + theme(axis.ticks.x=element_line())
+  ),
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "white", "white")) +
   #stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Putative Opportunist Candidates Only") 
 
-
+opportunist_upset
 
 wrap_plots(pathogen_upset, opportunist_upset) + 
   plot_layout(guides = 'collect')
@@ -1635,12 +1903,15 @@ probiotic_upset <- upset(
   colnames(simple_comp_upset %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T7, T3, T0, D, H, late_probiotic)),
   base_annotations=list(
-    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+    ' '=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
                                           mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 8) +
+      theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+            panel.background = element_blank(), axis.text.y=element_blank(),
+            axis.ticks.y=element_blank()) +
       scale_fill_manual(values = c(
         "Arenicellaceae" = "#BF4728",
         "Bdellovibrionaceae" = "#B6908B",
@@ -1685,14 +1956,45 @@ probiotic_upset <- upset(
     upset_query(set = "H", fill = "#0FAB02"),
     upset_query(set = "late_probiotic", fill = "#49EACC")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "gray85")) +
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE, wrap=TRUE,
+  set_sizes=(
+    upset_set_size(filter_intersections=TRUE)
+    + theme(axis.ticks.x=element_line())
+  ),
+  stripes = c("#F8EAFF", "#F8EAFF", "#F8EAFF", "#FFE4E4", "#E7FFE5", "white")) +
   #stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Putative Probiotic Candidates Only")
 
+probiotic_upset
+
 
 #& plot_annotation(title = signatures)
+
+#### Family Groupings Table ####
+
+simple_comp_upset %>%
+  rowwise() %>%
+  mutate(across(early_pathogen:late_pathogen, ~ifelse(.x == TRUE, 1, 0))) %>%
+  group_by(Family) %>%
+  mutate(across(early_pathogen:late_pathogen, ~sum(.x))) %>%
+  select(early_pathogen:late_pathogen, Family) %>%
+  distinct() %>%
+  select(Family, early_pathogen, late_pathogen, early_opportunist, late_opportunist, late_probiotic) %>%
+  ungroup() %>%
+  mutate(total = select(., early_pathogen:late_probiotic) %>% rowSums(na.rm = TRUE)) %>%
+  arrange(desc(total)) %>%
+  formattable(align = c("l", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c", "c"), list(
+    Family = formatter("span", style = ~ style(color = "gray",font.weight = "bold")),
+    early_pathogen = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
+    late_pathogen = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
+    early_opportunist = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
+    late_opportunist = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
+    late_probiotic = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
+    total = color_tile("gray", "gray")
+  )) #%>%
+  export_formattable("../Figures/fds_exp_diffs.png")
+  
 
 
 #### JASON Work Zone ####
