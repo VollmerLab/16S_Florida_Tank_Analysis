@@ -17,7 +17,7 @@ library(Hmisc)
 library(broom.mixed)
 library(tidyverse)
 
-refit_models <- FALSE
+refit_models <- TRUE
 
 #### Functions ####
 cluster <- new_cluster(parallel::detectCores() - 1)
@@ -212,12 +212,14 @@ coord_panel_ranges <- function(panel_ranges, expand = TRUE, default = FALSE, cli
 
 #
 #### Data ####
-normalized_asv_counts <- full_data %>% #read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
+full_data <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE)
+
+normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
   mutate(treatment = str_c(time, exposure, susceptability, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
-         across(Kingdom:Species, str_replace_na)) %>%
+         across(Domain:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer) #%>%
   #filter(asv_id %in% otus_to_analyze) #otus in D, T3, T7
   # filter(asv_number <= 200)
@@ -419,8 +421,8 @@ right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_path
                       contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
                                        early_opportunist, continuous_opportunist, late_opportunist),
                       direction = '>') #>
-left_tests <- tibble(microbial_signature = c('crasher_t3', 'crasher_t7', 'probiotic_t3_strict', 'probiotic_t7_strict', 'rev_probiotic_t0'),
-                     contrasts = list( crasher_t3, crasher_t7, probiotic_t3_strict, probiotic_t7_strict, rev_probiotic_t0),
+left_tests <- tibble(microbial_signature = c('probiotic_t3_strict', 'probiotic_t7_strict', 'rev_probiotic_t0'), #'crasher_t3', 'crasher_t7', 
+                     contrasts = list(probiotic_t3_strict, probiotic_t7_strict, rev_probiotic_t0), # crasher_t3, crasher_t7, 
                      direction = '<') #<
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
@@ -440,7 +442,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
   cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
   
   asv_models <- normalized_asv_counts %>%
-    nest_by(across(c('asv_id', Kingdom:Species))) %>%
+    nest_by(across(c('asv_id', Domain:Species))) %>%
     partition(cluster) %>%
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + (1 | tank),
                      data, 
@@ -531,10 +533,24 @@ bacterial_signature_asv %>%
   theme_combmatrix(combmatrix.label.make_space = TRUE)
 
 
+merged_bacterial_signature_asv <- bacterial_signature_asv %>%
+  group_by(asv_id) %>%
+  reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+  mutate(signatures = case_when(signatures == "early_pathogen, continuous_pathogen, late_pathogen" ~ "continuous_pathogen",
+                                signatures == "early_pathogen, early_opportunist" ~ "early_pathogen",
+                                signatures == "late_pathogen, late_opportunist" ~ "late_pathogen",
+                                signatures == "probiotic_t7_strict, late_opportunist" ~ "late_probiotic",
+                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
+                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
+                                signatures == "probiotic_t7_strict, early_opportunist, continuous_opportunist, late_opportunist" ~ "late_probiotic",
+                                TRUE ~ signatures)) %>%
+  distinct()
+
 #### Complex Upset for Bacterial Strategies ####
 
 #prep for comp upset
 comp_upset_bac_strat <- bacterial_signature_asv %>% 
+  select(-c(direction)) %>%
   pivot_wider(names_from = signatures, values_from = significance) %>%
   mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .))) %>% 
   left_join(taxonomy_tibble, by = c('asv_id' = 'asv_names'))
@@ -547,7 +563,7 @@ comp_upset_bac_strat <- bacterial_signature_asv %>%
 upset(
   comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
   colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-             select(T0, D, H, probiotic_t7_strict, crasher_t7, crasher_t3, late_opportunist, early_opportunist, late_pathogen, early_pathogen)), 
+             select(T0, D, H, probiotic_t7_strict, late_opportunist, early_opportunist, late_pathogen, early_pathogen)), 
 
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
@@ -567,11 +583,11 @@ upset(
         "H" = "#0FAB02",
         "late_pathogen" = "#FF1E1E",
         "early_pathogen" = "#FF9797",
-        #"continuous_opportunist" = "royalblue4",
+        "continuous_opportunist" = "royalblue4",
         "late_opportunist" = "deepskyblue3",
         "early_opportunist" = "lightskyblue",
-        "crasher_t3" = "#FF9A00",
-        "crasher_t7" = "#BD5E03",
+        #"crasher_t3" = "#FF9A00",
+        #"crasher_t7" = "#BD5E03",
         "probiotic_t7_strict" = "#49EACC"
       )
     )
@@ -584,11 +600,11 @@ upset(
     upset_query(set = "H", fill = "#0FAB02"),
     upset_query(set = "late_pathogen", fill = "#FF1E1E"),
     upset_query(set = "early_pathogen", fill = "#FF9797"),
-    #upset_query(set = "continuous_opportunist", fill = "royalblue4"),
+    upset_query(set = "continuous_opportunist", fill = "royalblue4"),
     upset_query(set = "late_opportunist", fill = "deepskyblue3"),
     upset_query(set = "early_opportunist", fill = "lightskyblue"),
-    upset_query(set = "crasher_t3", fill = "#FF9A00"),
-    upset_query(set = "crasher_t7", fill = "#BD5E03"),
+    #upset_query(set = "crasher_t3", fill = "#FF9A00"),
+    #upset_query(set = "crasher_t7", fill = "#BD5E03"),
     upset_query(set = "probiotic_t7_strict", fill = "#49EACC")
   ),
   name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
@@ -675,26 +691,20 @@ homogenate_models <- homogenate_data %>%
 add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>% unnest(homogenate_pred) %>% 
   dplyr::slice(1:4) %>% mutate(across(everything(), ~NA)) %>% 
   mutate(facet_lab = c("Doses", "Experimental", "Doses", "Experimental"), c_time = c(-5, -5, 10, 10), 
-         estimate = c(5.15, 5.25, 5.15, 5.25)) %>%
+         estimate = c(5.28, 5.30, 5.28, 5.30)) %>%
   mutate(sig_p = NA, time = "zero_lines")
+
+
+pathogens_not_in_dose <- comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+  filter((early_pathogen | late_pathogen | continuous_pathogen) & !D) %>% pull(asv_id)
 
 ## Make Fancy Plots
 
-the_plots <- bacterial_signature_asv %>%
-  arrange(signatures) %>%
-  group_by(asv_id) %>%
-  summarise(signatures = str_c(signatures, collapse = ', ')) %>%
-  mutate(signatures = case_when(signatures == "continuous_pathogen, early_pathogen, late_pathogen" ~ "continuous_pathogen",
-                                signatures == "crasher_t3, crasher_t7" ~ "continuous_crasher",
-                                signatures == "early_opportunist, early_pathogen" ~ "early_pathogen",
-                                signatures == "late_opportunist, late_pathogen" ~ "late_pathogen",
-                                signatures == "late_opportunist, probiotic_t7_strict" ~ "late_probiotic",
-                                signatures == "crasher_t7" ~ "late_crasher",
-                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
-                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
-                                TRUE ~ signatures)) %>%
+the_plots <- merged_bacterial_signature_asv %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
+  filter(!asv_id %in% pathogens_not_in_dose) %>%
+  filter(!asv_id %in% c("ASV_39")) %>% #manual culling - don't look like expectation of signture
   rowwise %>%
   mutate(plot_info = list(emmeans(model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
@@ -775,22 +785,14 @@ the_plots <- bacterial_signature_asv %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = signatures)))
 
 #view the plots
-the_plots$combo_plots[[6]]
+the_plots$combo_plots[[4]]
 
 #### Bac Strat NMDS and PCOA ####
 
-clean_bacstrats <- bacterial_signature_asv %>% 
-  group_by(asv_id) %>% 
-  reframe(bacstrat = paste(list(signatures))) %>%
-  mutate(bacstrat = case_when(bacstrat == "c(\"early_pathogen\", \"continuous_pathogen\", \"late_pathogen\")" ~ "continuous_pathogen",
-                              bacstrat == 'c("crasher_t3", "crasher_t7")' ~ "continuous_crasher",
-                              bacstrat == 'c("early_pathogen", "early_opportunist")' ~ "early_pathogen",
-                              bacstrat == 'c("late_pathogen", "late_opportunist")' ~ "late_pathogen",
-                              bacstrat == "c(\"probiotic_t7_strict\", \"late_opportunist\")" ~ "late_probiotic",
-                              bacstrat == "crasher_t7" ~ "late_crasher",
-                              bacstrat == "probiotic_t7_strict" ~ "late_probiotic",
-                              bacstrat == 'c("early_pathogen", "late_opportunist")' ~ "early_pathogen",
-                              TRUE ~ bacstrat))
+clean_bacstrats <- merged_bacterial_signature_asv %>%
+  select(-significance)
+
+
 
 asv_nmds <- full_data %>% 
   select(asv_id, sample_id, log2_cpm) %>%

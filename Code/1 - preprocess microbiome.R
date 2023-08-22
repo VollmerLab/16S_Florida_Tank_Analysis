@@ -8,8 +8,8 @@ library(phyloseq)
 preprocess_metadata <- read_csv('../intermediate_files/preprocess_metadata.csv', 
                                 show_col_types = FALSE)
 
-microbiome_raw <- read_rds('../Data/ps_fl_tank.rds') %>%
-  subset_taxa(Kingdom == "Bacteria" &
+microbiome_raw <- read_rds('../Data/updated_8_21_23_decipher_16s_ps.rds') %>% #ps_fl_tank.rds
+  subset_taxa(Domain == "Bacteria" & #Domain used to be Kingdom
                 Phylum != "Cyanobacteria" &
                 !is.na(Phylum) &
                 Family != "Mitochondria" &

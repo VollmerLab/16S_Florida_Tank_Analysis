@@ -8,6 +8,8 @@ library(metagMisc)
 library(edgeR)
 library(variancePartition)
 library(ggvenn)
+library(cowplot)
+library(ComplexUpset)
 library(microshades)
 
 #### Functions ####
@@ -95,7 +97,7 @@ metadata <- sample_data(microbiome_data) %>%
 
 model_samples <- filter(metadata, !str_detect(tank, 'homo|HOMO')) %>% pull(sample_id)
 
-#### Agregate Samples ####
+#### Aggregate Samples ####
 if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
@@ -126,7 +128,7 @@ mdf_processed_data <- mdf_prep_test1 %>%
   ungroup() %>%
   select(-c(retain_sample)) %>%
   group_by(category, Genus) %>%
-  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  reframe(Domain, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
   distinct() %>%
   rename(Sample = category, Abundance = rel_abun) %>%
   mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0", "T3_H", "T3_D", "T7_H_H", "T7_D_H", "T7_D_D"))) %>%
@@ -152,7 +154,7 @@ plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf_ordergenus) +
 plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
 
 
-#testing
+#ORDER GENUS - SUSCEPTIBILITY
 
 mdf_processed_suscep_data <- mdf_prep_test1 %>%
   filter(Abundance > 0) %>%
@@ -166,15 +168,15 @@ mdf_processed_suscep_data <- mdf_prep_test1 %>%
   ungroup() %>%
   select(-c(retain_sample)) %>%
   group_by(category, Genus) %>%
-  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  reframe(Domain, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
   distinct() %>%
   rename(Sample = category, Abundance = rel_abun) %>%
   mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0_S", "T0_R", "T3_H_S", "T3_H_R", "T3_D_S", "T3_D_R", "T7_H_S", "T7_H_R", "T7_D_S", "T7_D_R"))) %>%
   as.data.frame()
 
 color_objs_suscep <- create_color_dfs(mdf_processed_suscep_data, group_level = "Order", 
-                                          selected_groups = c("Rickettsiales", "Enterobacterales", "Flavobacteriales", 
-                                                              "Pseudomonadales",  "Rhodobacterales"), cvd = TRUE)
+                                          selected_groups = c("Rickettsiales", "Alteromonadales", "Oceanospirillales", 
+                                                              "Francisellales",  "Flavobacteriales"), cvd = TRUE)
 mdf_suscep <- color_objs_suscep$mdf
 cdf_suscep <- color_objs_suscep$cdf
 
@@ -189,17 +191,6 @@ plot_suscep_prelim <- plot_microshades(mdf_suscep, cdf_suscep) +
 
 plot_grid(plot_suscep_prelim, legend_suscep,  rel_widths = c(1, .25))
 
-
-#only show sig genuses - cant do it by asv so less interesting than expected
-mdf_processed_data
-
-mdf_only_sig <- mdf_processed_data %>% 
-  mutate(sig_genus = ifelse(Genus %in% testt$Genus, Genus, NA))
-
-ggplot(mdf_only_sig, aes(fill = sig_genus, x = Sample, y = Abundance)) +
-  geom_bar(position = "fill", stat = "identity") +
-  facet_grid(cols = vars(time), scales = "free", space = "free") +
-  theme_bw()
 
 #### Make Venn showing ASVs to keep ####
 otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data, 
@@ -227,7 +218,7 @@ venn_all_times_and_doses <- phyloseq_filter_prevalence(microbiome_data,
   filter(tank != "homogenate_fragment") %>%
   filter(Abundance > 0) %>%
   mutate(time = if_else(time == 'T0' & tank == "HOMO", exposure, time)) %>%
-  filter(OTU %in% venn_group) %>%
+  #filter(OTU %in% venn_group) %>%
   group_by(time, OTU) %>%
   summarise(n = sum(Abundance),
             .groups = 'drop') %>%
@@ -353,9 +344,13 @@ full_data <- otu_tmm %>%
               as_tibble(rownames = 'asv_id'),
             by = c('asv_id'))
 
+
+full_data %>% group_by(Order) %>% summarize(counts = sum(log2_cpm)) %>% arrange(desc(counts))
+
+
 #filtered for the 
 write_csv(full_data, '../intermediate_files/fully_preprocessed_samples.csv.gz')
-n_distinct(full_data$asv_id)
+
 
 ### Output ASV CPMs for doses ####
 homogenate_data <- microbiome_data %>%
