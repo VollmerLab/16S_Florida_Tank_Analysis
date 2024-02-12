@@ -425,18 +425,18 @@ posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
-  #cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
+  cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
   
   asv_models <- normalized_asv_counts %>%
     nest_by(across(c('asv_id', Domain:Species, Family_confidence:Species_confidence))) %>%
-    #partition(cluster) %>%
+    partition(cluster) %>%
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + (1 | tank),
                      data, 
                      use_weights = FALSE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
            posthoc = list(run_posthoc(model, posthoc_categories))) %>%
-    #collect() %>%
+    collect() %>%
     select(-re_model, -ends_with('global')) %>%
     ungroup %>% 
     p_adjust %>%
@@ -446,9 +446,6 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
   write_csv(select(asv_models, -where(is.list)), '../intermediate_files/mixed_model_results.csv.gz')
 }
 
-#error:
-#refitting model(s) with ML (instead of REML)
-#Random effect variances not available. Returned R2 does not account for random effects.
 
 #### Main Effects Upset ####
 asv_models %>%
