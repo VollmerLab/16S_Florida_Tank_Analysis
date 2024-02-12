@@ -1,6 +1,4 @@
-##TODO - Set up/evaluate contrasts for relevant/interesting bacterial responses
-#           -want to identify pathogens, opportunists, probiotics
-##TODO - 
+# Making the model based on FDS instead of Resistance
 
 #### Libraries ####
 library(vegan)
@@ -91,19 +89,19 @@ process_model <- function(model, re_model, random_anova){
     select(grp, varComp) %>%
     filter(grp != 'Residual') %>%
     left_join(random_anova %>%
-                  as_tibble(rownames = 'term') %>%
-                  mutate(term = str_extract(term, '\\| [0-9a-zA-Z]+') %>%
-                           str_remove('\\| +')) %>%
-                  filter(!is.na(term)) %>%
-                  select(term, Df, LRT, `Pr(>Chisq)`) %>%
-                  rename(df = Df,
-                         chisq = LRT,
-                         pvalue = `Pr(>Chisq)`),
-                by = c('grp' = 'term')) %>%
+                as_tibble(rownames = 'term') %>%
+                mutate(term = str_extract(term, '\\| [0-9a-zA-Z]+') %>%
+                         str_remove('\\| +')) %>%
+                filter(!is.na(term)) %>%
+                select(term, Df, LRT, `Pr(>Chisq)`) %>%
+                rename(df = Df,
+                       chisq = LRT,
+                       pvalue = `Pr(>Chisq)`),
+              by = c('grp' = 'term')) %>%
     tidyr::pivot_wider(names_from = 'grp',
                        values_from = c('varComp', 'df', 'chisq', 'pvalue'),
                        names_vary = 'slowest') #%>%
-    # rename_with(~str_replace_all(., '_', '.'))
+  # rename_with(~str_replace_all(., '_', '.'))
   
   tibble::tibble(anova_table = list(aov_tab)) %>%
     bind_cols(global_row, r2_row, varDecomp_row, ., aov_row)
@@ -125,7 +123,7 @@ run_posthoc <- function(model, contrast_list){
 process_postHoc <- function(posthoc){
   post_row <- as_tibble(posthoc) %>%
     dplyr::rename(tvalue = t.ratio,
-           pvalue = p.value) %>%
+                  pvalue = p.value) %>%
     mutate(contrast = str_c(contrast, direction, sep = '_'), .keep = 'unused') %>%
     pivot_wider(names_from = c('contrast'),
                 values_from = c('estimate', 'SE', 'df', 'tvalue', 'pvalue'),
@@ -150,7 +148,7 @@ reorder_columns <- function(df){
 p_adjust <- function(df, exclude_cols = NA_character_){
   exclude_cols <- if_else(is.na(exclude_cols), '@@@', exclude_cols)
   mutate(df, across(c(contains('pvalue'), -contains(exclude_cols)), ~p.adjust(., method = 'fdr'),
-                .names = 'fdr_{.col}')) %>% 
+                    .names = 'fdr_{.col}')) %>% 
     rename_with(~str_replace_all(., 'fdr_pvalue', 'fdr')) %>% 
     
     mutate(across(c(contains('pvalue'), -contains(exclude_cols)), safe_qvalue,
@@ -218,15 +216,17 @@ coord_panel_ranges <- function(panel_ranges, expand = TRUE, default = FALSE, cli
 #
 #### Data ####
 
-normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
+old_taxonomy_normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
-  mutate(treatment = str_c(time, exposure, susceptability, sep = '_'),
+  mutate(final_disease_state = ifelse(time == "T0", "F", final_disease_state)) %>%
+  filter(!c(exposure == "H" & final_disease_state == "D")) %>%
+  mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
          across(Domain:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer) #%>%
-  #filter(asv_id %in% otus_to_analyze) #otus in D, T3, T7
-  # filter(asv_number <= 200)
+#filter(asv_id %in% otus_to_analyze) #otus in D, T3, T7
+# filter(asv_number <= 200)
 
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
   as.data.frame %>%
@@ -234,199 +234,181 @@ taxonomy_tibble <- tax_table(microbiome_data) %>%
 
 homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv', show_col_types = FALSE)
 
+updated_taxonomy <- read_csv('../intermediate_files/updated_taxonomy.csv')
 
-#
-#### Plot raw data for an ASV ####
-normalized_asv_counts %>%
-  # filter(asv_id == 'ASV_3') %>%
-  
-  nest_by(across(c('asv_id', Kingdom:Species))) %>%
-  ungroup %>%
-  sample_n(1) %>%
-  unnest(data) %>%
-  
-  ggplot(aes(x = time, y = log2_cpm, colour = exposure, shape = susceptability)) +
-  geom_jitter() +
-  stat_summary(fun.data = 'mean_se', position = position_dodge(1), size = 1.5)
+normalized_asv_counts <- old_taxonomy_normalized_asv_counts %>%
+  select(-c(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
+  left_join(updated_taxonomy, by = join_by("asv_id"))
+
 
 #### Set-up Post-hoc contrasts ####
 # model <- asv_models$model[[1]]
 # emmeans(model, ~treatment)
-#   -Time alone i.e. linear or quadratic
-time_mainEffects_posthoc <- list('linear' = c(-1/2, -1/2, 0, 0, 0, 0, 1/4, 1/4, 1/4, 1/4),
-                                 'quadratic' = c(1/2, 1/2, -2/4, -2/4, -2/4, -2/4, 1/4, 1/4, 1/4, 1/4),
-                                 'early' = c(-1/2, -1/2, 1/4, 1/4, 1/4, 1/4, 0, 0, 0, 0),
-                                 'late' = c(0, 0, -1/4, -1/4, -1/4, -1/4, 1/4, 1/4, 1/4, 1/4))
 
-#   -Resistance alone i.e. difference between resistant & susceptabil across all time/exposure
-resistance_mainEffects_posthoc <- list('R - S' = c(1/5, -1/5, 1/5, -1/5, 1/5, -1/5, 1/5, -1/5, 1/5, -1/5))
+#   -Time alone i.e. linear or quadratic
+time_mainEffects_posthoc <- list('linear' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3),
+                                 'quadratic' = c(1, -2/3, -2/3, -2/3, 1/3, 1/3, 1/3),
+                                 'early' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
+                                 'late' = c(0, -1/3, -1/3, -1/3, 1/3, 1/3, 1/3))
+
+#   -Final Disease State alone i.e. difference between healthy & diseased across all time/exposure
+finalDiseaseState_mainEffects_posthoc <- list('H - D' = c(0, -1/2, 1/4, 1/4, -1/2, 1/4, 1/4))
+
 
 #   -Field vs Tank i.e. difference between field and average of healthy and diseased across all time/resistance
-#   -Exposure alone i.e. difference between heatlhy and diseased across all resistance & T3/T7
-exposure_mainEffects_posthoc <- list('Experimental - Field' = c(-1/2, -1/2, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8, 1/8),
-                                     'D - H' = c(0, 0, 1/4, 1/4, -1/4, -1/4, 1/4, 1/4, -1/4, -1/4))
-#   -Time x Resistance
-#     -RvS (t3-t0), RvS (t7-t3) - name early/late resistance/susceptible
-timeResistance_interaction_posthoc <- list('R(T3-T0) - S(T3-T0)' = c(-1, 0, 1/2, 0, 1/2, 0, 0, 0, 0, 0) - c(0, -1, 0, 1/2, 0, 1/2, 0, 0, 0, 0),
-                                           'R(T7-T3) - S(T7-T3)' = c(0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2, 0) - c(0, 0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2))
-
+#   -Exposure alone i.e. difference between healthy and diseased across all resistance & T3/T7
+exposure_mainEffects_posthoc <- list('Experimental - Field' = c(-1, 1/6, 1/6, 1/6, 1/6, 1/6, 1/6),
+                                     'expD - expH' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2))
+#   -Time x Final Disease State
+#   -HvD (t3-t0), HvD (t7-t3) - name early/late resistance/susceptible
+timeFinalDiseaseState_interaction_posthoc <- list('H(T3-T0) - D(T3-T0)' = c(-1, 0, 1/2, 1/2, 0, 0, 0) - c(-1, 1, 0, 0, 0, 0, 0),
+                                                  'H(T7-T3) - D(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 1/2, 1/2) - c(0, -1, 0, 0, 1, 0, 0))
 
 #   -Time x Exposure
 #     -HvD (t3-t0), HvD (t7-t3) - name early/late healthy/diseased
-timeExposure_interaction_posthoc <- list('D(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0),
-                                         'H(T3-T0)' = c(-1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0, 0, 0),
-                                         'D(T3-T0) - H(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0) - c(-1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0, 0, 0),
-                                         'D(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0),
-                                         'H(T7-T3)' = c(0, 0, 0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2),
-                                         'D(T7-T3) - H(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0) - c(0, 0, 0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2))
+timeExposure_interaction_posthoc <- list('expD(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
+                                         'expH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
+                                         'expD(T3-T0) - expH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0) - c(-1, 0, 0, 1, 0, 0, 0),
+                                         'expD(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0),
+                                         'expH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
+                                         'expD(T7-T3) - expH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0) - c(0, 0, 0, -1, 0, 0, 1))
 
-#   -Exposure x Resistance
-#     -HSvDS, HSvDR, HRvDS, HRvDR
-exposureResistance_interaction_posthoc <- list('HS - HR' = c(-1/3, 1/3, 0, 0, -1/3, 1/3, 0, 0, -1/3, 1/3),
-                                               'HS - DS' = c(0, 0, 0, -1/2, 0, 1/2, 0, -1/2, 0, 1/2),
-                                               'HS - DR' = c(-1/3, 1/3, -1/3, 0, 0, 1/3, -1/3, 0, 0, 1/3),
-                                               'HR - DS' = c(1/3, -1/3, 0, -1/3, 1/3, 0, 0, -1/3, 1/3, 0),
-                                               'HR - DR' = c(0, 0, -1/2, 0, 1/2, 0, -1/2, 0, 1/2, 0),
-                                               'DS - DR' = c(-1/3, 1/3, -1/3, 1/3, 0, 0, -1/3, 1/3, 0, 0))
+#   -Exposure x Final Disease State
+#     -HHvDH, HHvDD
+exposureFinalDiseaseState_interaction_posthoc <- list('HH - DD' = c(0, -1/2, 0, 1/2, -1/2, 0, 1/2),
+                                               'HH - DH' = c(0, 0, -1/2, 1/2, 0, -1/2, 1/2),
+                                               'DH - DD' = c(0, -1/2, 1/2, 0, -1/2, 1/2, 0))
+                                               
 
-#   -Time x Resistance x Exposure
-#       -DT7(S - R)
-#       -ST7(D - H)
+#   -Time x Final Disease State x Exposure
+#       -T7 expD(D - H)
 
-threeWay_interaction_posthoc <- list('DT7(S - R)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-                                     'ST7(D - H)' = c(0, 0, 0, 0, 0, 0, 0, 1, 0, -1))
+threeWay_interaction_posthoc <- list('T7 expD(D - H)' = c(0, 0, 0, 0, 1, -1, 0))
 
-posthoc_categories <- tibble(summarised_effect = c('time', 'resistance', 'exposure', 
-                                                   'timeXresistance', 'timeXexposure', 'exposureXresistance',
-                                                   'timeXresistanceXexposure'),
-       contrasts = list(time_mainEffects_posthoc, resistance_mainEffects_posthoc, exposure_mainEffects_posthoc,
-                     timeResistance_interaction_posthoc, timeExposure_interaction_posthoc, exposureResistance_interaction_posthoc,
-                     threeWay_interaction_posthoc)) %>%
+
+posthoc_categories <- tibble(summarised_effect = c('time', 'fds', 'exposure', 
+                                                   'timeXfds', 'timeXexposure', 'exposureXfds',
+                                                   'timeXfdsXexposure'),
+                             contrasts = list(time_mainEffects_posthoc, finalDiseaseState_mainEffects_posthoc, exposure_mainEffects_posthoc,
+                                              timeFinalDiseaseState_interaction_posthoc, timeExposure_interaction_posthoc, exposureFinalDiseaseState_interaction_posthoc,
+                                              threeWay_interaction_posthoc)) %>%
   unnest(contrasts) %>%
   mutate(contrast_name = names(contrasts)) 
 
 #### Pathogen Pattern based Contrasts ####
-# emmeans(asv_models$model[[1]], ~treatment)
-posthoc_order <- c('T0.F.R', 'T0.F.S', 'T3.D.R', 'T3.D.S', 'T3.H.R', 'T3.H.S', 'T7.D.R', 'T7.D.S', 'T7.H.R', 'T7.H.S')
-example_posthoc <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
-                       'DS(T7-T3)' = c(0, 0, 0, -1, 0, 0, 0, 1, 0, 0),
-                       'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
-                       'T0(DSvHR.DR.HS)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0),
-                       'T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-                       'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-                       'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+# emmeans(asv_models$model[[1]], ~treatment) #use to get order of treatments in model
 
-bacterial_growth <- list('(T3-T0)' = c(-1/2, -1/2, 1/4, 1/4, 1/4, 1/4, 0, 0, 0, 0),
-                         '(T7-T3)' = c(0, 0, -1/4, -1/4, -1/4, -1/4, 1/4, 1/4, 1/4, 1/4),
-                         '(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/4, 1/4, 1/4, 1/4),
+#DS = DD, DR = DH, HS/HR = HH 
+#0, 0, 0, 0, 0, 0, 0
+posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
+
+
+bacterial_growth <- list('(T3-T0)' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
+                         '(T7-T3)' = c(0, -1/3, -1/3, -1/3, 1/3, 1/3, 1/3),
+                         '(T7-T0)' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3),
                          
-                         'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
-                         'DS(T7-T3)' = c(0, 0, 0, -1, 0, 0, 0, 1, 0, 0),
-                         'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
+                         'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
+                         'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0),
+                         'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
                          
-                         'DR(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0, 0, 0, 0),
-                         'DR(T7-T3)' = c(0, 0, -1, 0, 0, 0, 1, 0, 0, 0),
-                         'DR(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1, 0, 0, 0),
+                         'DH(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0),
+                         'DH(T7-T3)' = c(0, 0, -1, 0, 0, 1, 0),
+                         'DH(T7-T0)' = c(-1, 0, 0, 0, 0, 1, 0),
                          
-                         'HS(T3-T0)' = c(0, -1, 0, 0, 0, 1, 0, 0, 0, 0),
-                         'HS(T7-T3)' = c(0, 0, 0, 0, 0, -1, 0, 0, 0, 1),
-                         'HS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 0, 0, 1),
+                         'HH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
+                         'HH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
+                         'HH(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1),
                          
-                         'HR(T3-T0)' = c(-1, 0, 0, 0, 1, 0, 0, 0, 0, 0),
-                         'HR(T7-T3)' = c(0, 0, 0, 0, -1, 0, 0, 0, 1, 0),
-                         'HR(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 0, 0, 1, 0),
+                         'H(T3-T0)' = c(-1, 0, 1/2, 1/2, 0, 0, 0),
+                         'H(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 1/2, 1/2),
+                         'H(T7-T0)' = c(-1, 0, 0, 0, 0, 1/2, 1/2),
                          
-                         'H(T3-T0)' = c(-1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0, 0, 0),
-                         'H(T7-T3)' = c(0, 0, 0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2),
-                         'H(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 0, 1/2, 1/2),
+                         'D(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
+                         'D(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0),
+                         'D(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
                          
-                         'D(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0),
-                         'D(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 0, 1/2, 1/2, 0, 0),
-                         'D(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0),
+                         'expH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
+                         'expH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
+                         'expH(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1),
                          
-                         'R(T3-T0)' = c(-1, 0, 1/2, 0, 1/2, 0, 0, 0, 0, 0),
-                         'R(T7-T3)' = c(0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2, 0),
-                         'R(T7-T0)' = c(-1, 0, 0, 0, -1/2, 0, 1/2, 0, 1/2, 0),
-                         
-                         'S(T3-T0)' = c(0, -1, 0, 1/2, 0, 1/2, 0, 0, 0, 0),
-                         'S(T7-T3)' = c(0, 0, 0, -1/2, 0, -1/2, 0, 1/2, 0, 1/2),
-                         'S(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1/2, 0, 1/2))
+                         'expD(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
+                         'expD(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0),
+                         'expD(T7-T0)' = c(-1, 0, 0, 0, 1/2, 1/2, 0))
 
 #pathogens
-early_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-                       'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0))
-continuous_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-                            'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-                            'DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
-                            'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-                            'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-                            'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
-late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-                      'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-                      'DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
+early_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
+                       'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
+                       'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0)) 
 
+late_pathogen <- list('T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
+                      'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
+                      'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0))
 
-# early_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-#                       'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-#                       'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
-# continuous_pathogen <- list('T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0),
-#                             'T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-#                             'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-#                             'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-#                             'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
-# late_pathogen <- list('T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3),
-#                       'T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-#                       'linear' = c(-1/2, -1/2, 0, 0, 0, 0, 0, 1, 0, 0))
+continuous_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
+                            'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
+                            'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
+                            'T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
+                            'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
+                            'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0)) 
 
 #opportunists
-early_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0),
-                          'DS.DR(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0))
-continuous_opportunist <- list('T3(DS.DRvHS.HR)' = c(0, 0, 1/2, 1/2, -1/2, -1/2, 0, 0, 0, 0),
-                               'T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2),
-                               'DS.DR(T3-T0)' = c(-1/2, -1/2, 1/2, 1/2, 0, 0, 0, 0, 0, 0),
-                               'DS.DR(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0))
-late_opportunist <- list('T7(DS.DRvHS.HR)' = c(0, 0, 0, 0, 0, 0, 1/2, 1/2, -1/2, -1/2),
-                          'DS.DR(T7-T0)' = c(-1/2, -1/2, 0, 0, 0, 0, 1/2, 1/2, 0, 0))
+early_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
+                          'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0))
 
-#add in left tests
-probiotic_t0 <- list('T0(SvR)' = c(-1, 1, 0, 0, 0, 0, 0, 0, 0, 0))
-probiotic_t3 <- list('T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0))
-probiotic_t7 <- list('T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0))
+late_opportunist <- list('T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
+                         'DD.DH(T7-T0)' = c(-1, 0, 0, 0, 1/2, 1/2, 0))
 
-probiotic_t3_strict <- list('T3(DSvDR)' = c(0, 0, -1, 1, 0, 0, 0, 0, 0, 0),
-                            'T3(DRvHR.DS.HS)' = c(0, 0, -1, 1/3, 1/3, 1/3, 0, 0, 0, 0),
-                            'DR(T3-T0)' = c(0, 1, -1, 0, 0, 0, 0, 0, 0, 0))
-probiotic_t7_strict <- list('T7(DSvDR)' = c(0, 0, 0, 0, 0, 0, -1, 1, 0, 0),
-                            'T7(DRvHR.DS.HS)' = c(0, 0, 0, 0, 0, 0, -1, 1/3, 1/3, 1/3),
-                            'DR(T7-T3)' = c(0, 0, 1, 0, 0, 0, -1, 0, 0, 0),
-                            'DR(T7-T0)' = c(1, 0, 0, 0, 0, 0, -1, 0, 0, 0))
+continuous_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
+                               'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
+                               'T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
+                               'DD.DH(T7-T0)' = c(-1, 0, 0, 0, 1/2, 1/2, 0))
 
-rev_probiotic_t0 <- list('T0(SvR)' = c(1, -1, 0, 0, 0, 0, 0, 0, 0, 0))
+#probiotics
 
-crasher_t3 <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0))
-crasher_t7 <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0))
+probiotic_t3_general <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0))
+probiotic_t7_general <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0))
 
-crasher_t3_strict <- list('DS(T3-T0)' = c(0, -1, 0, 1, 0, 0, 0, 0, 0, 0),
-                          'T3(DSvHR.DR.HS)' = c(0, 0, -1/3, 1, -1/3, -1/3, 0, 0, 0, 0))
-crasher_t7_strict <- list('DS(T7-T0)' = c(0, -1, 0, 0, 0, 0, 0, 1, 0, 0),
-                          'T7(DSvHR.DR.HS)' = c(0, 0, 0, 0, 0, 0, -1/3, 1, -1/3, -1/3))
+probiotic_t3_responder <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0),
+                               'T3(DHvDD.HH)' = c(0, -1/2, 1, -1/2, 0, 0, 0),
+                               'DH(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0))
+probiotic_t7_responder <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0),
+                               'T7(DHvDD.HH)' = c(0, 0, 0, 0, -1/2, 1, -1/2),
+                               'DH(T7-T3)' = c(0, 0, -1, 0, 0, 1, 0))
 
-#bad commensalist def
-commensalist <- list('T3vT7' = c(0, 0, 1/4, 1/4, 1/4, 1/4, -1/4, -1/4, -1/4, -1/4))
+probiotic_t3_always <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0),
+                            'T3(HH.DHvDD)' = c(0, -1, 1/2, 1/2, 0, 0, 0))
+probiotic_t7_always <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0),
+                            'T7(HH.DHvDD)' = c(0, 0, 0, 0, -1, 1/2, 1/2))
+#commensalists
+commensalist_t3 <- list('T3(HH.DHvDD)' = c(0, -1, 1/2, 1/2, 0, 0, 0))
+commensalist_t7 <- list('T7(HH.DHvDD)' = c(0, 0, 0, 0, -1, 1/2, 1/2))
+
+#crashers
+
+crasher_tank_effect <- list('DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0))
+crasher_BMO_dysbiosis <- list('DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0))
+crasher_dysbiosis <- list('DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
+
 
 #Put tests for one/two sided and directionality into bins. Will combine after post-hoc into meaningful categorization
 two_sided_tests <- tibble(microbial_signature = c('growth_comparisons'),
                           contrasts = list(bacterial_growth),
                           direction = '=') #=
 right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
-                                              'early_opportunist', 'continuous_opportunist', 'late_opportunist'),
+                                              'early_opportunist', 'continuous_opportunist', 'late_opportunist',
+                                              'commensalist_t3', 'commensalist_t7',
+                                              'probiotic_t3_general', 'probiotic_t7_general',
+                                              'probiotic_t3_responder', 'probiotic_t7_responder',
+                                              'probiotic_t3_always', 'probiotic_t7_always'),
                       contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
-                                       early_opportunist, continuous_opportunist, late_opportunist),
+                                       early_opportunist, continuous_opportunist, late_opportunist,
+                                       commensalist_t3, commensalist_t7,
+                                       probiotic_t3_general, probiotic_t7_general,
+                                       probiotic_t3_responder, probiotic_t7_responder,
+                                       probiotic_t3_always, probiotic_t7_always),
                       direction = '>') #>
-left_tests <- tibble(microbial_signature = c('crasher_t3', 'crasher_t7','crasher_t3_strict', 'crasher_t7_strict'), #'crasher_t3', 'crasher_t7', 'probiotic_t3_strict', 'probiotic_t7_strict', 'rev_probiotic_t0'
-                     contrasts = list(crasher_t3, crasher_t7, crasher_t3_strict, crasher_t7_strict), # crasher_t3, crasher_t7, probiotic_t3_strict, probiotic_t7_strict, rev_probiotic_t0
+left_tests <- tibble(microbial_signature = c('crasher_tank_effect', 'crasher_BMO_dysbiosis', 'crasher_dysbiosis'),
+                     contrasts = list(crasher_tank_effect, crasher_BMO_dysbiosis, crasher_dysbiosis), 
                      direction = '<') #<
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
@@ -443,27 +425,30 @@ posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
-  cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
+  #cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
   
   asv_models <- normalized_asv_counts %>%
-    nest_by(across(c('asv_id', Domain:Species))) %>%
-    partition(cluster) %>%
+    nest_by(across(c('asv_id', Domain:Species, Family_confidence:Species_confidence))) %>%
+    #partition(cluster) %>%
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + (1 | tank),
                      data, 
                      use_weights = FALSE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
            posthoc = list(run_posthoc(model, posthoc_categories))) %>%
-    collect() %>%
+    #collect() %>%
     select(-re_model, -ends_with('global')) %>%
     ungroup %>% 
     p_adjust %>%
     relocate(anova_table, .after = model) %>% 
     relocate(posthoc, .after = random_anova)
-  
   write_rds(asv_models, '../intermediate_files/mixed_model_results.rds.gz')
   write_csv(select(asv_models, -where(is.list)), '../intermediate_files/mixed_model_results.csv.gz')
 }
+
+#error:
+#refitting model(s) with ML (instead of REML)
+#Random effect variances not available. Returned R2 does not account for random effects.
 
 #### Main Effects Upset ####
 asv_models %>%
@@ -484,6 +469,7 @@ asv_models %>%
   scale_x_upset() +
   theme_classic() +
   theme_combmatrix(combmatrix.label.make_space = TRUE)
+
 
 #### Post-Hoc upset only on ASVs that have a significant treatment effect ####
 significant_models <- asv_models %>%
@@ -537,20 +523,30 @@ bacterial_signature_asv %>%
   theme_combmatrix(combmatrix.label.make_space = TRUE)
 
 
-merged_bacterial_signature_asv <- bacterial_signature_asv %>%
+# merged_bacterial_signature_asv <- bacterial_signature_asv %>%
+#   group_by(asv_id) %>%
+#   reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+#   mutate(signatures = case_when(signatures == "early_pathogen, continuous_pathogen, late_pathogen" ~ "continuous_pathogen",
+#                                 signatures == "early_pathogen, early_opportunist" ~ "early_pathogen",
+#                                 signatures == "late_pathogen, late_opportunist" ~ "late_pathogen",
+#                                 signatures == "probiotic_t7_strict, late_opportunist" ~ "late_probiotic",
+#                                 signatures == "probiotic_t7_strict" ~ "late_probiotic",
+#                                 signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
+#                                 signatures == "probiotic_t7_strict, early_opportunist, continuous_opportunist, late_opportunist" ~ "late_probiotic",
+#                                 TRUE ~ signatures)) %>%
+#   distinct()
+
+grouped_bacterial_signature_asv <- bacterial_signature_asv %>%
   group_by(asv_id) %>%
-  reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
-  mutate(signatures = case_when(signatures == "early_pathogen, continuous_pathogen, late_pathogen" ~ "continuous_pathogen",
-                                signatures == "early_pathogen, early_opportunist" ~ "early_pathogen",
-                                signatures == "late_pathogen, late_opportunist" ~ "late_pathogen",
-                                signatures == "probiotic_t7_strict, late_opportunist" ~ "late_probiotic",
-                                signatures == "probiotic_t7_strict" ~ "late_probiotic",
-                                signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
-                                signatures == "probiotic_t7_strict, early_opportunist, continuous_opportunist, late_opportunist" ~ "late_probiotic",
-                                TRUE ~ signatures)) %>%
+  #reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+  mutate(signatures = case_when(str_detect(signatures, "pathogen") ~ "pathogen",
+                                str_detect(signatures, "opportunist") ~ "opportunist",
+                                str_detect(signatures, "crasher") ~ "crasher",
+                                str_detect(signatures, "commensalist") ~ "commensalist",
+                                str_detect(signatures, "probiotic") ~ "probiotic")) %>%
   distinct()
 
-merged_bacterial_signature_asv %>%
+grouped_bacterial_signature_asv %>%
   group_by(asv_id) %>%
   summarise(terms = list(unique(signatures)),
             .groups = 'drop') %>%
@@ -560,6 +556,8 @@ merged_bacterial_signature_asv %>%
   scale_x_upset() +
   theme_classic() +
   theme_combmatrix(combmatrix.label.make_space = TRUE)
+
+### UP TO HERE ###
 
 #### Complex Upset for Bacterial Strategies ####
 
@@ -582,11 +580,11 @@ upset(
     mutate(across(D:T0_H, ~ifelse(is.na(.), FALSE, .))),
   colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
              select(T0, D, H, crasher_t7_strict, crasher_t7, crasher_t3,late_opportunist, continuous_opportunist, early_opportunist, late_pathogen, continuous_pathogen, early_pathogen)), 
-
+  
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                           bar_number_threshold = 25,
-        mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
   ),
@@ -1261,28 +1259,28 @@ bacstrat_pcoa$points %>%
   )) +
   guides(color = guide_legend(override.aes = list(fill = NA))) +
   theme_bw() #+
-  ylim(-0.3, 0.3) +
+ylim(-0.3, 0.3) +
   xlim(-0.3, 0.25)
 
 
 #### Emily Miscellaneous ####
 
-    ## Access all ASVs in a given bacterial strategy:
-  
+## Access all ASVs in a given bacterial strategy:
+
 asvs_by_signature <- clean_bacstrats %>%
   filter(bacstrat == "late_pathogen") %>%
   #filter(bacstrat %in% c("continuous_crasher", "late_crasher")) %>%
   pull(asv_id)
-  
-  
-    ## heritability (random effect of genotype)
+
+
+## heritability (random effect of genotype)
 
 heritable_asvs <- asv_models %>%
   rowwise() %>%
   mutate(heritability_percent = model %>% broom.mixed::tidy("ran_pars") %>%
-                               mutate(variance = estimate^2, tot_var = sum(variance)) %>% 
-                               filter(group == "genotype") %>% mutate(herit = 100*variance/tot_var) %>%
-                               pull(herit), .after = asv_id) %>%
+           mutate(variance = estimate^2, tot_var = sum(variance)) %>% 
+           filter(group == "genotype") %>% mutate(herit = 100*variance/tot_var) %>%
+           pull(herit), .after = asv_id) %>%
   filter(heritability_percent > 0)
 
 
@@ -1296,10 +1294,10 @@ heritable_asvs %>% arrange(desc(heritability_percent)) %>% filter(asv_id %in% as
   formattable(align = c("c", "c", "c", "c"), list(
     area(col = 4) ~ color_tile("#FFEBF9", "hotpink")
   )) #%>%
-  export_formattable("../Figures/top10_heritability.png")
+export_formattable("../Figures/top10_heritability.png")
 
-  
-    ##logfold change between D and H
+
+##logfold change between D and H
 
 #make formattable chart showing logfold change of D compared to H at Dose and T7
 significant_models %>%
@@ -1326,8 +1324,8 @@ significant_models %>%
   export_formattable("../Figures/put_pathogens_logfold_table.png")
 
 
-    ## lm models predicting w T0
-  #TAKEAWAY: T0 abundance cannot predict disease resistance
+## lm models predicting w T0
+#TAKEAWAY: T0 abundance cannot predict disease resistance
 
 t0_prediction_lms <- full_data %>%
   filter(time == "T0") %>%
@@ -1341,7 +1339,7 @@ t0_prediction_lms <- full_data %>%
 bacterial_signature_asv %>% filter(asv_id %in% t0_prediction_lms$asv_id)
 
 
-    ## Correlation Matrices
+## Correlation Matrices
 
 #corr matrix for 8 putative pathogen candidates only
 
@@ -1383,7 +1381,7 @@ corrplot(colwell_test$r, type="upper", order="hclust",
          p.mat = colwell_test$P, sig.level = 0.05, insig = "blank",
          #col.lim = c(-0.2,1), col = c(rep("gray30", 10), rainbow(20)), tl.col = "gray20")
          col.lim = c(-0.2,1), col = c(rep("gray30", 6), brewer.pal(11,"Spectral")), tl.col = "gray20")
-  
+
 
 #late pathogens and opportunists
 
@@ -1425,7 +1423,7 @@ mod_alpha_tab <- alpha_table %>%
   select(-c(final_disease_state, clone_group)) %>%
   nest_by(metric) %>%
   summarise(alpha_model = list(lmer(alpha_div_value ~ treatment + 
-                                (1 | genotype) + (1 | tank), data = data))) %>% 
+                                      (1 | genotype) + (1 | tank), data = data))) %>% 
   rowwise() %>% 
   mutate(sig_terms = list(anova(alpha_model) %>% 
                             rownames_to_column(var = "sig_term") %>% 
@@ -1438,31 +1436,31 @@ mod_alpha_tab <- alpha_table %>%
   filter(length(sig_terms) > 0) %>%
   select(-sig_terms) %>%
   mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
-           
+
 ## figuring out the fig
 
 alpha_graphs <- mod_alpha_tab %>%
   rowwise() %>%
   mutate(plot_info = list(emmeans(alpha_model, ~treatment) %>%
-                          broom::tidy(conf.int = TRUE) %>%
-                          separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                          mutate(graph_cat = ifelse(time == "T0", NA, 
-                                                    paste(exposure, susceptability, sep = "_"))) %>%
-                          {. ->> intermed } %>%
-                          mutate(graph_cat = ifelse(time == "T0", paste("H", susceptability, sep = "_"), 
-                                                    graph_cat)) %>%
-                          dplyr::slice(rep(1:2, 1)) %>%
-                          rbind(intermed) %>%
-                          mutate(graph_cat = ifelse(is.na(graph_cat), paste("D", susceptability, sep = "_"), 
-                                                    graph_cat)) %>%
-                          mutate(c_time = parse_number(time)) %>%
-                          mutate(facet_lab = "Experimental") %>%
-                          mutate(c_time = ifelse(time == "T0", ifelse(susceptability == "S", c_time - 0.1, c_time + 0.1),
-                                                 case_when(graph_cat == "D_S" ~ c_time - 0.35,
-                                                           graph_cat == "H_S" ~ c_time - 0.15,
-                                                           graph_cat == "D_R" ~ c_time + 0.15,
-                                                           graph_cat == "H_R" ~ c_time + 0.35))) %>%
-                          mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
+                            broom::tidy(conf.int = TRUE) %>%
+                            separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
+                            mutate(graph_cat = ifelse(time == "T0", NA, 
+                                                      paste(exposure, susceptability, sep = "_"))) %>%
+                            {. ->> intermed } %>%
+                            mutate(graph_cat = ifelse(time == "T0", paste("H", susceptability, sep = "_"), 
+                                                      graph_cat)) %>%
+                            dplyr::slice(rep(1:2, 1)) %>%
+                            rbind(intermed) %>%
+                            mutate(graph_cat = ifelse(is.na(graph_cat), paste("D", susceptability, sep = "_"), 
+                                                      graph_cat)) %>%
+                            mutate(c_time = parse_number(time)) %>%
+                            mutate(facet_lab = "Experimental") %>%
+                            mutate(c_time = ifelse(time == "T0", ifelse(susceptability == "S", c_time - 0.1, c_time + 0.1),
+                                                   case_when(graph_cat == "D_S" ~ c_time - 0.35,
+                                                             graph_cat == "H_S" ~ c_time - 0.15,
+                                                             graph_cat == "D_R" ~ c_time + 0.15,
+                                                             graph_cat == "H_R" ~ c_time + 0.35))) %>%
+                            mutate(graph_cat = factor(graph_cat, levels = c("D_S", "D_R", "H_S", "H_R"), labels = c("D_S", "D_R", "H_S", "H_R"))))) %>%
   rowwise() %>%
   mutate(plot = list(
     ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
@@ -1529,7 +1527,7 @@ t3t7_alpha_models <- alpha_table %>%
   filter(time %in% c("T3", "T7")) %>%
   nest_by(metric) %>%
   summarise(t3t7_model = list(lmer(alpha_div_value ~ time*exposure*susceptability + 
-                                      (1 | genotype) + (1 | tank), data = data)))
+                                     (1 | genotype) + (1 | tank), data = data)))
 
 t0_alpha_models <- alpha_table %>%
   filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
@@ -1561,12 +1559,12 @@ t0_plot_prep <- t0_alpha_models %>%
   filter(metric != "rarity_log_modulo_skewness") %>%
   rowwise() %>%
   mutate(t0_plot_info = list(emmeans(t0_model, ~susceptability) %>%
-                            cld(Letters = letters) %>% # , adjust = 'fdr' ??
-                            broom::tidy(conf.int = TRUE) %>%
-                            mutate(.group = str_trim(.group)) %>%
-                            mutate(c_time = 0) %>%
-                            mutate(time = NA, exposure = NA, facet_lab = "Field") %>%
-                            mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
+                               cld(Letters = letters) %>% # , adjust = 'fdr' ??
+                               broom::tidy(conf.int = TRUE) %>%
+                               mutate(.group = str_trim(.group)) %>%
+                               mutate(c_time = 0) %>%
+                               mutate(time = NA, exposure = NA, facet_lab = "Field") %>%
+                               mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
   )) 
 
 t3t7_plot_prep <- t3t7_sig_terms %>%
@@ -1574,15 +1572,15 @@ t3t7_plot_prep <- t3t7_sig_terms %>%
   filter(metric != "rarity_log_modulo_skewness") %>%
   left_join(t0_plot_prep, by = join_by("metric")) %>%
   mutate(t3t7_plot_info = list(emmeans(t3t7_model, ~time*exposure) %>%
-                            cld(Letters = LETTERS) %>% # , adjust = 'fdr' ??
-                            broom::tidy(conf.int = TRUE) %>%
-                            mutate(.group = str_trim(.group)) %>%
-                            mutate(c_time = parse_number(time)) %>%
-                            mutate(susceptability = NA, facet_lab = "Experimental") %>%
-                            mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
+                                 cld(Letters = LETTERS) %>% # , adjust = 'fdr' ??
+                                 broom::tidy(conf.int = TRUE) %>%
+                                 mutate(.group = str_trim(.group)) %>%
+                                 mutate(c_time = parse_number(time)) %>%
+                                 mutate(susceptability = NA, facet_lab = "Experimental") %>%
+                                 mutate(facet_lab = factor(facet_lab, levels = c("Field", "Experimental")))
   )) %>%
   mutate(both_plot_infos = list(rbind(t0_plot_info, t3t7_plot_info)))
-  
+
 
 slrp <- t3t7_plot_prep %>%
   rowwise() %>%
@@ -1593,9 +1591,9 @@ slrp <- t3t7_plot_prep %>%
       geom_point(data = both_plot_infos %>% filter(facet_lab == "Field"), 
                  aes(col = susceptability, pch = susceptability, size = susceptability), position = position_dodge(0.5)) +
       geom_errorbar(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
-                 aes(col = exposure), width = 0, position = position_dodge(0.5)) +
+                    aes(col = exposure), width = 0, position = position_dodge(0.5)) +
       geom_errorbar(data = both_plot_infos %>% filter(facet_lab == "Field"), 
-                 aes(col = susceptability), width = 0, position = position_dodge(0.5)) +
+                    aes(col = susceptability), width = 0, position = position_dodge(0.5)) +
       
       geom_line(data = both_plot_infos %>% filter(facet_lab == "Experimental"), 
                 aes(col = exposure, linetype = exposure), position = position_dodge(0.5)) +
@@ -1660,8 +1658,8 @@ upset(
   
   base_annotations=list(
     ' '=intersection_size(counts=T, text = aes(size = 6.5),
-                                          bar_number_threshold = 25,
-                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                          bar_number_threshold = 25,
+                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 19) +
@@ -1727,8 +1725,8 @@ upset(
              select(T0, D, H, starts_with("cont"), starts_with("late"), starts_with("early"))),
   base_annotations=list(
     ' '=intersection_size(counts=T, text = aes(size = 6.5),
-                                          bar_number_threshold = 25,
-                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                          bar_number_threshold = 25,
+                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
@@ -1807,32 +1805,32 @@ pathogen_upset <- upset(
              select(T7, T3, T0, D, H, late_pathogen, early_pathogen)),
   base_annotations=list(
     ' '=intersection_size(counts=T, text = aes(size = 6.5),
-                                          bar_number_threshold = 25,
-                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                          bar_number_threshold = 25,
+                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0,6) +
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
             panel.background = element_blank(), axis.text.y=element_blank(),
             axis.ticks.y=element_blank()) +
-    scale_fill_manual(values = c(
-      "Arenicellaceae" = "#BF4728",
-      "Bdellovibrionaceae" = "#B6908B",
-      "Cellvibrionaceae" = "#B5CAF0",
-      "Colwelliaceae" = "#CE2220",
-      "Cryomorphaceae" = "#EBDEA4",
-      "Crocinitomicaceae" = "#306A26",
-      "Flavobacteriaceae" = "#E67F33",
-      "Fokiniaceae" = "#7EB875",
-      "Francisellaceae" = "#D0B541",
-      "Oligoflexaceae" = "#57A2AC",
-      "P13-46" = "#7C4942",
-      "Hyphomonadaceae" = "#4E78C4",
-      "Puniceicoccaceae" = "#B997C7", 
-      "Rhodobacteraceae" = "#824D99",
-      "Saprospiraceae" = "#992572",
-      "Sphingomonadaceae" = "#F3B4DE"
-    ))
+      scale_fill_manual(values = c(
+        "Arenicellaceae" = "#BF4728",
+        "Bdellovibrionaceae" = "#B6908B",
+        "Cellvibrionaceae" = "#B5CAF0",
+        "Colwelliaceae" = "#CE2220",
+        "Cryomorphaceae" = "#EBDEA4",
+        "Crocinitomicaceae" = "#306A26",
+        "Flavobacteriaceae" = "#E67F33",
+        "Fokiniaceae" = "#7EB875",
+        "Francisellaceae" = "#D0B541",
+        "Oligoflexaceae" = "#57A2AC",
+        "P13-46" = "#7C4942",
+        "Hyphomonadaceae" = "#4E78C4",
+        "Puniceicoccaceae" = "#B997C7", 
+        "Rhodobacteraceae" = "#824D99",
+        "Saprospiraceae" = "#992572",
+        "Sphingomonadaceae" = "#F3B4DE"
+      ))
   ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
@@ -1876,8 +1874,8 @@ opportunist_upset <- upset(
              select(T7, T3, T0, D, H, late_opportunist, early_opportunist)),
   base_annotations=list(
     ' '=intersection_size(counts=T, text = aes(size = 6.5),
-                                          bar_number_threshold = 25,
-                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                          bar_number_threshold = 25,
+                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 9) +
@@ -1904,7 +1902,7 @@ opportunist_upset <- upset(
       ))
   ),
   
- 
+  
   
   
   matrix=(
@@ -1955,8 +1953,8 @@ probiotic_upset <- upset(
              select(T7, T3, T0, D, H, late_probiotic)),
   base_annotations=list(
     ' '=intersection_size(counts=T, text = aes(size = 6.5),
-                                          bar_number_threshold = 25,
-                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+                          bar_number_threshold = 25,
+                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
     ) +
       geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10") +
       ylim(0, 8) +
@@ -2044,302 +2042,86 @@ simple_comp_upset %>%
     #late_probiotic = formatter("span", style = x ~ style(color = ifelse(x < 1, "white", "black"))),
     total = color_tile("gray", "gray")
   )) #%>%
-  export_formattable("../Figures/fds_exp_diffs.png")
-  
+export_formattable("../Figures/fds_exp_diffs.png")
 
 
-  
+
+
 #### Comp Upset w Sig Row ####
 homog_unc_sig <- homogenate_models %>% 
-    filter(dose_pairwise <= 0.05) %>% 
-    select(asv_id) %>%
-    mutate(unc_sig = TRUE)
-  
+  filter(dose_pairwise <= 0.05) %>% 
+  select(asv_id) %>%
+  mutate(unc_sig = TRUE)
+
 homog_fdr_sig <- homogenate_models %>% 
-    filter(dose_pairwise_adj <= 0.05) %>% 
-    select(asv_id) %>%
-    mutate(fdr_sig = TRUE)
-  
-  
+  filter(dose_pairwise_adj <= 0.05) %>% 
+  select(asv_id) %>%
+  mutate(fdr_sig = TRUE)
+
+
 comp_upset_w_sigs <- comp_upset_bac_strat %>%
   left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
   left_join(homog_unc_sig, by = join_by(asv_id)) %>%
   left_join(homog_fdr_sig, by = join_by(asv_id)) %>%
   mutate(across(D:fdr_sig, ~ifelse(is.na(.), FALSE, .)))
 
-  upset(
-    comp_upset_w_sigs,
-    colnames(comp_upset_w_sigs %>%
-               select(T0, fdr_sig, unc_sig, D, H, crasher_t7_strict, crasher_t7, crasher_t3,late_opportunist, early_opportunist, late_pathogen, continuous_pathogen, early_pathogen)), 
-    
-    base_annotations=list(
-      'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
-                                            bar_number_threshold = 25,
-                                            mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
-      ) +
-        geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
-    ),
-    matrix=(
-      intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
-      + scale_color_manual(
-        values=c(
-          #"T7" = "#650197",
-          #"T3" = "#B21BFF",
-          "T0" = "#B21BFF",
-          "unc_sig" = "#ff87cd",
-          "fdr_sig" = "#ff4ab4",
-          "D" = "#AE0404",
-          "H" = "#0FAB02",
-          "late_pathogen" = "#FF1E1E",
-          "early_pathogen" = "#FF9797",
-          "continuous_pathogen" = "maroon",
-          "continuous_opportunist" = "royalblue4",
-          "late_opportunist" = "deepskyblue3",
-          "early_opportunist" = "lightskyblue",
-          "crasher_t3" = "#FF9A00",
-          "crasher_t7" = "#BD5E03",
-          "crasher_t7_strict" = "gold2"
-          #"probiotic_t7_strict" = "#49EACC"
-        )
+upset(
+  comp_upset_w_sigs,
+  colnames(comp_upset_w_sigs %>%
+             select(T0, fdr_sig, unc_sig, D, H, crasher_t7_strict, crasher_t7, crasher_t3,late_opportunist, early_opportunist, late_pathogen, continuous_pathogen, early_pathogen)), 
+  
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
+  matrix=(
+    intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+    + scale_color_manual(
+      values=c(
+        #"T7" = "#650197",
+        #"T3" = "#B21BFF",
+        "T0" = "#B21BFF",
+        "unc_sig" = "#ff87cd",
+        "fdr_sig" = "#ff4ab4",
+        "D" = "#AE0404",
+        "H" = "#0FAB02",
+        "late_pathogen" = "#FF1E1E",
+        "early_pathogen" = "#FF9797",
+        "continuous_pathogen" = "maroon",
+        "continuous_opportunist" = "royalblue4",
+        "late_opportunist" = "deepskyblue3",
+        "early_opportunist" = "lightskyblue",
+        "crasher_t3" = "#FF9A00",
+        "crasher_t7" = "#BD5E03",
+        "crasher_t7_strict" = "gold2"
+        #"probiotic_t7_strict" = "#49EACC"
       )
-    ),
-    queries=list(
-      #upset_query(set = "T7", fill = "#650197"),
-      #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
-      upset_query(set = "T0", fill = "#B21BFF"),
-      upset_query(set = "unc_sig", fill = "#ff87cd"),
-      upset_query(set = "fdr_sig", fill = "#ff4ab4"),
-      upset_query(set = "D", fill = "#AE0404"),
-      upset_query(set = "H", fill = "#0FAB02"),
-      upset_query(set = "late_pathogen", fill = "#FF1E1E"),
-      upset_query(set = "early_pathogen", fill = "#FF9797"),
-      upset_query(set = "continuous_pathogen", fill = "maroon"),
-      upset_query(set = "continuous_opportunist", fill = "royalblue4"),
-      upset_query(set = "late_opportunist", fill = "deepskyblue3"),
-      upset_query(set = "early_opportunist", fill = "lightskyblue"),
-      upset_query(set = "crasher_t3", fill = "#FF9A00"),
-      upset_query(set = "crasher_t7", fill = "#BD5E03"),
-      upset_query(set = "crasher_t7_strict", fill = "gold2")
-      #upset_query(set = "probiotic_t7_strict", fill = "#49EACC")
-    ),
-    name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-    stripes = c("#F8EAFF", "#fff2fa", "#fff2fa","#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
-    #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-    ggtitle("Bacterial Strategies/Presence Data") 
-  
-  
-  
-  
-#### JASON Work Zone ####
-tmp <- filter(significant_models, 
-              `fdr_DS(T7-T3)` < 0.05,
-              `fdr_T7(DSvHR.DR.HS)` < 0.05,
-              `fdr_T7(DSvDR)` < 0.05,
-              `fdr_DS(T7-T0)` < 0.05) %>%
-  filter(`estimate_DS(T7-T3)` > 0,
-         `estimate_DS(T7-T0)` > 0,
-         `estimate_T7(DSvDR)` > 0) %>%
-  mutate(across(Kingdom:Species, str_replace_na)) 
+    )
+  ),
+  queries=list(
+    #upset_query(set = "T7", fill = "#650197"),
+    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
+    upset_query(set = "T0", fill = "#B21BFF"),
+    upset_query(set = "unc_sig", fill = "#ff87cd"),
+    upset_query(set = "fdr_sig", fill = "#ff4ab4"),
+    upset_query(set = "D", fill = "#AE0404"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
+    upset_query(set = "early_pathogen", fill = "#FF9797"),
+    upset_query(set = "continuous_pathogen", fill = "maroon"),
+    upset_query(set = "continuous_opportunist", fill = "royalblue4"),
+    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
+    upset_query(set = "early_opportunist", fill = "lightskyblue"),
+    upset_query(set = "crasher_t3", fill = "#FF9A00"),
+    upset_query(set = "crasher_t7", fill = "#BD5E03"),
+    upset_query(set = "crasher_t7_strict", fill = "gold2")
+    #upset_query(set = "probiotic_t7_strict", fill = "#49EACC")
+  ),
+  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  stripes = c("#F8EAFF", "#fff2fa", "#fff2fa","#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
+  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
+  ggtitle("Bacterial Strategies/Presence Data") 
 
-tmp %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
-  pull(plot) %>%
-  wrap_plots() +
-  plot_layout(guides = 'collect')
-
-
-filter(significant_models, 
-       `fdr_DS(T7-T3)` < 0.05,
-       `fdr_T7(DSvHR.DR.HS)` < 0.05,
-       `fdr_T7(DSvDR)` < 0.05,
-       # `fdr_DS(T7-T0)` < 0.05
-       ) %>%
-  filter(#`estimate_DS(T7-T3)` > 0,
-         #`estimate_DS(T7-T0)` > 0,
-         `estimate_T7(DSvDR)` < 0) %>%
-  mutate(across(Kingdom:Species, str_replace_na)) %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
-  pull(plot) %>%
-  wrap_plots() +
-  plot_layout(guides = 'collect')
-
-T3(DS.DRvHS.HR)
-T7(DS.DRvHS.HR)
-filter(significant_models, 
-       # `fdr_DS(T7-T3)` < 0.05,
-       `fdr_T3(DSvHR.DR.HS)` < 0.05,
-       # `fdr_T3(DSvDR)` < 0.05,
-       # `fdr_DS(T7-T0)` < 0.05,
-       # `fdr_DS(T3-T0)` < 0.05,
-       `fdr_T7(DSvHR.DR.HS)` < 0.05,
-       `fdr_T7(DSvDR)` < 0.05,
-) %>%
-  filter(#`estimate_DS(T7-T3)` > 0,
-    #`estimate_DS(T7-T0)` > 0,
-    `estimate_T7(DSvDR)` > 0) %>%
-  mutate(across(Kingdom:Species, str_replace_na)) %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': ')))) %>%
-  pull(plot) %>%
-  wrap_plots() +
-  plot_layout(guides = 'collect')
-
-
-
-
-tmp <- significant_models %>%
-  select(asv_id, starts_with('fdr')) %>% 
-  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
-  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
-  
-  pivot_longer(cols = -asv_id,
-               names_to = c('term'),
-               values_to = 'significance') %>%
-  mutate(term = str_remove(term, 'fdr_')) %>%
-  left_join(posthoc_categories, by = c('term' = 'contrast_name')) %>%
-  mutate(summarised_effect = if_else(is.na(summarised_effect), term, summarised_effect)) %>%
-  group_by(asv_id, summarised_effect) %>%
-  filter(any(significance)) %>%
-  filter(summarised_effect == 'exposureXresistance') %>%
-  ungroup %>%
-  select(-contrasts) %>%
-  group_by(asv_id, summarised_effect) %>%
-  filter(significance) %>%
-  summarise(sig_terms = str_c(term, collapse = ' & '),
-            .groups = 'drop') %>%
-  left_join(significant_models, by = 'asv_id') %>%
-  mutate(across(Kingdom:Species, str_replace_na)) %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': '),
-                            subtitle = sig_terms)))
-
-
-
-  
-wrap_plots(tmp$plot) + plot_layout(guides = 'collect')
-
-
-
-tmp <- significant_models %>%
-  select(asv_id, starts_with('fdr')) %>% 
-  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
-  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
-  
-  pivot_longer(cols = -asv_id,
-               names_to = c('term'),
-               values_to = 'significance') %>%
-  mutate(term = str_remove(term, 'fdr_')) %>%
-  left_join(posthoc_categories, by = c('term' = 'contrast_name')) %>%
-  mutate(summarised_effect = if_else(is.na(summarised_effect), term, summarised_effect)) %>%
-  group_by(asv_id, summarised_effect) %>%
-  filter(any(significance)) %>%
-  ungroup %>%
-  group_by(asv_id) %>%
-  filter(any(summarised_effect == 'timeXresistanceXexposure')) %>%
-  ungroup %>%
-  select(-contrasts) %>%
-  group_by(asv_id) %>%
-  filter(significance) %>%
-  summarise(sig_terms = str_c(term, collapse = ' & '),
-            .groups = 'drop') %>%
-  left_join(significant_models, by = 'asv_id') %>%
-  mutate(across(Kingdom:Species, str_replace_na)) %>%
-  filter(`estimate_DT7(S - R)` > 0 & `estimate_ST7(D - H)` > 0) %>%
-  rowwise %>%
-  mutate(plot = list(emmeans(model, ~treatment) %>%
-                       broom::tidy(conf.int = TRUE) %>%
-                       separate(treatment, into = c('time', 'exposure', 'susceptability')) %>%
-                       ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high, 
-                                  colour = exposure,
-                                  shape = susceptability)) +
-                       geom_pointrange(position = position_dodge(0.5)) +
-                       labs(title = str_c(Family, Genus, asv_id, sep = ': '),
-                            subtitle = sig_terms)))
-
-wrap_plots(tmp$plot) + 
-  plot_layout(guides = 'collect')
-
-
-
-tmp$model[[2]] %>%
-  emmeans(~treatment) %>%
-  contrast(method = c(exposure_mainEffects_posthoc))
-
-
-reference_grid_2 <- tmp$model[[2]] %>%
-  ref_grid(~treatment)
-
-tmp1_grid <- add_grouping(reference_grid_2, newname = 'Experiment_Field', refname = 'treatment',
-                          c('F', 'F', 'E', 'E', 'E', 'E', 'E', 'E', 'E', 'E'))
-emmeans(tmp1_grid, ~Experiment_Field) %>%
-  contrast('pairwise')
-
-emmeans(tmp1_grid, ~Experiment_Field) %>%
-  broom::tidy(conf.int = TRUE) %>%
-  ggplot(aes(x = Experiment_Field, y = estimate, ymin = conf.low, ymax = conf.high)) +
-  geom_pointrange()
-
-
-
-tmp1_grid <- add_grouping(reference_grid_2, newname = 'H_D', refname = 'treatment',
-                          c(NA, NA, 'D', 'D', 'H', 'H', 'D', 'D', 'H', 'H'))
-emmeans(tmp1_grid, ~H_D) %>%
-  contrast('pairwise')
-
-emmeans(tmp1_grid, ~H_D) %>%
-  broom::tidy(conf.int = TRUE) %>%
-  ggplot(aes(x = H_D, y = estimate, ymin = conf.low, ymax = conf.high)) +
-  geom_pointrange()
-
-
-
-tmp <- significant_models %>%
-  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
-  mutate(across(starts_with('fdr'), ~. < 0.05)) %>% 
-  # select(asv_id, starts_with('fdr')) %>%
-  filter(`fdr_D(T3-T0)` & `fdr_D(T3-T0) - H(T3-T0)`) 
-
-reference_grid_2 <- tmp$model[[1]] %>%
-  ref_grid(~treatment)
-tmp1_grid <- add_grouping(reference_grid_2, newname = 'time_disease', refname = 'treatment',
-                          c('T0_F', 'T0_F', 'T3_D', 'T3_D', 'T3_H', 
-                            'T3_H', 'T7_D', 'T7_D', 'T7_H', 'T7_H'))
-emmeans(tmp1_grid, ~time_disease) %>%
-  contrast('pairwise')
-
-emmeans(tmp1_grid, ~time_disease) %>%
-  broom::tidy(conf.int = TRUE) %>%
-  separate(time_disease, into = c('time', 'exposure')) %>%
-  ggplot(aes(x = time, y = estimate, ymin = conf.low, ymax = conf.high,
-             colour = exposure)) +
-  geom_pointrange()

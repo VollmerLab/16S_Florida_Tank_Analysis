@@ -3,12 +3,13 @@
 library(tidyverse)
 library(magrittr)
 library(phyloseq)
+#library(seqateurs) #for outputting ps to fasta file
 
 #### Read in data ####
 preprocess_metadata <- read_csv('../intermediate_files/preprocess_metadata.csv', 
                                 show_col_types = FALSE)
 
-microbiome_raw <- read_rds('../Data/updated_8_21_23_decipher_16s_ps.rds') %>% #ps_fl_tank.rds
+microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>% #ps_fl_tank.rds
   subset_taxa(Domain == "Bacteria" & #Domain used to be Kingdom
                 Phylum != "Cyanobacteria" &
                 !is.na(Phylum) &
@@ -85,6 +86,8 @@ processed_microbiome <- subset_samples(processed_microbiome, retain_sample)
 #   mutate(T0 = str_remove(T0, ' \\+ ')) %>%
 #   relocate(final_disease_state, .after = everything()) %>%
 #   arrange(genotype) %>% View
+
+ps_to_fasta(processed_microbiome)
 
 #### Output preprocessed microbiome as rds ####
 write_rds(processed_microbiome, '../intermediate_files/preprocess_microbiome.rds')

@@ -85,3 +85,29 @@ preprocess_metadata %>%
   column_to_rownames('treatment') %T>%
   print %>%
   chisq.test()
+
+#### Table of Genotype Presences ####
+
+pre_table_of_genotypes <- preprocess_metadata %>%
+  group_by(genotype, time, exposure) %>%
+  pivot_wider(values_from = tank, names_from = time) %>%
+  select(-c(clone_group, sample_id, resistance, reads, susceptability)) %>%
+  summarise(T0 = paste0(na.omit(T0), collapse = ","),
+            T3 = paste0(na.omit(T3), collapse = ","),
+            T7 = paste0(na.omit(T7), collapse = ","),
+            FDS = paste0(na.omit(final_disease_state), collapse = ",")) %>%
+  mutate(across(T0:FDS, ~ifelse(. == "", NA, .))) %>%
+  ungroup()
+
+field_data_genotypes <- pre_table_of_genotypes %>%
+  filter(exposure == "F") %>%
+  pull(genotype)
+
+
+table_of_genotypes <- pre_table_of_genotypes %>%
+  mutate(T0 = ifelse(genotype %in% field_data_genotypes, "Field", NA)) %>%
+  filter(exposure != "F")
+
+
+#### ####
+

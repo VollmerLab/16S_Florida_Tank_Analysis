@@ -1,3 +1,4 @@
+setwd("/Users/emilytrytten/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### Libraries ####
 library(tidyverse)
@@ -128,7 +129,7 @@ mdf_processed_data <- mdf_prep_test1 %>%
   ungroup() %>%
   select(-c(retain_sample)) %>%
   group_by(category, Genus) %>%
-  reframe(Domain, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
+  reframe(Kingdom, Phylum, Class, Order, Family, time, total, rel_abun = sum(Abundance)/total) %>%
   distinct() %>%
   rename(Sample = category, Abundance = rel_abun) %>%
   mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0", "T3_H", "T3_D", "T7_H_H", "T7_D_H", "T7_D_D"))) %>%
@@ -149,7 +150,10 @@ plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf_ordergenus) +
   facet_grid(cols = vars(time), scales = "free", space = "free") +
   theme_bw() +
   theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
-  labs(title = "Order Genus")
+  #labs(title = "Order Genus") +
+  scale_x_discrete(name = element_blank(), labels = c("T0" = "Field", "T3_H" = "Healthy", "T3_D" =
+                                "Disease", "T7_H_H" = "Healthy (Healthy)",
+                              "T7_D_H" = "Disease (Healthy)", "T7_D_D" = "Disease (Diseased)"))
 
 plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
 
@@ -196,7 +200,7 @@ plot_grid(plot_suscep_prelim, legend_suscep,  rel_widths = c(1, .25))
 otu_timepoint_presence <- phyloseq_filter_prevalence(microbiome_data, 
                                                      prev.trh = 0.2) %>%
   psmelt() %>%
-  as_tibble  %>%
+  as_tibble() %>%
   mutate(across(c(exposure, final_disease_state), factor)) %>%
   filter(time %in% c('T3', 'T7') | (time == "T0" & tank == "HOMO")) %>%
   filter(Abundance > 0) %>%
@@ -249,9 +253,9 @@ otus_to_analyze <- filter(otu_timepoint_presence,
   pull(OTU)
 
 not_t3t7_only <- filter(venn_all_times_and_doses, 
-                    !c(!D & !H & !T0 & T3 & T7)) %>%
-  filter(!c(!D & !H & !T0 & !T3 & T7)) %>%
-  filter(!c(!D & !H & !T0 & T3 & !T7)) %>%
+                    !c(!D & !H & !T0 & T3 & T7 & !T0_H)) %>%
+  filter(!c(!D & !H & !T0 & !T3 & T7 & !T0_H)) %>%
+  filter(!c(!D & !H & !T0 & T3 & !T7 & !T0_H)) %>%
   pull(OTU)
   
 #### Normalize based on all samples & any other filtering ####
@@ -269,7 +273,7 @@ otu_tmm <- microbiome_data %>%
  
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
   filter_venn(not_t3t7_only) %>% #remove things that are only in T3 and T7
-  #filter_venn(otus_to_analyze) %>%
+  #filter_venn(otus_to_analyze) %>% #only things in D and T3 and T7, aka potential pathogens
   filter_samples(model_samples) %>% #remove samples not to be analyzed
   filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
 
