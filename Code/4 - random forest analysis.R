@@ -43,7 +43,7 @@ normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samp
   mutate(treatment = str_c(time, exposure, susceptability, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
-         across(Kingdom:Species, str_replace_na)) %>%
+         across(Domain:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer)
 
 #### Preprocess Metadata for Random Forest ####
@@ -70,8 +70,8 @@ samples_through_time <- normalized_asv_counts %>%
 
 #### Preprocess ASVs for Random Forest ####
 taxonomic_counts <- normalized_asv_counts %>%
-  select(Kingdom:Genus, asv_id, sample_id, read_count, lib.size) %>%
-  select(-Kingdom:-Class) %>%
+  select(Domain:Genus, asv_id, sample_id, read_count, lib.size) %>%
+  select(-Domain:-Class) %>%
   mutate(asv_id = str_c(Order, Family, Genus, asv_id, sep = ':')) %>%
   pivot_longer(cols = -c(sample_id, read_count, lib.size),
                names_to = 'taxonomic_level',
@@ -240,6 +240,10 @@ disease_fit %>%
 
 disease_fit %>%
   collect_predictions()
+
+disease_fit %>%
+  collect_predictions() %>% 
+  conf_mat(truth = final_disease_state, estimate = .pred_class)
 
 #### Fit Final Model for Variable Importance ####
 fit_rf <- final_rf %>%
