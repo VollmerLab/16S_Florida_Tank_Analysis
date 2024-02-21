@@ -87,7 +87,7 @@ processed_microbiome <- subset_samples(processed_microbiome, retain_sample)
 #   relocate(final_disease_state, .after = everything()) %>%
 #   arrange(genotype) %>% View
 
-ps_to_fasta(processed_microbiome)
+ps_to_fasta(processed_microbiome, seqnames = "Family", out.file = "genus_microbiome_fasta.fasta")
 
 #### Output preprocessed microbiome as rds ####
 write_rds(processed_microbiome, '../intermediate_files/preprocess_microbiome.rds')
@@ -103,3 +103,11 @@ sample_data(processed_microbiome) %>%
   column_to_rownames('exposure') %T>%
   print %>%
   chisq.test()
+
+#get fasta
+otu_table(processed_microbiome)
+tax_table(processed_microbiome)
+
+
+
+

@@ -103,9 +103,9 @@ if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
 } else {
-  #sequences <- taxa_names(microbiome_data)
+  sequences <- taxa_names(microbiome_data)
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
-  #names(sequences) <- taxa_names(microbiome_data)
+  names(sequences) <- taxa_names(microbiome_data)
 }
 
 

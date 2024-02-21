@@ -109,24 +109,11 @@ process_model <- function(model, re_model, random_anova){
     bind_cols(global_row, r2_row, varDecomp_row, ., aov_row)
 }
 
-run_posthoc <- function(model, contrast_list){
-  em_out <- emmeans(model, ~treatment)
-  
-  contrast_list %>%
-    rowwise(direction) %>%
-    reframe(emmeans::contrast(em_out,
-                              method = contrast$contrasts, 
-                              adjust = 'none',
-                              side = direction) %>%
-              as_tibble)
-}
-
 # posthoc <- asv_models$posthoc[[1]]
 process_postHoc <- function(posthoc){
   post_row <- as_tibble(posthoc) %>%
     dplyr::rename(tvalue = t.ratio,
                   pvalue = p.value) %>%
-    mutate(contrast = str_c(contrast, direction, sep = '_'), .keep = 'unused') %>%
     pivot_wider(names_from = c('contrast'),
                 values_from = c('estimate', 'SE', 'df', 'tvalue', 'pvalue'),
                 names_vary = 'slowest')
@@ -267,195 +254,13 @@ normalized_asv_counts <- old_taxonomy_normalized_asv_counts %>%
   select(-c(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
   left_join(combined_taxonomy, by = join_by("asv_id"))
 
+# posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
+simple_planned_posthocs <- list('aquarium' = c(-1, 1/6, 1/6, 1/6, 1/6, 1/6, 1/6),
+                                'exposure' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2),
+                                'outcome' = c(0, 1/2, -1/2, 0, 1/2, -1/2, 0))
 
-#### Main Effect and Interaction Contrasts ####
-# model <- asv_models$model[[1]]
-# emmeans(model, ~treatment)
-
-#   -Time alone i.e. linear or quadratic
-time_mainEffects_posthoc <- list('linear' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3),
-                                 'quadratic' = c(1, -2/3, -2/3, -2/3, 1/3, 1/3, 1/3),
-                                 'early' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
-                                 'late' = c(0, -1/3, -1/3, -1/3, 1/3, 1/3, 1/3))
-
-#   -Final Disease State alone i.e. difference between healthy & diseased across all time/exposure
-finalDiseaseState_mainEffects_posthoc <- list('H - D' = c(0, -1/2, 1/4, 1/4, -1/2, 1/4, 1/4))
-
-
-#   -Field vs Tank i.e. difference between field and average of healthy and diseased across all time/resistance
-#   -Exposure alone i.e. difference between healthy and diseased across all resistance & T3/T7
-exposure_mainEffects_posthoc <- list('Experimental - Field' = c(-1, 1/6, 1/6, 1/6, 1/6, 1/6, 1/6),
-                                     'expD - expH' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2))
-#   -Time x Final Disease State
-#   -HvD (t3-t0), HvD (t7-t3) - name early/late resistance/susceptible
-timeFinalDiseaseState_interaction_posthoc <- list('H(T3-T0) - D(T3-T0)' = c(-1, 0, 1/2, 1/2, 0, 0, 0) - c(-1, 1, 0, 0, 0, 0, 0),
-                                                  'H(T7-T3) - D(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 1/2, 1/2) - c(0, -1, 0, 0, 1, 0, 0))
-
-#   -Time x Exposure
-#     -HvD (t3-t0), HvD (t7-t3) - name early/late healthy/diseased
-timeExposure_interaction_posthoc <- list('expD(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
-                                         'expH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
-                                         'expD(T3-T0) - expH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0) - c(-1, 0, 0, 1, 0, 0, 0),
-                                         'expD(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0),
-                                         'expH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
-                                         'expD(T7-T3) - expH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0) - c(0, 0, 0, -1, 0, 0, 1))
-
-#   -Exposure x Final Disease State
-#     -HHvDH, HHvDD
-exposureFinalDiseaseState_interaction_posthoc <- list('HH - DD' = c(0, -1/2, 0, 1/2, -1/2, 0, 1/2),
-                                               'HH - DH' = c(0, 0, -1/2, 1/2, 0, -1/2, 1/2),
-                                               'DH - DD' = c(0, -1/2, 1/2, 0, -1/2, 1/2, 0))
-                                               
-
-#   -Time x Final Disease State x Exposure
-#       -T7 expD(D - H)
-
-threeWay_interaction_posthoc <- list('T7 expD(D - H)' = c(0, 0, 0, 0, 1, -1, 0))
-
-
-posthoc_categories <- tibble(summarised_effect = c('time', 'fds', 'exposure', 
-                                                   'timeXfds', 'timeXexposure', 'exposureXfds',
-                                                   'timeXfdsXexposure'),
-                             contrasts = list(time_mainEffects_posthoc, finalDiseaseState_mainEffects_posthoc, exposure_mainEffects_posthoc,
-                                              timeFinalDiseaseState_interaction_posthoc, timeExposure_interaction_posthoc, exposureFinalDiseaseState_interaction_posthoc,
-                                              threeWay_interaction_posthoc)) %>%
-  unnest(contrasts) %>%
-  mutate(contrast_name = names(contrasts)) 
-
-#### Bacterial Strategy Contrasts ####
-# emmeans(asv_models$model[[1]], ~treatment) #use to get order of treatments in model
-
-#DS = DD, DR = DH, HS/HR = HH 
-#0, 0, 0, 0, 0, 0, 0
-posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
-
-
-bacterial_growth <- list('(T3-T0)' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
-                         '(T7-T3)' = c(0, -1/3, -1/3, -1/3, 1/3, 1/3, 1/3),
-                         '(T7-T0)' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3),
-                         
-                         'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
-                         'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0),
-                         'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                         
-                         'DH(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0),
-                         'DH(T7-T3)' = c(0, 0, -1, 0, 0, 1, 0),
-                         'DH(T7-T0)' = c(-1, 0, 0, 0, 0, 1, 0),
-                         
-                         'HH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
-                         'HH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
-                         'HH(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1),
-                         
-                         'H(T3-T0)' = c(-1, 0, 1/2, 1/2, 0, 0, 0),
-                         'H(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 1/2, 1/2),
-                         'H(T7-T0)' = c(-1, 0, 0, 0, 0, 1/2, 1/2),
-                         
-                         'D(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
-                         'D(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0),
-                         'D(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                         
-                         'expH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
-                         'expH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
-                         'expH(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1),
-                         
-                         'expD(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
-                         'expD(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0),
-                         'expD(T7-T0)' = c(-1, 0, 0, 0, 1/2, 1/2, 0))
-
-#pathogens
-early_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
-                       'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
-                       'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0)) 
-
-late_pathogen <- list('T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
-                      'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
-                      'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                      'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0))
-
-continuous_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
-                            'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
-                            'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
-                            'T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
-                            'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
-                            'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                            'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0)) 
-
-#opportunists
-early_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
-                          'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0))
-
-late_opportunist <- list('T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
-                         'DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
-
-continuous_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
-                               'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
-                               'T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
-                               'DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
-
-#probiotics
-
-probiotic_t3_general <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0))
-probiotic_t7_general <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0))
-
-probiotic_t3_responder <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0),
-                               'T3(DHvDD.HH)' = c(0, -1/2, 1, -1/2, 0, 0, 0),
-                               'DH(T3-T0)' = c(-1, 0, 1, 0, 0, 0, 0))
-probiotic_t7_responder <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0),
-                               'T7(DHvDD.HH)' = c(0, 0, 0, 0, -1/2, 1, -1/2),
-                               'DH(T7-T3)' = c(0, 0, -1, 0, 0, 1, 0))
-
-probiotic_t3_always <- list('T3(DHvDD)' = c(0, -1, 1, 0, 0, 0, 0),
-                            'T3(HH.DHvDD)' = c(0, -1, 1/2, 1/2, 0, 0, 0))
-probiotic_t7_always <- list('T7(DHvDD)' = c(0, 0, 0, 0, -1, 1, 0),
-                            'T7(HH.DHvDD)' = c(0, 0, 0, 0, -1, 1/2, 1/2))
-#commensalists
-commensalist_t3 <- list('T3(HH.DHvDD)' = c(0, -1, 1/2, 1/2, 0, 0, 0))
-commensalist_t7 <- list('T7(HH.DHvDD)' = c(0, 0, 0, 0, -1, 1/2, 1/2))
-
-commensalist_HH_inc <- list('HH(T3-T0)' = c(-1, 0, 0, 1, 0, 0, 0),
-                        'HH(T7-T3)' = c(0, 0, 0, -1, 0, 0, 1),
-                        'HH(T7-T0)' = c(-1, 0, 0, 0, 0, 0, 1))
-
-#crashers
-
-crasher_tank_effect <- list('DD.DH.HH(T3-T0)' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
-                            'DD.DH.HH(T7-T0)' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3))
-rev_crasher_tank_assoc <- list('DD.DH.HH(T3-T0)' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0),
-                               'DD.DH.HH(T7-T0)' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3))
-crasher_BMO_dysbiosis <- list('DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0))
-crasher_dysbiosis <- list('DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
-
-
-#Put tests for one/two sided and directionality into bins. Will combine after post-hoc into meaningful categorization
-two_sided_tests <- tibble(microbial_signature = c('growth_comparisons'),
-                          contrasts = list(bacterial_growth),
-                          direction = '=') #=
-right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
-                                              'early_opportunist', 'continuous_opportunist', 'late_opportunist',
-                                              'commensalist_t3', 'commensalist_t7',
-                                              'probiotic_t3_general', 'probiotic_t7_general',
-                                              'probiotic_t3_responder', 'probiotic_t7_responder',
-                                              'probiotic_t3_always', 'probiotic_t7_always', 'rev_crasher_tank_assoc',
-                                              'commensalist_HH_inc'),
-                      contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
-                                       early_opportunist, continuous_opportunist, late_opportunist,
-                                       commensalist_t3, commensalist_t7,
-                                       probiotic_t3_general, probiotic_t7_general,
-                                       probiotic_t3_responder, probiotic_t7_responder,
-                                       probiotic_t3_always, probiotic_t7_always, rev_crasher_tank_assoc,
-                                       commensalist_HH_inc),
-                      direction = '>') #>
-left_tests <- tibble(microbial_signature = c('crasher_tank_effect', 'crasher_BMO_dysbiosis', 'crasher_dysbiosis'),
-                     contrasts = list(crasher_tank_effect, crasher_BMO_dysbiosis, crasher_dysbiosis), 
-                     direction = '<') #<
-
-posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
-  unnest(contrasts) %>%
-  mutate(contrast_name = names(contrasts)) %>%
-  group_by(contrast_name, contrasts, direction) %>%
-  summarise(signatures = list(c(microbial_signature)),
-            .groups = 'drop') %>%
-  nest(contrast = -direction)
+emmeans(asv_models$model[[1]], ~treatment) %>%
+  contrast(simple_planned_posthocs)
 
 
 #### Make ASV Models ####
@@ -463,9 +268,11 @@ posthoc_categories <- bind_rows(two_sided_tests, right_tests, left_tests) %>%
 if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_models){
   asv_models <- read_rds('../intermediate_files/mixed_model_results.rds.gz')
 } else {
-  cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
+  # cluster_copy(cluster, c('posthoc_categories', 'run_posthoc'))
+  cluster_copy(cluster, 'simple_planned_posthocs')
   
-  asv_models <- normalized_asv_counts %>%
+  asv_models <- normalized_asv_counts %>% 
+    # filter(asv_id == 'ASV_65') %>%
     nest_by(across(c('asv_id', Domain:Species, Family_confidence:Species_confidence))) %>%
     partition(cluster) %>%
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + (1 | tank),
@@ -473,7 +280,10 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
                      use_weights = FALSE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
-           posthoc = list(run_posthoc(model, posthoc_categories))) %>%
+           posthoc = list(emmeans(model, ~treatment) %>%
+                            contrast(simple_planned_posthocs, 
+                                     adjust = 'none') %>%
+                            as_tibble)) %>%
     collect() %>%
     select(-re_model, -ends_with('global')) %>%
     ungroup %>% 
@@ -513,42 +323,34 @@ significant_models <- asv_models %>%
   rowwise %>%
   mutate(process_postHoc(posthoc)) %>%
   ungroup() %>%
-  p_adjust(exclude_cols = c('treatment', 'tank', 'genotype')) #%>% #affects otu filter
+  p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
 
 
-bacterial_signature_asv <- significant_models %>%
-  select(asv_id, starts_with('fdr')) %>% 
+classified_asvs <- significant_models %>%
+  select(asv_id, starts_with('estimate'), starts_with('fdr')) %>% # or qvalue
   select(-contains(c('treatment', 'tank', 'genotype'))) %>%
-  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
+  mutate(across(starts_with('fdr'), ~. < 0.05),
+         across(starts_with('estimate'), ~if_else(. < 0, -1L, 1L))) %>%
   
   pivot_longer(cols = -asv_id,
-               names_to = c('term'),
-               values_to = 'significance') %>%
-  mutate(term = str_remove(term, 'fdr_')) %>%
-  
-  #Select ASVs which fit all characteristics of any given bacterial signature
-  mutate(direction = str_extract(term, '[><=]'),
-         term = str_remove(term, '_[><=]')) %>%
-  
-  left_join(unnest(posthoc_categories, contrast), 
-            by = c('term' = 'contrast_name', 'direction')) %>%
-  filter(signatures != 'growth_comparisons') %>%
-  select(-contrasts) %>%
-  unnest(signatures) %>%
-  # mutate(signatures = if_else(signatures == 'growth_comparisons', term, signatures)) %>%
-  # 
-  # filter(signatures != 'growth_comparisons' | 
-  #          (signatures == 'growth_comparisons' & significance)) %>%
-  
-  group_by(asv_id, signatures) %>%
-  filter(all(significance)) %>%
-  ungroup %>%
-  select(-term) %>%
-  distinct 
+               names_to = c('.value', 'term'),
+               names_pattern = '(.*)_(.*)') %>%
+  rename(significance = fdr) %>%
+  mutate(term = case_when(term == 'outcome' & estimate < 0 ~ 'HealthyOutcome',
+                          term == 'outcome' & estimate > 0 ~ 'DiseaseOutcome',
+                          
+                          term == 'aquarium' & estimate < 0 ~ 'Field',
+                          term == 'aquarium' & estimate > 0 ~ 'Aquaria',
+                          
+                          term == 'exposure' & estimate < 0 ~ 'HealthyExposed',
+                          term == 'exposure' & estimate > 0 ~ 'DiseaseExposed'),
+         .keep = 'unused') 
 
-bacterial_signature_asv %>%
+
+classified_asvs %>%
+  filter(significance) %>%
   group_by(asv_id) %>%
-  summarise(terms = list(unique(signatures)),
+  summarise(terms = list(term),
             .groups = 'drop') %>%
   
   ggplot(aes(x = terms)) +
@@ -556,6 +358,16 @@ bacterial_signature_asv %>%
   scale_x_upset() +
   theme_classic() +
   theme_combmatrix(combmatrix.label.make_space = TRUE)
+
+
+
+classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>%
+  left_join(classified_asvs %>%
+              pivot_wider(names_from = term,
+                          values_from = significance,
+                          values_fill = FALSE),
+            by = 'asv_id')
+write_csv(classified_asv_taxonomy, '../intermediate_files/classified_significant_asvs.csv.gz')
 
 
 # merged_bacterial_signature_asv <- bacterial_signature_asv %>%
