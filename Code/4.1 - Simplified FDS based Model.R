@@ -327,15 +327,15 @@ significant_models <- asv_models %>%
 
 
 classified_asvs <- significant_models %>%
-  select(asv_id, starts_with('estimate'), starts_with('fdr')) %>% # or qvalue
+  select(asv_id, starts_with('estimate'), starts_with('qvalue')) %>% # fdr or qvalue
   select(-contains(c('treatment', 'tank', 'genotype'))) %>%
-  mutate(across(starts_with('fdr'), ~. < 0.05),
+  mutate(across(starts_with('qvalue'), ~. < 0.05),
          across(starts_with('estimate'), ~if_else(. < 0, -1L, 1L))) %>%
   
   pivot_longer(cols = -asv_id,
                names_to = c('.value', 'term'),
                names_pattern = '(.*)_(.*)') %>%
-  rename(significance = fdr) %>%
+  rename(significance = qvalue) %>%
   mutate(term = case_when(term == 'outcome' & estimate < 0 ~ 'HealthyOutcome',
                           term == 'outcome' & estimate > 0 ~ 'DiseaseOutcome',
                           
@@ -369,127 +369,86 @@ classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>
             by = 'asv_id')
 write_csv(classified_asv_taxonomy, '../intermediate_files/classified_significant_asvs.csv.gz')
 
+#how many in each category
+classified_asv_taxonomy %>% 
+  mutate(across(Field:DiseaseOutcome, ~ifelse(. == TRUE, 1, 0))) %>%
+  select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
+  select(-asv_id) %>%
+  mutate(across(Field:DiseaseOutcome, ~ifelse(is.na(.), 0, .))) %>%
+  colSums(.)
 
-# merged_bacterial_signature_asv <- bacterial_signature_asv %>%
-#   group_by(asv_id) %>%
-#   reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
-#   mutate(signatures = case_when(signatures == "early_pathogen, continuous_pathogen, late_pathogen" ~ "continuous_pathogen",
-#                                 signatures == "early_pathogen, early_opportunist" ~ "early_pathogen",
-#                                 signatures == "late_pathogen, late_opportunist" ~ "late_pathogen",
-#                                 signatures == "probiotic_t7_strict, late_opportunist" ~ "late_probiotic",
-#                                 signatures == "probiotic_t7_strict" ~ "late_probiotic",
-#                                 signatures == "early_pathogen, late_opportunist" ~ "early_pathogen",
-#                                 signatures == "probiotic_t7_strict, early_opportunist, continuous_opportunist, late_opportunist" ~ "late_probiotic",
-#                                 TRUE ~ signatures)) %>%
-#   distinct()
-
-grouped_bacterial_signature_asv <- bacterial_signature_asv %>%
-  group_by(asv_id) %>%
-  #reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
-  mutate(signatures = case_when(str_detect(signatures, "pathogen") ~ "pathogen",
-                                str_detect(signatures, "opportunist") ~ "opportunist",
-                                str_detect(signatures, "crasher") ~ "crasher",
-                                str_detect(signatures, "commensalist") ~ "commensalist",
-                                str_detect(signatures, "probiotic") ~ "probiotic")) %>%
-  distinct()
-
-grouped_bacterial_signature_asv %>%
-  group_by(asv_id) %>%
-  summarise(terms = list(unique(signatures)),
-            .groups = 'drop') %>%
   
-  ggplot(aes(x = terms)) +
-  geom_bar() +
-  scale_x_upset() +
-  theme_classic() +
-  theme_combmatrix(combmatrix.label.make_space = TRUE)
-
-grouped_comp_upset_prep <- grouped_bacterial_signature_asv %>%
-  group_by(asv_id) %>%
-  pivot_wider(names_from = signatures, values_from = significance) %>%
-  summarise(commensalist = paste0(na.omit(commensalist), collapse = ","),
-            crasher = paste0(na.omit(crasher), collapse = ","),
-            pathogen = paste0(na.omit(pathogen), collapse = ","),
-            opportunist = paste0(na.omit(opportunist), collapse = ","),
-            probiotic = paste0(na.omit(probiotic), collapse = ",")) %>%
-  mutate(across(commensalist:probiotic, ~ifelse(. == "", FALSE, .))) %>%
-  mutate(across(commensalist:probiotic, ~as.logical(.))) %>%
-  ungroup()
-
-
-upset(grouped_comp_upset_prep,
-  colnames(grouped_comp_upset_prep %>% select(-asv_id)), 
+ 
+upset(classified_asv_taxonomy,
+  colnames(classified_asv_taxonomy %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names))))), 
+  base_annotations=list(
+    'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
+                                          bar_number_threshold = 25,
+                                          mapping=aes(fill=Family, col = Family, label = parse_number(asv_id)), col = "gray10"
+    ) +
+      geom_text(size = 4, position = position_stack(vjust = 0.5), col = "gray10")
+  ),
   matrix=(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        "pathogen" = "#FF1E1E",
-        "opportunist" = "deepskyblue3",
-        "crasher" = "#FF9A00",
-        "commensalist"= "#9ab010",
-        "probiotic"= "#28de9e"
+        "Field" = "#70d134",
+        #"HealthyExposed" = "#78acff",
+        "HealthyOutcome" = "#0d50ba",
+        "Aquaria"= "#c389e0",
+        "DiseaseExposed"= "#ff7878",
+        "DiseaseOutcome"= "#ba0d0d"
       )
     )
   ),
   queries=list(
-    upset_query(set = "pathogen", fill = "#FF1E1E"),
-    upset_query(set = "opportunist", fill = "deepskyblue3"),
-    upset_query(set = "crasher", fill = "#FF9A00"),
-    upset_query(set = "commensalist", fill = "#9ab010"),
-    upset_query(set = "probiotic", fill = "#28de9e")
+    upset_query(set = "Field", fill = "#70d134"),
+    #upset_query(set = "HealthyExposed", fill = "#78acff"),
+    upset_query(set = "HealthyOutcome", fill = "#0d50ba"),
+    upset_query(set = "Aquaria", fill = "#c389e0"),
+    upset_query(set = "DiseaseExposed", fill = "#ff7878"),
+    upset_query(set = "DiseaseOutcome", fill = "#ba0d0d")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
+  name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = "descending", min_degree = 1,
   stripes = c(rep(c("gray91", "gray97"), 3))) +
-  #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-  ggtitle("Grouped Bacterial Strategies") 
+  ggtitle("Simplified Categories")
+
+#### Q-value vs. FDR Notes ####
+
+#The q-value of a test measures the proportion of false positives incurred (called the false discovery rate) 
+#when that particular test is called significant.
+
+#fdr controls the false discovery rate, the expected proportion of false discoveries 
+#amongst the rejected hypotheses.
+
+#guarantees that the true FDR rate will be less than the specified rate on average if you do an exactly similar
+#experiment over and over again. So the BH approach is slightly more conservative than qvalue. 
+#The BH properties hold regardless of the number of p-values, while qvalue is asymptotic, so the BH approach 
+#is more robust than qvalue when the number of hypotheses being tested isn't very large.
 
 
-bacterial_signature_asv %>%
-  ungroup() %>%
-  group_by(signatures) %>%
-  summarize(count = n()) %>%
-  arrange(desc(count))
+#Using q-values allows us to decide how many false positives we are willing to accept among all the features
+#that we call significant. This is particularly useful when we wish to make a large number of discoveries for
+#further confirmation later on (i.e. pilot study or exploratory analyses, for example if we did a gene 
+#expression microarray to pick differentially expressed genes for confirmation with real-time PCR). This is 
+#also useful in genomewide studies where we expect a sizeable portion of features to be truly alternative, and
+#we do not want to restrict our discovery capacity
 
-
-#venn diagram of overlaps in bacterial strats
-
-bac_strat_venn_prep <- bacterial_signature_asv %>%
-  select(-direction) %>%
-  pivot_wider(names_from = signatures, values_from = significance) %>%
-  mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .)))
-
-#crashers
-bac_strat_venn_prep %>%
-  select(asv_id, contains("crasher")) %>%
-  select(-rev_crasher_tank_assoc) %>%
-  ggvenn()
-
-#probiotics
-bac_strat_venn_prep %>%
-  select(asv_id, contains("probiotic")) %>%
-  ggvenn()
-
-#commensalists
-bac_strat_venn_prep %>%
-  select(asv_id, contains("commensalist"), contains("rev")) %>%
-  ggvenn()
 
 #### Bacterial Strategies Upset ####
 
-#prep for comp upset
-comp_upset_bac_strat <- bacterial_signature_asv %>% 
-  select(-c(direction)) %>%
-  pivot_wider(names_from = signatures, values_from = significance) %>%
-  mutate(across(-asv_id, ~ifelse(is.na(.), FALSE, .))) %>% 
-  left_join(combined_taxonomy, by = c('asv_id'))
+sig_classified_asvs <- classified_asv_taxonomy %>%
+  filter(!if_all(Field:DiseaseOutcome, ~. == FALSE))
+  
+
 
 ### Upset - bacterial strategies and ASV Presence Data
 
 upset(
-  comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+  sig_classified_asvs %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
     mutate(across(D:T0_H, ~ifelse(is.na(.), FALSE, .))),
-  colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% #from script 2 - asv_sample_filtering
-             select(T0, D, H, contains(c('commensalist', 'crasher', 'probiotic', 'opportunist', 'pathogen')))), 
+  colnames(sig_classified_asvs %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% #from script 2 - asv_sample_filtering
+             select(D, T0_H, contains(c('Field', 'Aquaria', 'Healthy', 'Disease')))), 
   
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
@@ -502,59 +461,37 @@ upset(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        #"T7" = "#650197",
-        #"T3" = "#B21BFF",
-        "T0" = "#B21BFF",
-        "D" = "#AE0404",
-        "H" = "#0FAB02",
-        "late_pathogen" = "#FF1E1E",
-        #"early_pathogen" = "#FF9797",
-        #"continuous_pathogen" = "maroon",
-        #"continuous_opportunist" = "royalblue4",
-        "late_opportunist" = "deepskyblue3",
-        "early_opportunist" = "lightskyblue",
-        "crasher_BMO_dysbiosis" = "#FF9A00",
-        "crasher_tank_effect" = "#BD5E03",
-        "crasher_dysbiosis" = "gold2",
-        "probiotic_t7_general" = "#9effdd",
-        "commensalist_t7"= "#9ab010",
-        "probiotic_t7_responder"= "#0a8f60",
-        "probiotic_t7_always"= "#28de9e"
+        "D" = "#cf5002",
+        "T0_H" = "#318f48",
+        "Field" = "#70d134",
+        #"HealthyExposed" = "#78acff",
+        "HealthyOutcome" = "#0d50ba",
+        "Aquaria"= "#c389e0",
+        "DiseaseExposed"= "#ff7878",
+        "DiseaseOutcome"= "#ba0d0d"
       )
     )
   ),
   queries=list(
-    #upset_query(set = "T7", fill = "#650197"),
-    #upset_query(set = "T3", fill = "#B21BFF"), "#D98EFF"
-    upset_query(set = "T0", fill = "#B21BFF"),
-    upset_query(set = "D", fill = "#AE0404"),
-    upset_query(set = "H", fill = "#0FAB02"),
-    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
-    #upset_query(set = "early_pathogen", fill = "#FF9797"),
-    #upset_query(set = "continuous_pathogen", fill = "maroon"),
-    #upset_query(set = "continuous_opportunist", fill = "royalblue4"),
-    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
-    upset_query(set = "early_opportunist", fill = "lightskyblue"),
-    upset_query(set = "crasher_BMO_dysbiosis", fill = "#FF9A00"),
-    upset_query(set = "crasher_tank_effect", fill = "#BD5E03"),
-    upset_query(set = "crasher_dysbiosis", fill = "gold2"),
-    upset_query(set = "probiotic_t7_general", fill = "#9effdd"),
-    upset_query(set = "commensalist_t7", fill = "#9ab010"),
-    upset_query(set = "probiotic_t7_responder", fill = "#0a8f60"),
-    upset_query(set = "probiotic_t7_always", fill = "#28de9e")
+    upset_query(set = "D", fill = "#cf5002"),
+    upset_query(set = "T0_H", fill = "#318f48"),
+    upset_query(set = "Field", fill = "#70d134"),
+    #upset_query(set = "HealthyExposed", fill = "#78acff"),
+    upset_query(set = "HealthyOutcome", fill = "#0d50ba"),
+    upset_query(set = "Aquaria", fill = "#c389e0"),
+    upset_query(set = "DiseaseExposed", fill = "#ff7878"),
+    upset_query(set = "DiseaseOutcome", fill = "#ba0d0d")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c("#F8EAFF", "#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 6))) +
+  name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = FALSE, min_degree = 1,
+  stripes = c("#ffeee3", "#E7FFE5", rep(c("gray91", "gray97"), 6))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-  ggtitle("Bacterial Strategies/Presence Data") 
-
-
-### Upset - just bacterial strategies
+  ggtitle("Simplified Associations/Presence Data") 
 
 upset(
-  comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")),
-  colnames(comp_upset_bac_strat %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
-             select(contains(c('commensalist', 'crasher', 'probiotic', 'opportunist', 'pathogen')))), 
+  sig_classified_asvs %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>%
+    mutate(across(D:T0_H, ~ifelse(is.na(.), FALSE, .))),
+  colnames(sig_classified_asvs %>% left_join(venn_all_times_and_doses, by = c("asv_id" = "OTU")) %>% #from script 2 - asv_sample_filtering
+             select(T0, D, H, contains(c('Field', 'Aquaria', 'Healthy', 'Disease')))), 
   
   base_annotations=list(
     'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
@@ -567,35 +504,33 @@ upset(
     intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
     + scale_color_manual(
       values=c(
-        "late_pathogen" = "#FF1E1E",
-        "late_opportunist" = "deepskyblue3",
-        "early_opportunist" = "lightskyblue",
-        "crasher_BMO_dysbiosis" = "#FF9A00",
-        "crasher_tank_effect" = "#BD5E03",
-        "crasher_dysbiosis" = "gold2",
-        "probiotic_t7_general" = "#9effdd",
-        "commensalist_t7"= "#9ab010",
-        "probiotic_t7_responder"= "#0a8f60",
-        "probiotic_t7_always"= "#28de9e"
+        "T0" = "#f779ed",
+        "D" = "#cf5002",
+        "H" = "#0FAB02",
+        "Field" = "#70d134",
+        #"HealthyExposed" = "#78acff",
+        "HealthyOutcome" = "#0d50ba",
+        "Aquaria"= "#c389e0",
+        "DiseaseExposed"= "#ff7878",
+        "DiseaseOutcome"= "#ba0d0d"
       )
     )
   ),
   queries=list(
-    upset_query(set = "late_pathogen", fill = "#FF1E1E"),
-    upset_query(set = "late_opportunist", fill = "deepskyblue3"),
-    upset_query(set = "early_opportunist", fill = "lightskyblue"),
-    upset_query(set = "crasher_BMO_dysbiosis", fill = "#FF9A00"),
-    upset_query(set = "crasher_tank_effect", fill = "#BD5E03"),
-    upset_query(set = "crasher_dysbiosis", fill = "gold2"),
-    upset_query(set = "probiotic_t7_general", fill = "#9effdd"),
-    upset_query(set = "commensalist_t7", fill = "#9ab010"),
-    upset_query(set = "probiotic_t7_responder", fill = "#0a8f60"),
-    upset_query(set = "probiotic_t7_always", fill = "#28de9e")
+    upset_query(set = "T0", fill = "#f779ed"),
+    upset_query(set = "D", fill = "#cf5002"),
+    upset_query(set = "H", fill = "#0FAB02"),
+    upset_query(set = "Field", fill = "#70d134"),
+    #upset_query(set = "HealthyExposed", fill = "#78acff"),
+    upset_query(set = "HealthyOutcome", fill = "#0d50ba"),
+    upset_query(set = "Aquaria", fill = "#c389e0"),
+    upset_query(set = "DiseaseExposed", fill = "#ff7878"),
+    upset_query(set = "DiseaseOutcome", fill = "#ba0d0d")
   ),
-  name='ASVs', width_ratio=0.1, min_size = 0, sort_sets = FALSE,
-  stripes = c(rep(c("gray91", "gray97"), 4))) +
+  name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = FALSE, min_degree = 1,
+  stripes = c("#fff2fe", "#ffeee3", "#E7FFE5", rep(c("gray91", "gray97"), 6))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
-  ggtitle("Bacterial Strategies") 
+  ggtitle("Simplified Associations/Presence Data") 
 
 
 
@@ -644,19 +579,17 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 
 # why is ASV 84 have a value below 5.29 for T3_d_d even though none of the log2cpm are less than 5.29
 
-#Caused by warning in `.qf.non0()`:
-#! Negative variance estimate obtained!
 
 
-the_plots <- bacterial_signature_asv %>%  #merged_bacterial_signature_asv %>%
+the_plots <- classified_asvs %>%
+  filter(significance) %>%
+  rename("signatures" = "term") %>%
   group_by(asv_id) %>%
-  mutate(grouped_signatures = case_when(str_detect(signatures, "pathogen") ~ "pathogen",
-                                str_detect(signatures, "opportunist") ~ "opportunist",
-                                str_detect(signatures, "crasher") ~ "crasher",
-                                str_detect(signatures, "commensalist") ~ "commensalist",
-                                str_detect(signatures, "probiotic") ~ "probiotic")) %>%
-  group_by(asv_id, grouped_signatures) %>%
   reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+  mutate(grouped_signatures = case_when(str_detect(signatures, "Field") ~ "Tank Averse",
+                                        str_detect(signatures, "Aquaria") ~ "Tank Associated",
+                                        TRUE ~ signatures)) %>%
+  group_by(asv_id, grouped_signatures) %>%
   distinct() %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
@@ -746,7 +679,7 @@ the_plots <- bacterial_signature_asv %>%  #merged_bacterial_signature_asv %>%
 
 
 #view the plots
-the_plots$combo_plots[[1]]
+the_plots$combo_plots[[3]]
 
 #### Bac Strat NMDS and PCOA ####
 
