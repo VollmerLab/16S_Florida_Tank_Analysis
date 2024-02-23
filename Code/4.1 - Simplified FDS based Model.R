@@ -1272,8 +1272,16 @@ corrplot(late_test$r, type="upper", order="hclust",
 
 
 #### Alpha Diversity ####
+altered_microbiome_data <- microbiome_data
 
-alpha_table <- microbiome::alpha(microbiome_data, index = "all") %>%
+tax_table(altered_microbiome_data) <- combined_taxonomy %>% 
+  select(-contains("confidence")) %>%
+  arrange(parse_number(asv_id)) %>%
+  column_to_rownames("asv_id") %>%
+  as.matrix()
+
+
+alpha_table <- microbiome::alpha(altered_microbiome_data, index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
   inner_join(metadata, by = 'sample_id') %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
