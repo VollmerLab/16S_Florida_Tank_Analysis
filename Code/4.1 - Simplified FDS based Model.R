@@ -294,7 +294,7 @@ tax_table(altered_microbiome_data) <- full_taxonomy %>%
   column_to_rownames("asv_id") %>%
   as.matrix()
 
-#update taxonomy info in data; is now fully prepared data for further analysis
+#updated taxonomy info in data; is now fully prepared data for further analysis
 normalized_asv_counts <- old_taxonomy_normalized_asv_counts %>%
   select(-c(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
   left_join(full_taxonomy, by = join_by("asv_id"))
@@ -627,8 +627,9 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 
 
 the_plots <- classified_asvs %>%
+  filter(asv_id == "ASV_65") %>%
   filter(significance) %>%
-  rename("signatures" = "term") %>%
+  dplyr::rename("signatures" = "term") %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
   mutate(grouped_signatures = case_when(str_detect(signatures, "Field") ~ "Tank Averse",
@@ -691,12 +692,12 @@ the_plots <- classified_asvs %>%
          rename_geom_aes(new_aes = c("colour" = "colour3"))) + 
       (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & is.na(exposure))), size = 3, shape = 1, col = "black", alpha = 0)) +
       
-      scale_color_manual(aesthetics = "colour1", values = c("D_H" = "#F75D5D", "D_D" = "#A70000"), guide = "legend", 
+      scale_color_manual(aesthetics = "colour1", values = c("D_H" = "#188d99", "D_D" = "#A70000"), guide = "legend", 
                          name = "Disease Exposed", breaks = c("D_H", "D_D"), labels = c("Healthy", "Diseased")) +
-      scale_color_manual(aesthetics = "colour3", breaks = c("H", "D"), values = c("H" = "#16d9f0", "D" = "#e30e0e"), guide = "legend", 
+      scale_color_manual(aesthetics = "colour3", breaks = c("H", "D"), values = c("H" = "#00c0d6", "D" = "#e30e0e"), guide = "legend", 
                          name = "Doses", labels = c("H" = "Healthy", "D" = "Diseased")) +
       scale_shape_manual(values = c("D_H" = 16, "D_D" = 17, "H_H" = 16), guide = "none") +
-      scale_color_manual(aesthetics = "colour2", values = c("H_H" = "#29A5B2"), guide = "legend", 
+      scale_color_manual(aesthetics = "colour2", values = c("H_H" = "#7bd2db"), guide = "legend", 
                          name = "Healthy Exposed", labels = c("Healthy")) +
       guides(colour1 = guide_legend(
         override.aes=list(linetype = c(1, 1), shape = c(16, 17))),
@@ -724,7 +725,7 @@ the_plots <- classified_asvs %>%
 
 
 #view the plots
-the_plots$combo_plots[[3]]
+the_plots$combo_plots[[1]]
 
 #### Bac Strat NMDS and PCOA ####
 
@@ -1316,16 +1317,17 @@ corrplot(late_test$r, type="upper", order="hclust",
          col.lim = c(-0.3,1), col = c(rep("gray30", 5), brewer.pal(11,"Spectral")), tl.col = "gray20")
 
 
-#### Alpha Diversity ####
+#### Microshades Plot ####
 
 mdf_prep_test1 <- altered_microbiome_data %>%
   tax_glom("Genus") %>%
   psmelt() 
 
-mdf_prep_test1 %>% 
-select(-c(Phylum:Family)) %>%
-left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
-group_by(Order) %>% reframe(tot_sum = sum(Abundance)) %>% arrange(desc(tot_sum))
+#check the most abundant Orders for microshades
+# mdf_prep_test1 %>% 
+# select(-c(Phylum:Family)) %>%
+# left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
+# group_by(Order) %>% reframe(tot_sum = sum(Abundance)) %>% arrange(desc(tot_sum))
 
 mdf_processed_data <- mdf_prep_test1 %>%
   filter(Abundance > 0) %>%
@@ -1371,8 +1373,8 @@ plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf = cdf_ordergenus)
 
 plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
 
+#### Alpha Diversity ####
 
-#alpha div
 alpha_table <- microbiome::alpha(altered_microbiome_data, index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
   inner_join(metadata, by = 'sample_id') %>%
@@ -1380,11 +1382,12 @@ alpha_table <- microbiome::alpha(altered_microbiome_data, index = "all") %>%
 
 mod_alpha_tab <- alpha_table %>%
   filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
-  mutate(treatment = str_c(time, exposure, susceptability, sep = '_')) %>%
+  mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
+  mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_')) %>%
   pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
                names_to = 'metric',
                values_to = 'alpha_div_value') %>%
-  select(-c(final_disease_state, clone_group)) %>%
+  select(-c(susceptability, resistance, clone_group)) %>%
   nest_by(metric) %>%
   summarise(alpha_model = list(lmer(alpha_div_value ~ treatment + 
                                       (1 | genotype) + (1 | tank), data = data))) %>% 
@@ -1392,7 +1395,7 @@ mod_alpha_tab <- alpha_table %>%
   mutate(sig_terms = list(anova(alpha_model) %>% 
                             rownames_to_column(var = "sig_term") %>% 
                             as_tibble() %>% 
-                            rename("p_val" = `Pr(>F)`) %>%
+                            dplyr::rename("p_val" = `Pr(>F)`) %>%
                             mutate(fdr_p_val = p.adjust(p_val, method = 'fdr')) %>%
                             filter(fdr_p_val < 0.05) %>%
                             filter(sig_term != "time") %>%
