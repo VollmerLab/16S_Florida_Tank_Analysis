@@ -20,6 +20,7 @@ library(ComplexUpset)
 library(corrplot)
 library(Hmisc)
 library(broom.mixed)
+library(taxize)
 library(tidyverse)
 
 refit_models <- TRUE
@@ -244,15 +245,59 @@ all_na_in_new_tax <- updated_taxonomy %>%
 #combine the old taxonomy with the updated version
 combined_taxonomy <- updated_taxonomy %>% 
   filter(!if_all(Domain:Species, ~is.na(.))) %>%
-  full_join(all_na_in_new_tax) %>%
-  mutate(Family = case_when(Genus == "Enhygromyxa" ~ "[[Nannocystaceae]]", #[[...]] to indicate manually added classifications
-                            Genus == "Sedimenticola" ~ "[[incertae sedis]]",
-                            TRUE ~ Family))
+  full_join(all_na_in_new_tax)
+
+#get list of genera that have multiple described taxonomies
+multiple_classifications_list <- combined_taxonomy %>%
+  select(Domain:Genus) %>%
+  group_by(Genus) %>% 
+  distinct() %>%
+  summarise(n = n()) %>%
+  filter(n > 1, !is.na(Genus)) %>%
+  plyr::arrange(Genus) %>%
+  pull(Genus)
+
+#get the ncbi classifications for the genera with multiple described taxonomies
+
+# ncbi_classifications_by_genus <- tax_name(multiple_classifications_list, db = "ncbi", 
+#                                           get = c("Domain", "Phylum", "Class", "Order", "Family")) %>%
+#   select(-c(db, Domain)) %>%
+#   dplyr::rename("Genus" = "query")
+# write_csv(ncbi_classifications_by_genus, "../intermediate_files/ncbi_classifications_for_overlaps.csv")
+ncbi_classifications_by_genus <- read_csv("../intermediate_files/ncbi_classifications_for_overlaps.csv")
+
+#most updated taxonomy, just phylum:genus
+#each genus has only one described classification, is combined with old and new taxonomies
+#doesnt contain NA for genus rows
+nonoverlapping_taxonomy <- combined_taxonomy %>% 
+  select(Phylum:Genus) %>% 
+  distinct() %>% 
+  filter(!is.na(Genus)) %>%
+  filter(!Genus %in% multiple_classifications_list) %>%
+  rbind(ncbi_classifications_by_genus)
+
+#our ASVs with the most up to date taxonomy, use for downstream purposes
+full_taxonomy <- combined_taxonomy %>% 
+  select(-c(Phylum:Family)) %>%
+  left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
+  relocate(Phylum:Family, .after = Domain) %>%
+  filter(!asv_id %in% c(combined_taxonomy %>% filter(is.na(Genus)) %>% pull(asv_id))) %>%
+  rbind(combined_taxonomy %>% filter(is.na(Genus))) %>%
+  arrange(parse_number(asv_id))
+
+#make version of microbiome data ps to update the taxonomy in
+altered_microbiome_data <- microbiome_data
+
+tax_table(altered_microbiome_data) <- full_taxonomy %>% 
+  select(-contains("confidence")) %>%
+  arrange(parse_number(asv_id)) %>%
+  column_to_rownames("asv_id") %>%
+  as.matrix()
 
 #update taxonomy info in data; is now fully prepared data for further analysis
 normalized_asv_counts <- old_taxonomy_normalized_asv_counts %>%
   select(-c(colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
-  left_join(combined_taxonomy, by = join_by("asv_id"))
+  left_join(full_taxonomy, by = join_by("asv_id"))
 
 # posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
 simple_planned_posthocs <- list('aquarium' = c(-1, 1/6, 1/6, 1/6, 1/6, 1/6, 1/6),
@@ -1272,15 +1317,62 @@ corrplot(late_test$r, type="upper", order="hclust",
 
 
 #### Alpha Diversity ####
-altered_microbiome_data <- microbiome_data
 
-tax_table(altered_microbiome_data) <- combined_taxonomy %>% 
-  select(-contains("confidence")) %>%
-  arrange(parse_number(asv_id)) %>%
-  column_to_rownames("asv_id") %>%
-  as.matrix()
+mdf_prep_test1 <- altered_microbiome_data %>%
+  tax_glom("Genus") %>%
+  psmelt() 
+
+mdf_prep_test1 %>% 
+select(-c(Phylum:Family)) %>%
+left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
+group_by(Order) %>% reframe(tot_sum = sum(Abundance)) %>% arrange(desc(tot_sum))
+
+mdf_processed_data <- mdf_prep_test1 %>%
+  filter(Abundance > 0) %>%
+  mutate(category = paste(time, exposure, final_disease_state, 
+                          sep = "_")) %>%
+  mutate(category = ifelse(str_detect(category, "F"), "T0", category)) %>%
+  filter(!category %in% c("T3_H_D", "T7_H_D")) %>%
+  mutate(time = ifelse(category %in% c("T0_D_D", "T0_H_H"), "Doses", time)) %>%
+  mutate(category = ifelse(category == "T0_D_D", "Diseased", ifelse(category == "T0_H_H", "Healthy", category))) %>%
+  mutate(category = ifelse(time == "T3", paste(time, exposure, sep = "_"), category)) %>%
+  group_by(category) %>%
+  mutate(total = sum(Abundance)) %>%
+  ungroup() %>%
+  select(-c(retain_sample)) %>%
+  group_by(category, Genus) %>%
+  reframe(Domain, time, total, rel_abun = sum(Abundance)/total) %>%
+  distinct() %>%
+  left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
+  dplyr::rename(Sample = category, Abundance = rel_abun) %>%
+  mutate(Sample = factor(Sample, levels = c("Healthy", "Diseased", "T0", "T3_H", "T3_D", "T7_H_H", "T7_D_H", "T7_D_D"))) %>%
+  as.data.frame()
 
 
+## ORDER GENUS
+
+color_objs_ordergenus <- create_color_dfs(mdf_processed_data, group_level = "Order", 
+                                          selected_groups = c("Rickettsiales", "Alteromonadales", "Flavobacteriales", 
+                                                              "Spirochaetales",  "Rhodobacterales"), cvd = TRUE)
+mdf_ordergenus <- color_objs_ordergenus$mdf
+cdf_ordergenus <- color_objs_ordergenus$cdf
+
+legend_ordergenus <-custom_legend(mdf_ordergenus, cdf_ordergenus, group_level = "Order")
+
+plot_ordergenus_prelim <- plot_microshades(mdf_ordergenus, cdf = cdf_ordergenus) + 
+  scale_y_continuous(labels = scales::percent, expand = expansion(0)) +
+  facet_grid(cols = vars(time), scales = "free", space = "free") +
+  theme_bw() +
+  theme(legend.position = "none", plot.margin = margin(6,20,6,6)) +
+  #labs(title = "Order Genus") +
+  scale_x_discrete(name = element_blank(), labels = c("T0" = "Field", "T3_H" = "Healthy", "T3_D" =
+                                                        "Disease", "T7_H_H" = "Healthy (Healthy)",
+                                                      "T7_D_H" = "Disease (Healthy)", "T7_D_D" = "Disease (Diseased)"))
+
+plot_grid(plot_ordergenus_prelim, legend_ordergenus,  rel_widths = c(1, .25))
+
+
+#alpha div
 alpha_table <- microbiome::alpha(altered_microbiome_data, index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
   inner_join(metadata, by = 'sample_id') %>%
