@@ -319,49 +319,20 @@ simple_posthoc_aquar <- list('aquarium' = c(-1, 0, 0, 1/2, 0, 0, 1/2))
 
 simple_posthoc_exp <- list('exposure' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2))
 
-simple_posthoc_outc <- list('outcome' = c(0, 1/2, -1/2, 0, 1/2, -1/2, 0))
+simple_posthoc_outc <- list('outcome' = c(0, 1/2, -1/4, -1/4, 1/2, -1/4, -1/4))
 
-early_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
-                       'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
-                       'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0)) 
 
-late_pathogen <- list('T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
-                      'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
-                      'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                      'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0))
+DD_early <- list('DD_early' = c(-1, 1, 0, 0, 0, 0, 0))
 
-continuous_pathogen <- list('T3(DDvDH.HH)' = c(0, 1, -1/2, -1/2, 0, 0, 0),
-                            'T3(DDvDH)' = c(0, 1, -1, 0, 0, 0, 0),
-                            'DD(T3-T0)' = c(-1, 1, 0, 0, 0, 0, 0),
-                            'T7(DDvDH.HH)' = c(0, 0, 0, 0, 1, -1/2, -1/2),
-                            'T7(DDvDH)' = c(0, 0, 0, 0, 1, -1, 0),
-                            'DD(T7-T0)' = c(-1, 0, 0, 0, 1, 0, 0),
-                            'DD(T7-T3)' = c(0, -1, 0, 0, 1, 0, 0))
-
-early_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
-                          'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0))
-
-late_opportunist <- list('T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
-                         'DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
-
-continuous_opportunist <- list('T3(DD.DHvHH)' = c(0, 1/2, 1/2, -1, 0, 0, 0),
-                               'DD.DH(T3-T0)' = c(-1, 1/2, 1/2, 0, 0, 0, 0),
-                               'T7(DD.DHvHH)' = c(0, 0, 0, 0, 1/2, 1/2, -1),
-                               'DD.DH(T7-T3)' = c(0, -1/2, -1/2, 0, 1/2, 1/2, 0))
-
-BMO <- list('T7(DH.HHvDD)' = c(0, 0, 0, 0, -1, 1/2, 1/2),
-            'DH.HH(T7-T3)' = c(0, 0, -1/2, -1/2, 0, 1/2, 1/2))
-
+DD_late <- list('DD_late' = c(0, -1, 0, 0, 1, 0, 0))
+                                 
 
 two_sided_tests <- tibble(microbial_signature = c('simple_posthoc_aquar', 'simple_posthoc_exp', 'simple_posthoc_outc'),
                           contrasts = list(simple_posthoc_aquar, simple_posthoc_exp, simple_posthoc_outc),
                           direction = '=') #=
-right_tests <- tibble(microbial_signature = c('early_pathogen', 'continuous_pathogen', 'late_pathogen',
-                                              'early_opportunist', 'continuous_opportunist', 'late_opportunist',
-                                              'BMO'),
-                      contrasts = list(early_pathogen, continuous_pathogen, late_pathogen,
-                                       early_opportunist, continuous_opportunist, late_opportunist,
-                                       BMO),
+
+right_tests <- tibble(microbial_signature = c('DD_early', 'DD_late'),
+                      contrasts = list(DD_early, DD_late),
                       direction = '>') #>
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests) %>%
@@ -408,13 +379,13 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
 
 #### Main Effects Upset ####
 asv_models %>%
-  select(asv_id, starts_with('qvalue')) %>% 
-  mutate(across(starts_with('qvalue'), ~. < 0.05)) %>%
+  select(asv_id, starts_with('fdr')) %>% 
+  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
   
   pivot_longer(cols = -asv_id,
                names_to = c('term'),
                values_to = 'significance',
-               names_prefix = 'qvalue_') %>%
+               names_prefix = 'fdr_') %>%
   filter(significance) %>%
   group_by(asv_id) %>%
   summarise(terms = list(term),
@@ -436,29 +407,8 @@ significant_models <- asv_models %>%
   ungroup() %>%
   p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
 
-simple_posthoc_sig_asvs <- significant_models %>%
-  select(asv_id, starts_with('estimate'), starts_with('qvalue')) %>% # fdr or qvalue
-  select(asv_id, contains(c('aquar', 'outcome', 'exposure'))) %>%
-  mutate(across(starts_with('qvalue'), ~. < 0.05),
-         across(starts_with('estimate'), ~if_else(. < 0, -1L, 1L))) %>%
-  
-  pivot_longer(cols = -asv_id,
-               names_to = c('.value', 'signatures', 'direction'),
-               names_pattern = '(.*)_(.*)_(.*)') %>%
-  dplyr::rename(significance = qvalue) %>%
-  mutate(signatures = case_when(signatures == 'outcome' & estimate < 0 ~ 'HealthyOutcome',
-                                signatures == 'outcome' & estimate > 0 ~ 'DiseaseOutcome',
-                                
-                                signatures == 'aquarium' & estimate < 0 ~ 'Field',
-                                signatures == 'aquarium' & estimate > 0 ~ 'Aquaria',
-                                
-                                signatures == 'exposure' & estimate < 0 ~ 'HealthyExposed',
-                                signatures == 'exposure' & estimate > 0 ~ 'DiseaseExposed'),
-         .keep = 'unused') %>%
-  filter(significance) %>%
-  select(-c(significance, direction))
 
-fdr_simple_posthoc_sig_asvs <- significant_models %>%
+simple_posthoc_sig_asvs <- significant_models %>%
   select(asv_id, starts_with('estimate'), starts_with('fdr')) %>% # fdr or qvalue
   select(asv_id, contains(c('aquar', 'outcome', 'exposure'))) %>%
   mutate(across(starts_with('fdr'), ~. < 0.05),
@@ -511,7 +461,7 @@ bacterial_signature_asv <- significant_models %>%
   separate_rows(signatures, sep = ", ", convert = TRUE) %>%
   #convert the simple posthocs to which direction they are
   filter(!str_detect(signatures, "simple")) %>%
-  rbind(fdr_simple_posthoc_sig_asvs) %>%
+  rbind(simple_posthoc_sig_asvs) %>%
   arrange(asv_id)
 
 
@@ -536,31 +486,38 @@ classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>
                           values_from = significance,
                           values_fill = FALSE),
             by = 'asv_id') %>%
-  mutate(across(HealthyOutcome:early_opportunist, ~ifelse(is.na(.), FALSE, .)))
+  mutate(across(Field:Aquaria, ~ifelse(is.na(.), FALSE, .)))
+
+classified_asv_taxonomy %>%
+  mutate(DD_continuous = ifelse(DD_early & DD_late, TRUE, FALSE)) %>%
+  mutate(DD_early = ifelse(DD_continuous, FALSE, DD_early), DD_late = ifelse(DD_continuous, FALSE, DD_late)) 
 
 #write_csv(classified_asv_taxonomy, '../intermediate_files/classified_significant_asvs.csv.gz')
 
 #how many in each category
 classified_asv_taxonomy %>% 
-  mutate(across(HealthyOutcome:late_pathogen, ~ifelse(. == TRUE, 1, 0))) %>%
+  mutate(across(time_early:Aquaria, ~ifelse(. == TRUE, 1, 0))) %>%
   select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
   select(-asv_id) %>%
-  mutate(across(HealthyOutcome:late_pathogen, ~ifelse(is.na(.), 0, .))) %>%
+  mutate(across(time_early:Aquaria, ~ifelse(is.na(.), 0, .))) %>%
   colSums(.)
 
 #### Bacterial Strategies Upset ####
 
 sig_classified_asvs <- classified_asv_taxonomy %>%
   filter(!if_all(colnames(classified_asv_taxonomy %>% select(-c(asv_id, colnames(taxonomy_tibble %>%
-                                                              select(-asv_names))))), ~. == FALSE))
+                                                              select(-asv_names))))), ~. == FALSE)) %>%
+  mutate(DiseaseExposed = FALSE, HealthyExposed = FALSE) %>%
+  mutate(TankEffect = ifelse(Field | Aquaria, TRUE, FALSE)) %>%
+  select(-c(Field, Aquaria))
 
 
 
 
 #just overarching bac strats
-upset(sig_classified_asvs %>% select(-c(BMO, contains("opp"), contains("path"))),
-      colnames(sig_classified_asvs %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)), BMO, contains("opp"), contains("path"))) %>%
-                 relocate(Aquaria, Field, contains("Exposed"), contains("Outcome"))), 
+upset(sig_classified_asvs %>% select(-c(contains("time"))),
+      colnames(sig_classified_asvs %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)), contains("time"))) %>%
+                 relocate(TankEffect, contains("Exposed"), contains("Outcome"))), 
       base_annotations=list(
         'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                               bar_number_threshold = 25,
@@ -572,31 +529,31 @@ upset(sig_classified_asvs %>% select(-c(BMO, contains("opp"), contains("path")))
         intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
         + scale_color_manual(
           values=c(
-            "Field" = "#70d134",
+            #"Field" = "#70d134",
             #"HealthyExposed" = "#78acff",
             "HealthyOutcome" = "#0d50ba",
-            "Aquaria"= "#c389e0",
-            "DiseaseExposed"= "#ff7878",
+            "TankEffect"= "#c389e0",
+            #"DiseaseExposed"= "#ff7878",
             "DiseaseOutcome"= "#ba0d0d"
           )
         )
       ),
       queries=list(
-        upset_query(set = "Field", fill = "#70d134"),
+        #upset_query(set = "Field", fill = "#70d134"),
         #upset_query(set = "HealthyExposed", fill = "#78acff"),
         upset_query(set = "HealthyOutcome", fill = "#0d50ba"),
-        upset_query(set = "Aquaria", fill = "#c389e0"),
-        upset_query(set = "DiseaseExposed", fill = "#ff7878"),
+        upset_query(set = "TankEffect", fill = "#c389e0"),
+        #upset_query(set = "DiseaseExposed", fill = "#ff7878"),
         upset_query(set = "DiseaseOutcome", fill = "#ba0d0d")
       ),
-      name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = FALSE, min_degree = 1,
-      stripes = c("#fcf5ff", "#fcf5ff", "#fcd5d4", "#d5d6eb", "#fcd5d4")) +
+      name='ASVs', width_ratio=0.1, sort_sets = FALSE,
+      stripes = c("#fcf5ff", "#fcd5d4", "#d5d6eb", "#fcd5d4", "#d5d6eb")) +
   ggtitle("Overarching Strategies")
 
 #overarching and specific bac strats
 upset(sig_classified_asvs,
-      colnames(sig_classified_asvs %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
-                 relocate(Aquaria, Field, contains("Outcome"), BMO, contains("opp"), contains("path"))), 
+      colnames(sig_classified_asvs %>% select(-c(contains("time"), asv_id, colnames(taxonomy_tibble %>% select(-asv_names)))) %>%
+                 relocate(Aquaria, Field, contains("Outcome"))), 
       base_annotations=list(
         'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                               bar_number_threshold = 25,
@@ -613,14 +570,11 @@ upset(sig_classified_asvs,
             "HealthyOutcome" = "#0d50ba",
             "Aquaria"= "#c389e0",
             #"DiseaseExposed"= "#ff7878",
-            "DiseaseOutcome"= "#ba0d0d",
-            "late_pathogen" = "#FF1E1E",
-            "early_pathogen" = "#FF9797",
-            #"continuous_pathogen" = "maroon",
-            #"continuous_opportunist" = "royalblue4",
-            "late_opportunist" = "deepskyblue3",
-            "early_opportunist" = "lightskyblue",
-            "BMO"= "#28de9e"
+            "DiseaseOutcome"= "#ba0d0d"
+            #"time_linear" = "gray30",
+            #"time_quadratic" = "gray20",
+            #"time_late" = "gray60",
+            #"time_early" = "gray70"
           )
         )
       ),
@@ -630,14 +584,11 @@ upset(sig_classified_asvs,
         upset_query(set = "HealthyOutcome", fill = "#0d50ba"),
         upset_query(set = "Aquaria", fill = "#c389e0"),
         #upset_query(set = "DiseaseExposed", fill = "#ff7878"),
-        upset_query(set = "DiseaseOutcome", fill = "#ba0d0d"),
-        upset_query(set = "late_pathogen", fill = "#FF1E1E"),
-        upset_query(set = "early_pathogen", fill = "#FF9797"),
-        #upset_query(set = "continuous_pathogen", fill = "maroon"),
-        #upset_query(set = "continuous_opportunist", fill = "royalblue4"),
-        upset_query(set = "late_opportunist", fill = "deepskyblue3"),
-        upset_query(set = "early_opportunist", fill = "lightskyblue"),
-        upset_query(set = "BMO", fill = "#28de9e")
+        upset_query(set = "DiseaseOutcome", fill = "#ba0d0d")
+        #upset_query(set = "time_linear", fill = "gray30"),
+        #upset_query(set = "time_quadratic", fill = "gray20"),
+        #upset_query(set = "time_late", fill = "gray60"),
+        #upset_query(set = "time_early", fill = "gray70")
       ),
       name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = FALSE, min_degree = 1,
       stripes = c("#fcf5ff", "#fcf5ff", "#d5d6eb", "#fcd5d4",  rep(c("gray91", "gray97"), 3))) +
