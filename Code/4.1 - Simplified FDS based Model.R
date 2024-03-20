@@ -458,28 +458,6 @@ upset(classified_asv_taxonomy,
   stripes = c(rep(c("gray91", "gray97"), 3))) +
   ggtitle("Simplified Categories")
 
-#### Q-value vs. FDR Notes ####
-
-#The q-value of a test measures the proportion of false positives incurred (called the false discovery rate) 
-#when that particular test is called significant.
-
-#fdr controls the false discovery rate, the expected proportion of false discoveries 
-#amongst the rejected hypotheses.
-
-#guarantees that the true FDR rate will be less than the specified rate on average if you do an exactly similar
-#experiment over and over again. So the BH approach is slightly more conservative than qvalue. 
-#The BH properties hold regardless of the number of p-values, while qvalue is asymptotic, so the BH approach 
-#is more robust than qvalue when the number of hypotheses being tested isn't very large.
-
-
-#Using q-values allows us to decide how many false positives we are willing to accept among all the features
-#that we call significant. This is particularly useful when we wish to make a large number of discoveries for
-#further confirmation later on (i.e. pilot study or exploratory analyses, for example if we did a gene 
-#expression microarray to pick differentially expressed genes for confirmation with real-time PCR). This is 
-#also useful in genomewide studies where we expect a sizeable portion of features to be truly alternative, and
-#we do not want to restrict our discovery capacity
-
-
 #### Bacterial Strategies Upset ####
 
 sig_classified_asvs <- classified_asv_taxonomy %>%
@@ -2091,4 +2069,92 @@ upset(
   stripes = c("#F8EAFF", "#fff2fa", "#fff2fa","#FFE4E4", "#E7FFE5", rep(c("gray91", "gray97"), 4))) +
   #stripes = c(rep(c("gray78", "gray87"), 2), "gray78", rep(c("gray97", "gray91"), 4))) +
   ggtitle("Bacterial Strategies/Presence Data") 
+
+
+#### Comparing BH and q-value FDR Methods ####
+
+## Q-value vs. FDR Notes
+
+#The q-value of a test measures the proportion of false positives incurred (called the false discovery rate) 
+#when that particular test is called significant.
+
+#fdr controls the false discovery rate, the expected proportion of false discoveries 
+#amongst the rejected hypotheses.
+
+#guarantees that the true FDR rate will be less than the specified rate on average if you do an exactly similar
+#experiment over and over again. So the BH approach is slightly more conservative than qvalue. 
+#The BH properties hold regardless of the number of p-values, while qvalue is asymptotic, so the BH approach 
+#is more robust than qvalue when the number of hypotheses being tested isn't very large.
+
+
+#Using q-values allows us to decide how many false positives we are willing to accept among all the features
+#that we call significant. This is particularly useful when we wish to make a large number of discoveries for
+#further confirmation later on (i.e. pilot study or exploratory analyses, for example if we did a gene 
+#expression microarray to pick differentially expressed genes for confirmation with real-time PCR). This is 
+#also useful in genomewide studies where we expect a sizeable portion of features to be truly alternative, and
+#we do not want to restrict our discovery capacity
+
+
+
+fdr_asvs_venn <- classified_asvs %>%
+  filter(significance) %>%
+  rename("signatures" = "term") %>%
+  group_by(asv_id) %>%
+  reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+  mutate(grouped_signatures = case_when(str_detect(signatures, "Field") ~ "TankAverse",
+                                        str_detect(signatures, "Aquaria") ~ "TankAssociated",
+                                        TRUE ~ signatures)) %>%
+  select(-signatures) %>%
+  pivot_wider(names_from = grouped_signatures, values_from = significance, names_prefix = "fdr_")
+
+
+qvalue_asvs_venn <- classified_asvs %>%
+  filter(significance) %>%
+  rename("signatures" = "term") %>%
+  group_by(asv_id) %>%
+  reframe(signatures = str_c(signatures, collapse = ', '), significance) %>%
+  mutate(grouped_signatures = case_when(str_detect(signatures, "Field") ~ "TankAverse",
+                                        str_detect(signatures, "Aquaria") ~ "TankAssociated",
+                                        TRUE ~ signatures)) %>%
+  select(-signatures) %>%
+  distinct() %>%
+  pivot_wider(names_from = grouped_signatures, values_from = significance, names_prefix = "qvalue_")
+
+
+correction_comparison_cu <- fdr_asvs_venn %>%
+  full_join(qvalue_asvs_venn, by = join_by(asv_id)) %>%
+  mutate(across(everything(), ~ifelse(is.na(.), FALSE, .))) %>%
+  ungroup()
+
+
+upset(correction_comparison_cu,
+      colnames(correction_comparison_cu %>% select(-asv_id)), 
+      matrix=(
+        intersection_matrix(geom=geom_point(shape = "circle filled", size=3, stroke = 0.35, color = "gray20"))
+        + scale_color_manual(
+          values=c(
+            "fdr_HealthyOutcome" = "#318f48",
+            "fdr_DiseaseOutcome" = "#ba0d0d",
+            "fdr_TankAssociated" = "#c389e0",
+            "qvalue_HealthyOutcome" = "#318f48",
+            "qvalue_TankAverse" = "#70d134",
+            "qvalue_TankAssociated"= "#c389e0",
+            "qvalue_DiseaseOutcome"= "#ba0d0d",
+            "qvalue_DiseaseExposed, DiseaseOutcome"= "#ff7878"
+          )
+        )
+      ),
+      queries=list(
+        upset_query(set = "fdr_HealthyOutcome", fill = "#318f48"),
+        upset_query(set = "fdr_DiseaseOutcome", fill = "#ba0d0d"),
+        upset_query(set = "fdr_TankAssociated", fill = "#c389e0"),
+        upset_query(set = "qvalue_HealthyOutcome", fill = "#318f48"),
+        upset_query(set = "qvalue_TankAverse", fill = "#70d134"),
+        upset_query(set = "qvalue_TankAssociated", fill = "#c389e0"),
+        upset_query(set = "qvalue_DiseaseOutcome", fill = "#ba0d0d"),
+        upset_query(set = "qvalue_DiseaseExposed, DiseaseOutcome", fill = "#ff7878")
+      ),
+      name='ASVs', width_ratio=0.1, min_size = 1, sort_sets = FALSE, min_degree = 1,
+      stripes = c(rep("#ffe3cc", 3), rep("#ccd2ff", 6))) +
+  ggtitle("Comparing FDR and q-value") 
 

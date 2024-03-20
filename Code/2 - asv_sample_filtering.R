@@ -1,7 +1,6 @@
 setwd("/Users/emilytrytten/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### Libraries ####
-library(tidyverse)
 library(magrittr)
 library(phyloseq)
 library(microbiome)
@@ -12,6 +11,7 @@ library(ggvenn)
 library(cowplot)
 library(ComplexUpset)
 library(microshades)
+library(tidyverse)
 
 #### Functions ####
 # data <- otu_tmm; prop_missing <- 0.25
@@ -315,7 +315,7 @@ dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm,
                                     column_to_rownames('sample_id'),
                                   BPPARAM = param, 
                                   plot = TRUE)
-#87917 vs 36251
+
 #### ASV Modelling ####
 full_data <- otu_tmm %>%
   cpm(log = TRUE, prior.count = 0.5,

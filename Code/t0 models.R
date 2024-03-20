@@ -10,7 +10,7 @@ t0_only_data <- normalized_asv_counts %>%
 # no ASVs correlated w continuous resistance
 t0_only_data %>%
   group_by(asv_id) %>%
-  summarize(corr_val = broom::tidy(cor.test(log2_cpm, resistance))) %>%
+  reframe(corr_val = broom::tidy(cor.test(log2_cpm, resistance))) %>%
   unnest(corr_val) %>%
   filter(!is.na(estimate)) %>%
   mutate(p.value = p.adjust(p.value, method = "fdr")) %>%
@@ -19,13 +19,9 @@ t0_only_data %>%
   geom_point(aes(x = fct_reorder(asv_id, p.value), y = p.value)) +
   geom_hline(yintercept = 0.05, col = "deepskyblue2") +
   coord_flip() +
-  labs(title = "Genus, continuous")
+  labs(title = "Family, continuous")
 
 # no ASVs correlated w discrete resistance
-t0_only_data %>%
-  group_by(asv_id) %>%
-  reframe(broom::glance(lm(log2_cpm~susceptability))) 
-
 t0_only_data %>%
   group_by(asv_id) %>%
   reframe(aov_val = broom::tidy(aov(log2_cpm~resistance))) %>%
@@ -37,7 +33,7 @@ t0_only_data %>%
   geom_point(aes(x = fct_reorder(asv_id, p.value), y = p.value)) +
   geom_hline(yintercept = 0.05, col = "deepskyblue2") +
   coord_flip() +
-  labs(title = "Genus, discrete")
+  labs(title = "Family, discrete")
 
 ##By Genus
 
