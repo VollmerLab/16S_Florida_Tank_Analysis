@@ -1,0 +1,32 @@
+---
+title: "blast_sequences"
+author: "Emily Trytten"
+date: "2024-03-26"
+output: html_document
+---
+
+```
+outdir=/scratch/trytten.e/acerv_WBD_metagenomes
+scriptDir=/work/vollmer/software/jds_scripts
+
+sbatch \
+
+
+
+JOBID=$(sbatch \
+  --output=${outdir}/slurm/blast_seq_%A_%a.output \
+  --array=0-$((${number_of_barcodes}-1))%30 \
+  ${scriptDir}/cleanNanopore.slurm \
+    ${outdir}/qc_longreads \
+    ${merged_longreads})
+qcID=$(echo ${JOBID} | sed 's/[^0-9]*//g')
+echo "Submitted QC job: ${qcID}" #41482251
+
+
+
+
+diamond blastx -d nr -q SRR7828855_merged.fastq -o SRR7828855_merged.daa -f 100
+
+
+
+```
