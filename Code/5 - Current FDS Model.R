@@ -237,8 +237,29 @@ if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
 } else {
+  sequences <- taxa_names(microbiome_data)
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
+  names(sequences) <- taxa_names(microbiome_data)
 }
+
+#look at sequences
+
+colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
+
+colwell_seqs <- sequences[colwells_of_interest]
+
+
+outside_colwells <- c("TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGTTTGATAAGCCAGATGTGAAATCCCGGGGCTTAACCTCGGAACTGCATTTGGAACTGTTTGACTAGAGTACTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAGATACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG",
+                      "TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGATAGTTAAGCGAGATGTGAAATCCCGGGGCTCAACCTCGGAACTGCATTTCGAACTGGCTGTCTAGAGTCTTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAAAGACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG")
+names(outside_colwells) <- c("schul66", "schul65")
+
+colwell_seqs
+
+combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
+
+
+write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
+
 
 #old taxonomy info
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
@@ -332,13 +353,16 @@ DD_early <- list('DD_early' = c(-1, 1, 0, 0, 0, 0, 0))
 
 DD_late <- list('DD_late' = c(0, -1, 0, 0, 1, 0, 0))
 
+DD_vs_DH_early <- list('DD_vs_DH_early' = c(0, 1, -1, 0, 0, 0, 0))
+
+DD_vs_DH_late <- list('DD_vs_DH_late' = c(0, 0, 0, 0, 1, -1, 0))
 
 two_sided_tests <- tibble(microbial_signature = c('simple_posthoc_aquar', 'simple_posthoc_exp', 'simple_posthoc_outc'),
                           contrasts = list(simple_posthoc_aquar, simple_posthoc_exp, simple_posthoc_outc),
                           direction = '=') #=
 
-right_tests <- tibble(microbial_signature = c('DD_early', 'DD_late'),
-                      contrasts = list(DD_early, DD_late),
+right_tests <- tibble(microbial_signature = c('DD_early', 'DD_late', 'DD_vs_DH_early', 'DD_vs_DH_late'),
+                      contrasts = list(DD_early, DD_late, DD_vs_DH_early, DD_vs_DH_late),
                       direction = '>') #>
 
 posthoc_categories <- bind_rows(two_sided_tests, right_tests) %>%
@@ -402,6 +426,24 @@ asv_models %>%
   scale_x_upset() +
   theme_classic() +
   theme_combmatrix(combmatrix.label.make_space = TRUE)
+
+#number of things significant in main model
+asv_models %>%
+  select(asv_id, starts_with('fdr')) %>% 
+  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
+  
+  pivot_longer(cols = -asv_id,
+               names_to = c('term'),
+               values_to = 'significance',
+               names_prefix = 'fdr_') %>%
+  filter(significance) %>%
+  group_by(asv_id) %>%
+  mutate(sigs = str_c(term, collapse = ", ")) %>%
+  select(asv_id, sigs) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(sigs) %>%
+  reframe(n = n())
 
 
 #### Significant Treatment Effect Upset ####
@@ -506,6 +548,15 @@ classified_asv_taxonomy %>%
   mutate(across(Field:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
   colSums(.)
 
+#how many in each category without tank effect
+classified_asv_taxonomy %>% 
+  filter(!Aquaria & !Field) %>%
+  mutate(across(Field:DD_continuous, ~ifelse(. == TRUE, 1, 0))) %>%
+  select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
+  select(-asv_id) %>%
+  mutate(across(Field:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
+  colSums(.)
+
 #### Bacterial Strategies Upset ####
 
 sig_classified_asvs <- classified_asv_taxonomy %>%
@@ -540,7 +591,6 @@ classified_asv_taxonomy %>%
   distinct %>%
   group_by(TankEffect) %>%
   reframe(n = n())
-
 
 #just overarching bac strats
 upset(sig_classified_asvs %>% select(-c(contains("DD"))),
@@ -762,8 +812,9 @@ the_plots <- bacterial_signature_asv %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
   mutate(grouped_signatures = case_when(str_detect(signatures, "Aquaria") ~ "Tank Effect",
                                         str_detect(signatures, "Field") ~ "Tank Effect",
-                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_early") ~ "Putative Early Pathogens",
-                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") ~ "Putative Late Pathogens",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_early") & str_detect(signatures, "DD_vs_DH_early") ~ "Putative Early Pathogens",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") ~ "Putative Late Pathogens",
+                                        str_detect(signatures, "DiseaseOutcome") ~ "Unlikely Pathogens",
                                         str_detect(signatures, "HealthyOutcome") ~ "Healthy Associated",
                                         TRUE ~ signatures)) %>%
   group_by(asv_id, grouped_signatures) %>%
@@ -937,6 +988,11 @@ nmds_matrix <- normalized_asv_counts %>%
 
 asv_nmds <- metaMDS(nmds_matrix, distance = 'bray', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
 
+#shepard plot
+#doesn't follow y = x line well, so MDS might be misleading -> use nmds
+plot(asv_nmds$diss, asv_nmds$dist)
+abline(a = 0, b = 1, col = "red")
+
 stressplot(asv_nmds)
 
 plot(asv_nmds)
@@ -949,7 +1005,8 @@ orditorp(asv_nmds,display="sites",cex=1.25,air=0.01)
 nmds_scores = as.data.frame(scores(asv_nmds)$sites)
 
 nmds_metadata <- normalized_asv_counts %>% 
-  select(asv_id, time, exposure, final_disease_state, susceptability, genotype, sample_id, log2_cpm) %>%
+  select(asv_id, time, exposure, final_disease_state, susceptability, genotype, 
+         sample_id, log2_cpm, tank, treatment) %>%
   pivot_wider(names_from = asv_id, values_from = log2_cpm) %>%
   as.data.frame()
 
@@ -985,132 +1042,73 @@ ggplot(nmds_scores) +
 
 
   scale_shape_manual(values = c("T0_F_F" = 1))
+  
+adonis2(nmds_matrix ~treatment, method = "bray", perm = 999, data = nmds_metadata)  
+  
+adonis2(nmds_matrix ~time*final_disease_state*exposure, method = "bray", perm = 999, data = nmds_metadata)
+
+adonis2(nmds_matrix ~time + genotype + tank, method = "bray", perm = 999, data = nmds_metadata)
+
+library(pairwiseAdonis)
+pairwise.adonis2(nmds_matrix ~treatment, data = nmds_metadata) %>% broom::tidy()
 
 #### PCoA ####
-#old code
-sppscores(test_nmds) <- t(asv_nmds)
-#shepard plot
-#doesn't follow y = x line well, so MDS might be misleading -> use nmds
-plot(test_nmds$diss, test_nmds$dist)
-abline(a = 0, b = 1, col = "red")
 
-# permanova
+dist_mat <- vegdist(nmds_matrix)
+multivar_disp <- betadisper(dist_mat, nmds_metadata$treatment)
 
-nmds_sample_metadat <- normalized_asv_counts %>% 
-  select(-c(weight, read_count, reads,lib.size, norm.factors)) %>%
-  select(-(colnames(updated_taxonomy %>% select(-asv_id)))) %>%
-  pivot_wider(names_from = asv_id, values_from = log2_cpm)
-
-asv_nmds_no_colnames <- nmds_sample_metadat %>% 
-  select(starts_with("ASV_")) %>%
-  as.matrix()
-
-asvs_dist <- vegdist(asv_nmds_no_colnames, method='bray')
-
-adonis2(asvs_dist ~ time * (exposure + susceptability) + genotype + tank, data = nmds_sample_metadat, perm=999)
-
-# genotype marginally sig, everything else sig
-
-set.seed(0830)
-
-adonis2(asvs_dist ~ genotype + time + tank, data = nmds_sample_metadat, perm=999)
-
-#time and tank sig, genotype not
-
-trial_nmds_sample_metadat <- nmds_sample_metadat %>%
-  mutate(ex_res = paste(exposure, susceptability, sep = "_")) %>%
-  mutate(treatment = str_c(time, exposure, susceptability, sep = '_'))
-
-dispersion<-betadisper(asvs_dist, group=trial_nmds_sample_metadat$treatment)
-permutest(dispersion)
-anova(dispersion)
-plot(dispersion, hull=FALSE, ellipse=TRUE, conf = 0.95)
+asv_pcoa <- cmdscale (dist_mat, eig = TRUE)
 
 
-test <- nmds_sample_metadat %>%
-  select(sample_id, starts_with("ASV_")) %>%
-  column_to_rownames("sample_id") %>%
-  as.matrix()
 
-test_dist <- vegdist(test, method='bray')
-
-asvs_pcoa <- cmdscale (test_dist, eig = TRUE)
-ordiplot (asvs_pcoa, display = 'sites', type = 'text')
-
-testadon <- adonis2(test_dist ~ exposure*susceptability, data = nmds_sample_metadat, perm=999)
-
-adonis2(test_dist ~ time*exposure*susceptability, data = nmds_sample_metadat, perm=999)
-
-
-nmds_sample_metadat <- nmds_sample_metadat %>% mutate(across(time:susceptability, ~as.factor(.x))) %>% ungroup() 
-
-nmds_sample_metadat$susceptability = as.factor(nmds_sample_metadat$susceptability)
-
-
-ttti <- nmds_sample_metadat %>% mutate(treatment = paste(time, exposure, susceptability, sep = "_"), .after = susceptability) %>% as.data.frame()
-
-ttti$treatment = as.factor(ttti$treatment)
-
-tst <- adonis_pairwise(x = ttti, dd = test_dist, group.var = "treatment")
-
-tst$Adonis.tab
-tst$Betadisper.tab
-
-
-bd_pcoa_data <- asvs_pcoa$points %>%
-  as_tibble(rownames = 'sample_id') %>%
-  left_join(full_data %>% select(sample_id, time, exposure, susceptability, tank, genotype) %>%
-              mutate(treatment = paste(time, exposure, susceptability, sep = "_")) %>%
-              mutate(shape_determ = paste(exposure, susceptability, sep = "_")) %>%
-              distinct(), by = join_by("sample_id"))
-
-bd_pcoa_centroid <- bd_pcoa_data %>% 
+pcoa_data <- asv_pcoa$points %>%
+  as_tibble(rownames = 'sample_id', .name_repair = "unique") %>%
+  dplyr::rename("PCoA1" = "...1", "PCoA2" = "...2") %>%
+  left_join(normalized_asv_counts %>% select(sample_id, treatment, time, exposure, final_disease_state, tank, genotype) %>%
+              mutate(shape_determ = paste(exposure, final_disease_state, sep = "_")) %>%
+              distinct(), by = join_by("sample_id")) %>% 
+  mutate(PCoA1 = -PCoA1) %>%
   group_by(treatment) %>%
-  reframe(V1 = mean(V1), V2 = mean(V2))
-
-bd_pcoa_arms <- bd_pcoa_data %>% 
-  group_by(treatment) %>%
-  mutate(V1_cent = mean(V1), V2_cent = mean(V2))
+  mutate(PCoA1_centroid = mean(PCoA1), PCoA2_centroid = mean(PCoA2))
 
 # better version of betadisper plot
-bd_pcoa_arms %>%
-  ggplot(aes(x = V1, y = V2, xend = V1_cent, yend = V2_cent)) +
+ggplot(pcoa_data, aes(x = PCoA1, y = PCoA2, xend = PCoA1_centroid, yend = PCoA2_centroid)) +
   stat_ellipse(level = 0.95, aes(col = treatment)) +
-  geom_point(aes(col = treatment, shape = susceptability), size = 2) + 
+  geom_point(aes(col = treatment, shape = treatment), size = 2.5) + 
   geom_segment(aes(col = treatment)) +
-  #scale_color_brewer(palette = "Paired", direction = -1) +
   scale_color_manual(values = c(
-    "T3_H_S" = "#A6CEE3",
-    "T3_H_R" = "#1F78B4",
-    "T7_H_S" = "#B2DF8A",
-    "T7_H_R" = "#33A02C",
-    "T7_D_S" = "#FB9A99",
-    "T7_D_R" = "#E31A1C",
-    "T3_D_S" = "#FDBF6F",
-    "T3_D_R" = "#FF7F00",
-    "T0_F_S" = "#CAB2D6",
-    "T0_F_R" = "#6A3D9A"
+    "T0_F_F" = "#c389e0",
+    "T3_D_D" = "#E79B9B",
+    "T3_D_H" = "#97D9E1",
+    "T3_H_H" = "#95AC85",
+    "T7_D_D" = "#A70000",
+    "T7_D_H" = "#22A7B6",
+    "T7_H_H" = "#406F23"
   )) +
   scale_shape_manual(values = c(
-    "R" = 17,
-    "S" = 16
-  )) + 
-  geom_text(data = bd_pcoa_centroid, 
-            aes(label = treatment, x = V1, y = V2, fontface = "bold"), col = "black", inherit.aes = FALSE) +
+    "T0_F_F" = 16,
+    "T3_D_D" = 15,
+    "T3_D_H" = 15,
+    "T3_H_H" = 15,
+    "T7_D_D" = 17,
+    "T7_D_H" = 17,
+    "T7_H_H" = 17
+  ), guide = "none") + 
+  geom_text(data = pcoa_data %>% select(treatment, PCoA1_centroid, PCoA2_centroid) %>% distinct(), 
+            aes(label = treatment, x = PCoA1_centroid, y = PCoA2_centroid, fontface = "bold"), col = "black", inherit.aes = FALSE) +
   theme_bw() +
-  labs(pch = "Susceptibility", col = "Treatment")
+  labs(col = "Treatment") +
+  guides(color = guide_legend(
+    override.aes=list(shape = c("T0_F_F" = 16,
+                                "T3_D_D" = 15,
+                                "T3_D_H" = 15,
+                                "T3_H_H" = 15,
+                                "T7_D_D" = 17,
+                                "T7_D_H" = 17,
+                                "T7_H_H" = 17),
+                      size = 3)))
 
-#plot centroid locations
-bd_pcoa_data %>%
-  ggplot(aes(x = V1, y = V2)) +
-  stat_ellipse(geom = "polygon", alpha = 0.1, level = 0.95, aes(col = treatment, fill = treatment)) +
-  geom_point(aes(col = treatment, shape = shape_determ), size = 4) + 
-  geom_point(data = bd_pcoa_centroid, pch = "*")
-
-#plot species or site alone
-plot(test_nmds, "species")
-orditorp(test_nmds, "species")
-
+###### OLD v
 
 ## NMDS with 95% CI around TIMEPOINTS
 
@@ -1563,7 +1561,7 @@ mdf_prep_test1 <- altered_microbiome_data %>%
   psmelt() 
 
 #check the most abundant Orders for microshades
-# mdf_prep_test1 %>% 
+# mdf_prep_test1 %>%
 # select(-c(Phylum:Family)) %>%
 # left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
 # group_by(Order) %>% reframe(tot_sum = sum(Abundance)) %>% arrange(desc(tot_sum))
@@ -1645,7 +1643,9 @@ mod_alpha_tab <- alpha_table %>%
 
 ## figuring out the fig
 
-alpha_graphs <- mod_alpha_tab %>%
+alpha_graphs_manuscript <- mod_alpha_tab %>%
+  mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
+  mutate(for_manuscript = ifelse(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1"), TRUE, FALSE)) %>%
   rowwise() %>%
   mutate(plot_info = list(emmeans(alpha_model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
@@ -1710,13 +1710,17 @@ alpha_graphs <- mod_alpha_tab %>%
       scale_linetype_manual(values = c("D_H" = 1, "D_D" = 1, "H_H" = 6), guide = "none") +
       theme_bw() +
       xlab("Time") +
-      ylab(expression("Normalized log"[2]*" (cpm)")) +
+      ylab(metric) +
       labs(title = metric)
   )) %>%
+  group_by(for_manuscript) %>%
+  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect')))
+
+  
   group_by(alpha_type) %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = alpha_type)))
 
-alpha_graphs$combo_plots[[5]]
+alpha_graphs$combo_plots[[2]]
 
 
 ### other model type for alpha div
