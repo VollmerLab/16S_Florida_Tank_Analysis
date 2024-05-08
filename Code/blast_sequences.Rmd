@@ -5,28 +5,72 @@ date: "2024-03-26"
 output: html_document
 ---
 
+#attempt, did not end up working/abandoned
+#not complete code
+
 ```
-outdir=/scratch/trytten.e/acerv_WBD_metagenomes
-scriptDir=/work/vollmer/software/jds_scripts
+srun -t 24:00:00 --nodes=1 --cpus-per-task=48 --mem=100G --pty /bin/bash
 
-sbatch \
+#blast a sequence
+		diamond blastx \
+		  -d /work/vollmer/Databases/nrDB_3.26.2024/nr \
+		  -q ../metagenome/barcode07_flyeHQ.fasta \
+		  -o barcode07_flyeHQ.daa \
+		  -f 100 \
+		  --threads ${SLURM_CPUS_PER_TASK}
+		
+#sequences that need to be blasted
+		all_diseased_flyeHQ.fasta
+		barcode06_flyeHQ.fasta
+		barcode07_flyeHQ.fasta
+		barcode08_flyeHQ.fasta
+		barcode09_flyeHQ.fasta
+		unclassified_flyeHQ.fasta
+
+#started 07 at ~11 (?)
+
+#trying to download the refseq complete genomes
+for next in $(cat assembly_summary_complete_genomes.txt); do wget -P refseq_genomes "$next"; done
+
+#broken bc no wildcards (*) allowed
+for next in $(cat assembly_summary_complete_genomes.txt); do wget -P refseq_genomes "$next"/*genomic.fna.gz; done
+
+```
 
 
 
-JOBID=$(sbatch \
-  --output=${outdir}/slurm/blast_seq_%A_%a.output \
-  --array=0-$((${number_of_barcodes}-1))%30 \
-  ${scriptDir}/cleanNanopore.slurm \
-    ${outdir}/qc_longreads \
-    ${merged_longreads})
-qcID=$(echo ${JOBID} | sed 's/[^0-9]*//g')
-echo "Submitted QC job: ${qcID}" #41482251
+```
+mkdir b07_contig_names
+cd b07_contig_names/
 
+#get names of all contigs
+cat ../metagenome/barcode07_flyeHQ.fasta | grep '>'  | cut -f 1 -d ' ' |  sed 's/>//g'   > list_of_geneIDs_b07.txt
 
+cat ${queryFASTA} | grep '>'  | cut -f 1 -d ' ' | sed 's/contig//g'
 
+#make each its own
+awk -F'\t' '$1!=prev{close(out); out=$1".txt"; prev=$1} {sub(/[^\t]+\t/,""); print > out}' list_of_geneIDs_b07.txt
 
-diamond blastx -d nr -q SRR7828855_merged.fastq -o SRR7828855_merged.daa -f 100
+#get rid of list
+rm -rf list_of_geneIDs_b07.txt 
 
+for file in ../b07_contig_names/*
+  do echo "hello $file"; done
+  
+done
 
+{$foo}="test/test1/getthis.txt"
+
+"${foo##*/ }"
+
+sed 's/..*//'
+
+seqtk subseq   ../metagenome/barcode07_flyeHQ.fasta  "$file"   > "$file".fasta
+
+mkdir b07_contig_fastas
+cd b07_contig_fastas
+
+#make a fasta for those seqs
+seqtk subseq   ../metagenome/barcode07_flyeHQ.fasta  test_subsetIDs.txt   > test_gene_subset.fasta
 
 ```
