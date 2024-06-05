@@ -1,6 +1,6 @@
 # Making the model based on FDS instead of Resistance
 
-setwd("/Users/emilytrytten/Desktop/Screenshots/Career/Vollmer Lab/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("/Users/emilytrytten/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### Libraries ####
 library(vegan)
@@ -21,6 +21,7 @@ library(corrplot)
 library(Hmisc)
 library(broom.mixed)
 library(taxize)
+library(parallel)
 library(tidyverse)
 
 refit_models <- TRUE
@@ -220,7 +221,7 @@ coord_panel_ranges <- function(panel_ranges, expand = TRUE, default = FALSE, cli
 #### Data ####
 
 #read in and format data
-old_taxonomy_normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
+normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
   mutate(final_disease_state = ifelse(time == "T0", "F", final_disease_state)) %>%
   filter(!c(exposure == "H" & final_disease_state == "D")) %>%
@@ -229,133 +230,6 @@ old_taxonomy_normalized_asv_counts <- read_csv('../intermediate_files/fully_prep
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
          across(Domain:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer)
-
-#read in unprocessed data to get old taxonomy info
-microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
-aggregation_level <- 'none' #or none
-if(aggregation_level != 'none'){
-  microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
-  taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
-} else {
-  sequences <- taxa_names(microbiome_data)
-  taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
-  names(sequences) <- taxa_names(microbiome_data)
-}
-
-#look at sequences
-
-colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
-
-colwell_seqs <- sequences[colwells_of_interest]
-
-outside_colwells <- c("TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGTTTGATAAGCCAGATGTGAAATCCCGGGGCTTAACCTCGGAACTGCATTTGGAACTGTTTGACTAGAGTACTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAGATACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG",
-                      "TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGATAGTTAAGCGAGATGTGAAATCCCGGGGCTCAACCTCGGAACTGCATTTCGAACTGGCTGTCTAGAGTCTTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAAAGACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG")
-names(outside_colwells) <- c("schul66", "schul65")
-combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
-
-
-write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
-
-
-cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
-cysteiniphilum_seqs <- sequences[cysteiniphilums]
-write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
-
-
-#old taxonomy info
-taxonomy_tibble <- tax_table(microbiome_data) %>% 
-  as.data.frame %>%
-  as_tibble(rownames = "asv_names")
-
-#read in data
-homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv', show_col_types = FALSE)
-updated_taxonomy <- read_csv('../intermediate_files/updated_taxonomy.csv')
-
-#replace everything less than 80% confidence with NA
-updated_taxonomy_above80 <- updated_taxonomy %>%
-  mutate(Domain = ifelse(Domain_confidence > 80, Domain, NA),
-         Phylum = ifelse(Phylum_confidence > 80, Phylum, NA),
-         Class = ifelse(Class_confidence > 80, Class, NA),
-         Order = ifelse(Order_confidence > 80, Order, NA),
-         Family = ifelse(Family_confidence > 80, Family, NA),
-         Genus = ifelse(Genus_confidence > 80, Genus, NA),
-         Species = ifelse(Species_confidence > 80, Species, NA)
-  )
-
-#get old taxonomy info for ASVs that are all NA in updated taxonomy
-all_na_in_new_tax <- updated_taxonomy_above80 %>% 
-  filter(if_all(Domain:Species, ~is.na(.))) %>% 
-  select(-c(Domain:Species)) %>%
-  left_join(taxonomy_tibble, by = join_by("asv_id" == "asv_names"))
-
-#combine the old taxonomy with the updated version
-combined_taxonomy <- updated_taxonomy_above80 %>% 
-  filter(!if_all(Domain:Species, ~is.na(.))) %>%
-  full_join(all_na_in_new_tax)
-
-#get list of genera that have multiple described taxonomies
-multiple_classifications_list <- combined_taxonomy %>%
-  select(Domain:Genus) %>%
-  group_by(Genus) %>% 
-  distinct() %>%
-  summarise(n = n()) %>%
-  filter(n > 1, !is.na(Genus)) %>%
-  plyr::arrange(Genus) %>%
-  pull(Genus)
-
-#get the ncbi classifications for the genera with multiple described taxonomies
-
-# ncbi_classifications_by_genus <- tax_name(multiple_classifications_list, db = "ncbi", 
-#                                           get = c("Domain", "Phylum", "Class", "Order", "Family")) %>%
-#   select(-c(db, Domain)) %>%
-#   dplyr::rename("Genus" = "query")
-# write_csv(ncbi_classifications_by_genus, "../intermediate_files/ncbi_classifications_for_overlaps.csv")
-ncbi_classifications_by_genus <- read_csv("../intermediate_files/ncbi_classifications_for_overlaps.csv")
-
-#most updated taxonomy, just phylum:genus
-#each genus has only one described classification, is combined with old and new taxonomies
-#doesnt contain NA for genus rows
-nonoverlapping_taxonomy <- combined_taxonomy %>% 
-  select(Phylum:Genus) %>% 
-  distinct() %>% 
-  filter(!is.na(Genus)) %>%
-  filter(!Genus %in% multiple_classifications_list) %>%
-  rbind(ncbi_classifications_by_genus)
-
-ncbi_classifications_by_genus %>% filter(Genus == "Nannocystis")
-
-#our ASVs with the most up to date taxonomy, use for downstream purposes
-full_taxonomy <- combined_taxonomy %>%
-  select(-c(Phylum:Family)) %>%
-  left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
-  relocate(Phylum:Family, .after = Domain) %>%
-  filter(!asv_id %in% c(combined_taxonomy %>% filter(is.na(Genus)) %>% pull(asv_id))) %>%
-  rbind(combined_taxonomy %>% filter(is.na(Genus))) %>%
-  arrange(parse_number(asv_id)) %>%
-  filter(!(asv_id %in% c("ASV_121", "ASV_1535", "ASV_1909", "ASV_4075", "ASV_5598") & 
-             Class %in% c("Gammaproteobacteria", "Alphaproteobacteria") & Phylum != "Pseudomonadota")) %>% #remove duplicates of these w diff phyla
-  filter(!(asv_id == "ASV_121" & is.na(Class))) %>%
-  distinct()
-
-#make version of microbiome data ps to update the taxonomy in
-altered_microbiome_data <- microbiome_data
-
-tax_table(altered_microbiome_data) <- full_taxonomy %>% 
-  select(-contains("confidence")) %>%
-  arrange(parse_number(asv_id)) %>%
-  column_to_rownames("asv_id") %>%
-  as.matrix()
-
-metadata <- sample_data(altered_microbiome_data) %>%
-  as_tibble(rownames = 'sample_id') %>%
-  dplyr::select(-retain_sample) %>%
-  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
-         .after = sample_id)
-
-#updated taxonomy info in data; is now fully prepared data for further analysis
-normalized_asv_counts <- old_taxonomy_normalized_asv_counts %>%
-  select(-c(colnames(taxonomy_tibble %>% select(-c(asv_names))))) %>%
-  left_join(full_taxonomy, by = join_by("asv_id"))
 
 #### Contrasts ####
 

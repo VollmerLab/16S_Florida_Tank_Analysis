@@ -3,23 +3,23 @@ setwd("/Users/emilytrytten/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
 #### Libraries ####
 library(magrittr)
 library(phyloseq)
-library(microbiome)
+library(microbiome) #BiocManager::install("microbiome")
 library(vegan)
-library(metagMisc)
-library(edgeR)
-library(variancePartition)
+library(metagMisc) #devtools::install_github("vmikk/metagMisc")
+library(edgeR) #BiocManager::install("edgeR")
+library(variancePartition) #BiocManager::install("variancePartition")
 library(ggvenn)
 library(cowplot)
 library(ComplexUpset)
-library(microshades)
+library(microshades) #remotes::install_github("KarstensLab/microshades", dependencies = TRUE)
 library(lme4)
 library(tidyverse)
 library(emmeans)
 library(relayer)
-library(fantaxtic)
-library(ggnested)
+library(fantaxtic) #devtools::install_github("gmteunisse/fantaxtic")
+library(ggnested) #devtools::install_github("gmteunisse/ggnested")
 
-set.seed(68748)
+#set.seed(68748)
 
 #### Functions ####
 # data <- otu_tmm; prop_missing <- 0.25
@@ -96,6 +96,65 @@ filter_asv_meanCount <- function(data, meta, min_count){
   data[keep, keep.lib.sizes = TRUE]
 }
 
+#from https://rdrr.io/github/vmikk/metagMisc/src/R/phyloseq_filter.R
+#package metagMisc, needed to change the package type used for the function "prevalence" from "data.table" to "base"
+#using the base functions is just slower and less efficient but the data.table method was throwing an error after updating R/RStudio
+#Gave the error: "Error in prevalence(physeq) : object 'variable' not found"
+phyloseq_filter_prevalence <- function(physeq, prev.trh = 0.05, abund.trh = NULL, threshold_condition = "OR", abund.type = "total"){
+  
+  ## Threshold validation
+  if(prev.trh > 1 | prev.trh < 0){ stop("Prevalence threshold should be non-negative value in the range of [0, 1].\n") }
+  if(!is.null(abund.trh)){ 
+    if(abund.trh <= 0){ stop("Abundance threshold should be non-negative value larger 0.\n") }
+  }
+  
+  # ## Check for the low-prevalence species (compute the total and average prevalences of the features in each phylum)
+  # prevdf_smr <- function(prevdf){
+  #   plyr::ddply(prevdf, "Phylum", function(df1){ 
+  #     data.frame(
+  #       Average = mean(df1$Prevalence),
+  #       Total = sum(df1$Prevalence))
+  #     })
+  # }
+  # prevdf_smr( prevalence(physeq) )
+  
+  ## Check the prevalence threshold
+  # phyloseq_prevalence_plot(prevdf, physeq)
+  
+  ## Define prevalence threshold as % of total samples
+  ## This function is located in 'phyloseq_prevalence_plot.R' file
+  prevalenceThreshold <- prev.trh * phyloseq::nsamples(physeq)
+  
+  ## Calculate prevalence (number of samples with OTU) and OTU total abundance
+  prevdf <- metagMisc::prevalence(physeq, package = "base")
+  
+  ## Get the abundance type
+  if(abund.type == "total") { prevdf$AbundFilt <- prevdf$TotalAbundance }
+  if(abund.type == "mean")  { prevdf$AbundFilt <- prevdf$MeanAbundance }
+  if(abund.type == "median"){ prevdf$AbundFilt <- prevdf$MedianAbundance }
+  
+  ## Which taxa to preserve
+  if(is.null(abund.trh)) { tt <- prevdf$Prevalence >= prevalenceThreshold }
+  if(!is.null(abund.trh)){
+    ## Keep OTU if it either occurs in many samples OR it has high abundance
+    if(threshold_condition == "OR"){
+      tt <- (prevdf$Prevalence >= prevalenceThreshold | prevdf$AbundFilt >= abund.trh)
+    }
+    
+    ## Keep OTU if it occurs in many samples AND it has high abundance
+    if(threshold_condition == "AND"){
+      tt <- (prevdf$Prevalence >= prevalenceThreshold & prevdf$AbundFilt >= abund.trh)
+    }
+  }
+  
+  ## Extract names for the taxa we whant to keep
+  keepTaxa <- prevdf$Taxa[ tt ]
+  
+  ## Execute prevalence filter
+  res <- phyloseq::prune_taxa(taxa = keepTaxa, x = physeq)
+  return(res)
+}
+
 #### Data ####
 aggregation_level <- 'none' #or none
 
@@ -103,25 +162,6 @@ microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
   select(-retain_sample)
-
-melted_ps <- phyloseq_filter_prevalence(updated_microbiome_data, 
-                                        prev.trh = 0.2) %>%
-  psmelt() %>%
-  as_tibble()
-
-longitudinal_genos <- melted_ps %>%
-  select(time, genotype) %>%
-  group_by(genotype) %>%
-  distinct() %>%
-  reframe(all_timepoints = str_c(time, collapse = "_")) %>%
-  filter(all_timepoints != "T0") %>% # remove 5 fragments used for making doses
-  filter(str_detect(all_timepoints, "T3") & str_detect(all_timepoints, "T7")) %>% #removes 2 T7 only and 2 T0/T7
-  pull(genotype)
-
-model_samples <- filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
-  filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
-  filter(!(exposure == "H" & final_disease_state == "D")) %>%
-  pull(sample_id)
 
 #### Aggregate Samples ####
 if(aggregation_level != 'none'){
@@ -132,6 +172,25 @@ if(aggregation_level != 'none'){
   taxa_names(microbiome_data) <- str_c('ASV', 1:length(taxa_names(microbiome_data)), sep = '_')
   names(sequences) <- taxa_names(microbiome_data)
 }
+
+#look at sequences
+
+colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
+
+colwell_seqs <- sequences[colwells_of_interest]
+
+outside_colwells <- c("TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGTTTGATAAGCCAGATGTGAAATCCCGGGGCTTAACCTCGGAACTGCATTTGGAACTGTTTGACTAGAGTACTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAGATACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG",
+                      "TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGATAGTTAAGCGAGATGTGAAATCCCGGGGCTCAACCTCGGAACTGCATTTCGAACTGGCTGTCTAGAGTCTTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAAAGACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG")
+names(outside_colwells) <- c("schul66", "schul65")
+combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
+
+#write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
+
+
+cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
+cysteiniphilum_seqs <- sequences[cysteiniphilums]
+#write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
+
 
 #old taxonomy info
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
@@ -192,8 +251,6 @@ nonoverlapping_taxonomy <- combined_taxonomy %>%
   filter(!Genus %in% multiple_classifications_list) %>%
   rbind(ncbi_classifications_by_genus)
 
-ncbi_classifications_by_genus %>% filter(Genus == "Nannocystis")
-
 #our ASVs with the most up to date taxonomy, use for downstream purposes
 full_taxonomy <- combined_taxonomy %>%
   select(-c(Phylum:Family)) %>%
@@ -222,6 +279,46 @@ metadata <- sample_data(updated_microbiome_data) %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
          .after = sample_id)
 
+#total number of each taxa that were initially found:
+tax_table(updated_microbiome_data) %>% 
+  as.data.frame() %>% 
+  as_tibble() %>%
+  select(Family) %>% #change taxa level here
+  filter(!is.na(.)) %>%
+  distinct() %>%
+  nrow()
+
+write_rds(updated_microbiome_data, "../intermediate_files/updated_microbiome_data.rds")
+
+#melted ps
+melted_ps <- phyloseq_filter_prevalence(updated_microbiome_data, 
+                                        prev.trh = 0.2) %>%
+  psmelt() %>%
+  as_tibble()
+
+longitudinal_genos <- melted_ps %>%
+  select(time, genotype) %>%
+  group_by(genotype) %>%
+  distinct() %>%
+  reframe(all_timepoints = str_c(time, collapse = "_")) %>%
+  filter(all_timepoints != "T0") %>% # remove 5 fragments used for making doses
+  filter(str_detect(all_timepoints, "T3") & str_detect(all_timepoints, "T7")) %>% #removes 2 T7 only and 2 T0/T7
+  pull(genotype)
+
+model_samples <- filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
+  filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
+  filter(!(exposure == "H" & final_disease_state == "D")) %>%
+  pull(sample_id)
+
+#roughly check evenness across groups
+melted_ps %>% 
+  filter(Sample %in% model_samples) %>% 
+  select(-c(OTU, Abundance)) %>% 
+  select(!colnames(updated_taxonomy %>% select(-c(asv_id, contains("confidence"))))) %>%
+  distinct() %>%
+  group_by(time, exposure, final_disease_state) %>%
+  reframe(n = n())
+
 #### Alpha Diversity ####
 # pre-filtering for abundance
 
@@ -230,32 +327,30 @@ alpha_table <- microbiome::alpha(updated_microbiome_data, index = "all") %>%
   inner_join(metadata, by = 'sample_id') %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
 
-# mod_alpha_tab <- alpha_table %>%
-#   filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
-#   mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
-#   mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_')) %>%
-#   pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
-#                names_to = 'metric',
-#                values_to = 'alpha_div_value') %>%
-#   select(-c(susceptability, resistance, clone_group)) %>%
-#   mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank'), .after = final_disease_state) %>%
-#   nest_by(metric) %>%
-#   rowwise() %>%
-#   summarise(alpha_model = list(lmer(alpha_div_value ~ treatment + 
-#                                       (1 | genotype) + (0 + dummy(tank_field, c("tank")) | tank),
-#                                     data = data))) %>% 
-#   rowwise() %>% 
-#   mutate(p_value = anova(alpha_model) %>% 
-#            rownames_to_column(var = "sig_term") %>% 
-#            as_tibble() %>% 
-#            dplyr::rename("p_val" = `Pr(>F)`) %>%
-#            pull(p_val)) %>%
-#   ungroup() %>%
-#   mutate(fdr_p_val = p.adjust(p_value, method = 'fdr')) %>%
-#   filter(fdr_p_val < 0.05) %>%
-#   mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
-
-mod_alpha_tab <- read_rds("../intermediate_files/mod_alpha_tab.rds")
+mod_alpha_tab <- alpha_table %>%
+  filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
+  mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
+  mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_')) %>%
+  pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
+               names_to = 'metric',
+               values_to = 'alpha_div_value') %>%
+  select(-c(susceptability, resistance, clone_group)) %>%
+  mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank'), .after = final_disease_state) %>%
+  nest_by(metric) %>%
+  rowwise() %>%
+  mutate(alpha_model = list(lmer(alpha_div_value ~ treatment +
+                                      (1 | genotype) + (0 + dummy(tank_field, c("tank")) | tank),
+                                    data = data))) %>%
+  rowwise() %>%
+  mutate(p_value = anova(alpha_model) %>%
+           rownames_to_column(var = "sig_term") %>%
+           as_tibble() %>%
+           dplyr::rename("p_val" = `Pr(>F)`) %>%
+           pull(p_val)) %>%
+  ungroup() %>%
+  mutate(fdr_p_val = p.adjust(p_value, method = 'fdr')) %>%
+  filter(fdr_p_val < 0.05) %>%
+  mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
 
 ## figuring out the fig
 
@@ -509,19 +604,29 @@ plot_nested_bar(ps_obj = top_nested$ps_obj,
 top_level <- "Order"
 nested_level <- "Genus"
 sample_order <- NULL
-top_asv <- top_taxa(updated_microbiome_data, n_taxa = 10, nested_level, by_proportion = TRUE)
 
-top_nested <- nested_top_taxa(updated_microbiome_data,
+top_asv <- nested_top_taxa(updated_microbiome_data,
                               top_tax_level = "Order",
                               nested_tax_level = "Genus",
                               n_top_taxa = 10, 
                               n_nested_taxa = 4)
 
-top_asv <- top_nested
-
 # Generate a palette based  on the phyloseq object
 pal <- taxon_colours(top_asv$ps_obj,
                      tax_level = top_level)
+
+custom_palette <- taxon_colours(top_asv$ps_obj, 
+                      tax_level = "Order", 
+                      palette = c(Rickettsiales = "#24820D", 
+                                  Spirochaetales = "#5A41BF",
+                                  Alteromonadales = "#7A5634",
+                                  Verrucomicrobiales = "#98B824",
+                                  Flavobacteriales = "#F36D19",
+                                  Rhodobacterales = "#F873BE",
+                                  Puniceicoccales = "#FDF1AE",
+                                  Saprospirales = "#8C146E",
+                                  Oceanospirillales = "#0BC8E1",
+                                  Vibrionales = "#DF2727"))
 
 # Create names for NA taxa
 ps_tmp <- top_asv$ps_obj %>%
@@ -577,13 +682,26 @@ if(!is.null(sample_order)){
   
 }
 
-# Generate a base plot
+custom_palette <- taxon_colours(top_asv$ps_obj, 
+                                tax_level = "Order", 
+                                palette = c(Rickettsiales = "#114C02", 
+                                            Spirochaetales = "#5A41BF",
+                                            Alteromonadales = "#4E3117",
+                                            Verrucomicrobiales = "#98B824",
+                                            Flavobacteriales = "#F7B10F",
+                                            Rhodobacterales = "#F873BE",
+                                            Puniceicoccales = "#FDF1AE",
+                                            Saprospirales = "#8C146E",
+                                            Oceanospirillales = "#0BC8E1",
+                                            Vibrionales = "#DF2727"))
+
+# Generate the plot
 ggnested(psdf,
               aes_string(main_group = top_level,
                          sub_group = nested_level,
                          x = "Sample",
                          y = "Abundance"),
-              main_palette = pal) +
+              main_palette = custom_palette) +
   scale_y_continuous(expand = c(0, 0)) +
   theme(axis.text.x = element_text(hjust = 1, vjust = 0.5, angle = 90)) +
   theme_nested(theme_bw) + 
