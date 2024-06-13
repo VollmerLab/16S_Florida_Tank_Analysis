@@ -14,7 +14,6 @@ library(emmeans)
 library(multidplyr)
 library(ggupset)
 library(qvalue)
-library(patchwork)
 library(relayer) #devtools::install_github("clauswilke/relayer")
 library(ComplexUpset)
 library(corrplot)
@@ -23,6 +22,7 @@ library(broom.mixed)
 library(taxize)
 library(parallel)
 library(tidyverse)
+library(patchwork)
 
 refit_models <- TRUE
 
@@ -32,7 +32,7 @@ cluster_library(cluster, c('dplyr', 'lmerTest', 'emmeans', 'stringr', 'tidyr'))
 
 fit_model <- function(formula, data, use_weights = TRUE){
   if(!use_weights){
-    data$weights <- 1
+    data$weight <- 1
   }
   
   full_model <- lmer(formula, 
@@ -231,6 +231,52 @@ normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samp
          across(Domain:Species, str_replace_na)) %>%
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer)
 
+homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv')
+
+#### Prevalence of Cysteiniphilum ####
+
+normalized_asv_counts %>% 
+  filter(asv_id == "ASV_65") %>%
+  mutate(present = ifelse(log2_cpm > 5.255240, TRUE, FALSE), .after = log2_cpm) %>%
+  filter(time %in% c("T0", "T7")) %>%
+  group_by(time, final_disease_state, present) %>%
+  reframe(n = n())
+#71% of D
+#11% of H
+#6% of F
+
+#Monte Carlo Simulations
+
+t7_mc_samples <- normalized_asv_counts %>% 
+  filter(asv_id == "ASV_65") %>%
+  filter(time == "T7") %>%
+  mutate(present = ifelse(log2_cpm > 5.255240, 1, 0), .after = log2_cpm)
+
+runs <- 100000
+
+#T7 Diseased
+mc_d_t7 <- sample(t7_mc_samples %>% filter(final_disease_state == "D") %>% pull(present), runs, replace = T)
+sum(mc_d_t7)/runs #prev of 0.71348
+
+sd(mc_d_t7)/sqrt(runs) #SE of 0.001429784
+
+#T7 Healthy
+mc_h_t7 <- sample(t7_mc_samples %>% filter(final_disease_state == "H") %>% pull(present), runs, replace = T)
+sum(mc_h_t7)/runs #prev of 0.11259
+
+sd(mc_h_t7)/sqrt(runs) #SE of 0.0009995724
+
+#T0
+t0_mc_samples <- normalized_asv_counts %>% 
+  filter(asv_id == "ASV_65") %>%
+  filter(time == "T0") %>%
+  mutate(present = ifelse(log2_cpm > 5.255240, 1, 0), .after = log2_cpm)
+
+mc_d_t0 <- sample(t0_mc_samples$present, runs, replace = T)
+sum(mc_d_t0)/runs #prev of 0.06103
+
+sd(mc_d_t0)/sqrt(runs) #SE of 0.0007570067
+
 #### Contrasts ####
 
 # posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
@@ -279,7 +325,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
   asv_models <- normalized_asv_counts %>% 
     mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank')) %>%
     # filter(asv_id == 'ASV_65') %>%
-    nest_by(across(c('asv_id', Domain:Species, Family_confidence:Species_confidence))) %>%
+    nest_by(across(c('asv_id', Domain:Species))) %>% #, Family_confidence:Species_confidence
     partition(cluster) %>%
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + #(1 | tank),
                        (0 + dummy(tank_field, c("tank")) | tank),
@@ -648,6 +694,8 @@ upset(sig_classified_asvs %>% select(c(asv_id, contains("pathogen"), colnames(ta
 
 #### More Upsets ####
 
+non_tank_sig_classified_asvs %>% select(Family) %>% distinct()
+
 cu_family_colors <- c("Fastidiosibacteraceae" = '#e6194B', 
                       "Fokiniaceae" = '#3cb44b', 
                       "Francisellaceae" = '#42d4f4', 
@@ -658,7 +706,17 @@ cu_family_colors <- c("Fastidiosibacteraceae" = '#e6194B',
                       "Puniceicoccaceae" = '#dcbeff', 
                       "Erythrobacteraceae" = '#9A6324', 
                       "Roseobacteraceae" = '#fabed4',
+                      "Cellvibrionaceae" = "purple",
+                      "Vibrionaceae" = "darkred",
+                      "Arenicellaceae" = "lightgreen",
+                      "Planctomycetaceae" = "tan",
+                      "NA" = "gray60",
                       "Unclassified" = "gray60")
+
+non_tank_sig_classified_asvs <- sig_classified_asvs %>%
+  filter(!TankEffect) %>%
+  left_join(sig_homog_dose_data, by = join_by(asv_id)) %>%
+  select(-TankEffect)
 
 sig_effects_cu <- upset(sig_classified_asvs %>% select(-c(contains("DD"))),
                         colnames(sig_classified_asvs %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)), contains("DD"))) %>%
@@ -966,11 +1024,12 @@ the_plots <- bacterial_signature_asv %>%
       ))
   )) %>%
   group_by(grouped_signatures) %>%
-  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = grouped_signatures)))
+  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto'))) # & plot_annotation(title = grouped_signatures)))
 
 
 #view the plots
-the_plots$combo_plots[[5]]
+the_plots$combo_plots[[3]]
+
 
 #### Complex Upset with Doses ####
 
@@ -989,10 +1048,7 @@ sig_homog_dose_data <- homogenate_models %>%
 
 
 
-non_tank_sig_classified_asvs <- sig_classified_asvs %>%
- filter(!TankEffect) %>%
-  left_join(sig_homog_dose_data, by = join_by(asv_id)) %>%
-  select(-TankEffect)
+
 
 sig_classified_asvs %>% left_join(sig_homog_dose_data, by = join_by(asv_id)) %>% filter(sig_dose_H)
   
@@ -1106,14 +1162,11 @@ ggplot(nmds_scores) +
 
   scale_shape_manual(values = c("T0_F_F" = 1))
   
-adonis2(nmds_matrix ~treatment, method = "bray", perm = 999, data = nmds_metadata)  
-  
-adonis2(nmds_matrix ~time*final_disease_state*exposure, method = "bray", perm = 999, data = nmds_metadata)
+adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, method = "bray", perm = 1000, data = nmds_metadata)  
 
-adonis2(nmds_matrix ~time + genotype + tank, method = "bray", perm = 999, data = nmds_metadata)
 
-library(pairwiseAdonis)
-pairwise.adonis2(nmds_matrix ~treatment, data = nmds_metadata) %>% broom::tidy()
+#library(pairwiseAdonis)
+#pairwise.adonis2(nmds_matrix ~treatment, data = nmds_metadata) %>% broom::tidy()
 
 #### PCoA ####
 
@@ -1472,6 +1525,11 @@ bacstrat_pcoa$points %>%
 ylim(-0.3, 0.3) +
   xlim(-0.3, 0.25)
 
+
+#### Time 0 Microbiome ####
+
+normalized_asv_counts %>%
+  filter(time == "T0")
 
 #### Emily Miscellaneous ####
 

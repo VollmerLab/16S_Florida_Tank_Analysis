@@ -19,7 +19,7 @@ library(relayer)
 library(fantaxtic) #devtools::install_github("gmteunisse/fantaxtic")
 library(ggnested) #devtools::install_github("gmteunisse/ggnested")
 
-#set.seed(68748)
+set.seed(68748)
 
 #### Functions ####
 # data <- otu_tmm; prop_missing <- 0.25
@@ -98,7 +98,8 @@ filter_asv_meanCount <- function(data, meta, min_count){
 
 #from https://rdrr.io/github/vmikk/metagMisc/src/R/phyloseq_filter.R
 #package metagMisc, needed to change the package type used for the function "prevalence" from "data.table" to "base"
-#using the base functions is just slower and less efficient but the data.table method was throwing an error after updating R/RStudio
+#using the base functions does the same thing but is just slower and less efficient 
+#but the data.table method was throwing an error after updating R/RStudio
 #Gave the error: "Error in prevalence(physeq) : object 'variable' not found"
 phyloseq_filter_prevalence <- function(physeq, prev.trh = 0.05, abund.trh = NULL, threshold_condition = "OR", abund.type = "total"){
   
@@ -189,6 +190,9 @@ combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
 
 cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
 cysteiniphilum_seqs <- sequences[cysteiniphilums]
+
+sequences["ASV_65"]
+
 #write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
 
 
@@ -288,7 +292,7 @@ tax_table(updated_microbiome_data) %>%
   distinct() %>%
   nrow()
 
-write_rds(updated_microbiome_data, "../intermediate_files/updated_microbiome_data.rds")
+#write_rds(updated_microbiome_data, "../intermediate_files/updated_microbiome_data.rds")
 
 #melted ps
 melted_ps <- phyloseq_filter_prevalence(updated_microbiome_data, 
@@ -319,16 +323,40 @@ melted_ps %>%
   group_by(time, exposure, final_disease_state) %>%
   reframe(n = n())
 
+#### Alpha Posthocs ####
+# posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
+# emmeans(model, ~treatment)
+alpha_posthoc_time <- list('aquarium' = c(-1, 0, 0, 1/2, 0, 0, 1/2))
+
+alpha_posthoc_exp <- list('exposure' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2))
+
+alpha_posthoc_outc <- list('outcome' = c(0, 1/2, -1/4, -1/4, 1/2, -1/4, -1/4))
+
+
+
+alpha_two_sided_tests <- tibble(microbial_signature = c('alpha_posthoc_time', 'alpha_posthoc_exp', 'alpha_posthoc_outc'),
+                                contrasts = list(alpha_posthoc_time, alpha_posthoc_exp, alpha_posthoc_outc),
+                                direction = '=') #=
+
+alpha_posthoc_categories <- alpha_two_sided_tests %>%
+  unnest(contrasts) %>%
+  mutate(contrast_name = names(contrasts)) %>%
+  group_by(contrast_name, contrasts, direction) %>%
+  summarise(signatures = list(c(microbial_signature)),
+            .groups = 'drop') %>%
+  nest(contrast = -direction)
+
 #### Alpha Diversity ####
 # pre-filtering for abundance
 
-alpha_table <- microbiome::alpha(updated_microbiome_data, index = "all") %>%
+alpha_table <- subset_samples(updated_microbiome_data, sample_names(updated_microbiome_data) %in% model_samples) %>%
+  rarefy_even_depth(rngseed = 68748) %>% #rarefying reduces the data down to 4311 taxa
+  microbiome::alpha(index = "all") %>%
   as_tibble(rownames = 'sample_id') %>%
   inner_join(metadata, by = 'sample_id') %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'))
 
 mod_alpha_tab <- alpha_table %>%
-  filter(!tank %in% c("HOMO", "homogenate_fragment")) %>%
   mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
   mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_')) %>%
   pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
@@ -337,28 +365,121 @@ mod_alpha_tab <- alpha_table %>%
   select(-c(susceptability, resistance, clone_group)) %>%
   mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank'), .after = final_disease_state) %>%
   nest_by(metric) %>%
-  rowwise() %>%
-  mutate(alpha_model = list(lmer(alpha_div_value ~ treatment +
-                                      (1 | genotype) + (0 + dummy(tank_field, c("tank")) | tank),
-                                    data = data))) %>%
-  rowwise() %>%
-  mutate(p_value = anova(alpha_model) %>%
-           rownames_to_column(var = "sig_term") %>%
-           as_tibble() %>%
-           dplyr::rename("p_val" = `Pr(>F)`) %>%
-           pull(p_val)) %>%
+  #partition(cluster) %>%
+  mutate(fit_model(alpha_div_value ~ treatment + (1 | genotype) + #(1 | tank),
+                     (0 + dummy(tank_field, c("tank")) | tank),
+                   data, 
+                   use_weights = FALSE),
+         random_anova = list(rand(model)),
+         process_model(model, re_model, random_anova),
+         posthoc = list(run_posthoc(model, alpha_posthoc_categories))) %>%
+  collect() %>%
+  select(-re_model, -ends_with('global')) %>%
+  ungroup() %>% 
+  p_adjust() %>%
+  relocate(anova_table, .after = model) %>% 
+  relocate(posthoc, .after = random_anova)
+
+# All 22 metrics are significant for treatment
+mod_alpha_tab %>%
+  select(metric, starts_with('fdr')) %>% 
+  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
+  
+  pivot_longer(cols = -metric,
+               names_to = c('term'),
+               values_to = 'significance',
+               names_prefix = 'fdr_') %>%
+  filter(significance) %>%
+  group_by(metric) %>%
+  mutate(sigs = str_c(term, collapse = ", ")) %>%
+  select(metric, sigs) %>%
+  distinct() %>%
   ungroup() %>%
-  mutate(fdr_p_val = p.adjust(p_value, method = 'fdr')) %>%
-  filter(fdr_p_val < 0.05) %>%
-  mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
+  group_by(sigs) %>%
+  reframe(n = n())
 
-## figuring out the fig
+#process the posthocs
+alpha_significant_models <- mod_alpha_tab %>%
+  filter(fdr_treatment < 0.05) %>%
+  rowwise() %>%
+  mutate(process_postHoc(posthoc)) %>%
+  ungroup() %>%
+  p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
 
-alpha_graphs_manuscript <- mod_alpha_tab %>%
+#p vals for manuscript metrics
+alpha_significant_models %>%
+  select(metric, `fdr_aquarium_=`) %>% 
+  filter(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "chao1"))
+
+alpha_significant_models %>%
+  select(metric, posthoc) %>% 
+  filter(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "chao1")) %>%
+  unnest(posthoc) %>%
+  filter(contrast == "aquarium")
+
+alpha_significant_models$anova_table[[1]]
+
+#which of the posthocs are significant
+alpha_metric_signatures <- alpha_significant_models %>%
+  select(metric, starts_with('fdr')) %>% 
+  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
+  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
+  
+  pivot_longer(cols = -metric,
+               names_to = c('term'),
+               values_to = 'significance') %>%
+  mutate(term = str_remove(term, 'fdr_')) %>%
+  mutate(direction = str_extract(term, '[><=]'),
+         term = str_remove(term, '_[><=]')) %>%
+  filter(significance) %>%
+  ungroup()
+
+# how many sig for each type: 21 for tank/time
+alpha_metric_signatures %>%
+  group_by(term) %>%
+  reframe(n = n())
+
+#rarity_log_modulo_skewness is not sig for time/tank
+alpha_significant_models %>%
+  select(metric, starts_with('fdr')) %>% 
+  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
+  mutate(across(starts_with('fdr'), ~. < 0.05)) %>%
+  filter(`fdr_aquarium_=` == FALSE)
+
+
+#old way of doing alpha model, no contrasts integrated
+# mod_alpha_tab <- alpha_table %>%
+#   mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
+#   mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_')) %>%
+#   pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
+#                names_to = 'metric',
+#                values_to = 'alpha_div_value') %>%
+#   select(-c(susceptability, resistance, clone_group)) %>%
+#   mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank'), .after = final_disease_state) %>%
+#   nest_by(metric) %>%
+#   rowwise() %>%
+#   mutate(alpha_model = list(lmer(alpha_div_value ~ treatment +
+#                                       (1 | genotype) + (0 + dummy(tank_field, c("tank")) | tank),
+#                                     data = data))) %>%
+#   rowwise() %>%
+#   mutate(p_value = anova(alpha_model) %>%
+#            rownames_to_column(var = "sig_term") %>%
+#            as_tibble() %>%
+#            dplyr::rename("p_val" = `Pr(>F)`) %>%
+#            pull(p_val)) %>%
+#   ungroup() %>%
+#   mutate(fdr_p_val = p.adjust(p_value, method = 'fdr')) %>%
+#   filter(fdr_p_val < 0.05) %>%
+#   mutate(alpha_type = ifelse(metric %in% c("chao1", "observed"), "richness", str_extract(metric, "[^_]+")))
+
+
+#### Alpha Div Plots ####
+
+alpha_graphs_manuscript <- alpha_significant_models %>%
   mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
   mutate(for_manuscript = ifelse(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1"), TRUE, FALSE)) %>%
   rowwise() %>%
-  mutate(plot_info = list(emmeans(alpha_model, ~treatment) %>%
+  mutate(plot_info = list(emmeans(model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
                             separate(treatment, into = c('time', 'exposure', 'final_disease_state')) %>%
                             mutate(graph_cat = ifelse(time == "T0", NA, 
@@ -425,78 +546,18 @@ alpha_graphs_manuscript <- mod_alpha_tab %>%
       labs(title = metric)
   )) %>%
   group_by(for_manuscript) %>%
-  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect')))
+  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto')))
 
+alpha_graphs_manuscript$combo_plots[[2]]
 
 group_by(alpha_type) %>%
   summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'collect') & plot_annotation(title = alpha_type)))
 
 alpha_graphs$combo_plots[[2]]
 
-#### Beta Diversity ####
-
-nmds_matrix <- melted_ps %>% 
-  filter(Sample %in% model_samples) %>%
-  select(OTU, Sample, Abundance) %>%
-  pivot_wider(names_from = Sample, values_from = Abundance) %>%
-  column_to_rownames('OTU') %>%
-  t() %>%
-  as.matrix()
-
-asv_nmds <- metaMDS(nmds_matrix, distance = 'mountford', k = 2, trymax = 100, autotransform = FALSE, verbose = TRUE)
-
-#shepard plot
-#doesn't follow y = x line well, so MDS might be misleading -> use nmds
-plot(asv_nmds$diss, asv_nmds$dist)
-abline(a = 0, b = 1, col = "red")
-
-stressplot(asv_nmds)
-
-plot(asv_nmds)
-
-nmds_scores = as.data.frame(scores(asv_nmds)$sites)
-
-nmds_metadata <- melted_ps %>% 
-  filter(Sample %in% model_samples) %>%
-  select(OTU, time, exposure, final_disease_state, genotype, 
-         Sample, Abundance, tank) %>%
-  mutate(final_disease_state = ifelse(exposure == "F", "F", final_disease_state)) %>%
-  mutate(tank_field = if_else(exposure == "F", 'field', 'tank')) %>%
-  pivot_wider(names_from = OTU, values_from = Abundance) %>%
-  as.data.frame()
-
-nmds_scores$time = nmds_metadata$time
-nmds_scores$exposure = nmds_metadata$exposure
-nmds_scores$final_disease_state = nmds_metadata$final_disease_state
-nmds_scores$susceptability = nmds_metadata$susceptability
-nmds_scores$genotype = nmds_metadata$genotype
-nmds_scores$treatment = str_c(nmds_scores$time, nmds_scores$exposure, nmds_scores$final_disease_state, sep = "_")
-
-#nice nmds
-ggplot(nmds_scores) +
-  geom_point(aes(x = NMDS1, y = NMDS2, col = treatment, pch = time), size = 2.5) +
-  stat_ellipse(aes(x = NMDS1, y = NMDS2, col = treatment)) +
-  theme_bw() +
-  scale_shape_manual(values = c("T0" = 16, "T3" = 15, "T7" = 17), guide = "none") +
-  scale_color_manual(name = "Treatment", values = c("T0_F_F" = "#c389e0",
-                                                    "T3_D_D" = "#E79B9B",
-                                                    "T3_D_H" = "#97D9E1",
-                                                    "T3_H_H" = "#95AC85",
-                                                    "T7_D_D" = "#A70000",
-                                                    "T7_D_H" = "#22A7B6",
-                                                    "T7_H_H" = "#406F23")) +
-  guides(color = guide_legend(
-    override.aes=list(shape = c("T0_F_F" = 16,
-                                "T3_D_D" = 15,
-                                "T3_D_H" = 15,
-                                "T3_H_H" = 15,
-                                "T7_D_D" = 17,
-                                "T7_D_H" = 17,
-                                "T7_H_H" = 17),
-                      size = 3)))
 
 
-adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, method = "mountford", perm = 999, data = nmds_metadata)
+
 
 #### Microshades Microbe Abundance ####
 
