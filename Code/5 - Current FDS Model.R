@@ -718,9 +718,12 @@ non_tank_sig_classified_asvs <- sig_classified_asvs %>%
   left_join(sig_homog_dose_data, by = join_by(asv_id)) %>%
   select(-TankEffect)
 
+fantaxtic_palette
+
 sig_effects_cu <- upset(sig_classified_asvs %>% select(-c(contains("DD"))),
                         colnames(sig_classified_asvs %>% select(-c(asv_id, colnames(taxonomy_tibble %>% select(-asv_names)), contains("DD"))) %>%
                                    relocate(TankEffect, contains("Exposed"), contains("Outcome"))), 
+                        
                         base_annotations=list(
                           'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                                                 bar_number_threshold = 25,

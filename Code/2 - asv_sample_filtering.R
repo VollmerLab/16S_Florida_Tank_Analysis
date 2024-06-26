@@ -156,6 +156,195 @@ phyloseq_filter_prevalence <- function(physeq, prev.trh = 0.05, abund.trh = NULL
   return(res)
 }
 
+#modified version of ggnested that creates the color palette for the ggnested plot based on genus abundance
+#so the most abundant overall genus has the darkest color and the least abundant has the lightest
+mod_ggnested <- function(data, 
+                         mapping = aes(), 
+                         ...,
+                         legend_labeling = c("sub", "join", "main"),
+                         join_str = " - ",
+                         legend_title = NULL,
+                         main_keys = TRUE,
+                         nested_aes = c("fill", "color"),
+                         gradient_type = c("both", "shades", "tints"),
+                         min_l = 0.05,
+                         max_l = 0.95,
+                         main_palette = NULL, 
+                         base_clr = "#008CF0"
+){
+  
+  # Check if mapping has required args
+  aes_args <- names(mapping)
+  if (!"main_group" %in% aes_args){
+    stop("Error: provide the main_group in the aesthetic mapping argument. For non-nested data, use the regular ggplot2 function.")
+  }
+  if (!"sub_group" %in% aes_args){
+    stop("Error: provide a subgroup in the aesthetic mapping argument. For non-nested data, use the regular ggplot2 function.")
+  }
+  
+  # Show warnings when fill or colour are specified in aes
+  if ("fill" %in% aes_args & "fill" %in% nested_aes){
+    warning("Warning: fill aesthetics will be ignored in the main ggnested function. Please specify non-nested fill in the geom_* layer. Alternatively,
+            remove 'fill' from mapping_aes.")
+    mapping$fill <- NULL
+  }
+  if (("colour" %in% aes_args | "color" %in% aes_args) & ("colour" %in% nested_aes | "color" %in% nested_aes)){
+    warning("Warning: colour aesthetics will be ignored in the main ggnested function. Please specify non-nested colour in the geom_* layer. Alternatively,
+            remove 'colour' from mapping_aes.")
+    mapping$colour <- NULL
+    mapping$color <- NULL
+  }
+  
+  # Define group and subgroup
+  group <- quo_name(mapping$main_group)
+  subgroup <- quo_name(mapping$sub_group)
+  
+  # Generate the nested palette
+  pal0 <- nested_palette(data, group, subgroup, gradient_type, min_l, max_l, 
+                         main_palette, base_clr, join_str)
+  
+  color_order_sub <- pal0$subgroup_colour
+  
+  pal_step1 <- data %>% select(all_of(subgroup), Abundance) %>%
+    group_by(across(all_of(subgroup))) %>%
+    reframe(tot_abun = sum(Abundance)) %>%
+    arrange(desc(tot_abun))
+  
+  pal_others <- pal_step1 %>% filter(str_detect(Genus, "Other"))
+  
+  reordered_pal <- pal_step1 %>%
+    filter(!str_detect(Genus, "Other")) %>%
+    rbind(., pal_others) %>%
+    pull(Genus)
+  
+  pal <- pal0 %>%
+    select(-subgroup_colour) %>%
+    group_by(Order) %>%
+    slice(match(reordered_pal, Genus)) %>%
+    cbind(subgroup_colour = color_order_sub) %>%
+    relocate(subgroup_colour, .after = group_colour)
+  
+  # Extract colours
+  colours <- pal %>%
+    rename(sublabel = !!subgroup,
+           label = !!group) %>%
+    as.data.frame()
+  
+  # Add main_group labels to the legend as extra keys that appear as titles
+  if (main_keys){
+    colours <- colours %>%
+      group_by(label) %>% 
+      group_modify(~add_row(.x, .before = 0)) %>%
+      ungroup() %>%
+      mutate(subgroup_colour = ifelse(is.na(subgroup_colour), "#FFFFFF", subgroup_colour),
+             sublabel = ifelse(is.na(sublabel), sprintf("**%s**", as.character(label)), as.character(sublabel)),
+             group_subgroup = ifelse(is.na(group_subgroup), sprintf("**%s**", as.character(label)), group_subgroup)) %>%
+      as.data.frame() 
+  }
+  
+  # Get the final colours
+  vals <- colours$subgroup_colour
+  names(vals) <- colours$group_subgroup
+  
+  # Reorder the data
+  df <- left_join(data, pal, by = c(group, subgroup)) %>%
+    arrange(group, subgroup) %>%
+    mutate(group_subgroup = factor(group_subgroup, ordered = T, levels = colours$group_subgroup),
+           !!subgroup := factor(!!sym(subgroup), ordered = T, levels = reordered_pal),
+           !!group := factor(!!sym(group), ordered = T)) %>%
+    ungroup() %>%
+    arrange(group_subgroup)
+  
+  # Add legend labels and title
+  if (legend_labeling[1] == "join"){
+    labels <- colours$group_subgroup
+    leg_title <- sprintf("%s%s%s", group, join_str, subgroup)
+  } else if (legend_labeling[1] == "main"){
+    labels <- colours$label
+    leg_title <- group
+  } else if (legend_labeling[1] == "sub"){
+    labels <- colours$sublabel
+    leg_title <- subgroup
+  } else {
+    stop("Invalid option for legend_labeling. Pick one of c('join', 'main', 'sub')")
+  }
+  
+  if (!is.null(legend_title)){
+    leg_title <- legend_title
+  }
+  
+  # Generate a scale
+  nested_scale <- scale_discrete_manual(..., 
+                                        aesthetics = nested_aes, 
+                                        name = leg_title, 
+                                        values = vals, 
+                                        labels = labels, 
+                                        drop = F)
+  
+  # Update mapping
+  if ("fill" %in% nested_aes){
+    mapping$fill <- quo(group_subgroup)
+  }
+  if ("colour" %in% nested_aes | "color" %in% nested_aes){
+    mapping$colour <- quo(group_subgroup)
+  }
+  
+  # Generate the plot
+  p <- ggplot(df, mapping, ...) +
+    nested_scale
+  if (main_keys){
+    p <- p +
+      theme_nested(theme)
+  }
+  return(p)
+}
+
+get_mod_ggnested_palette <- function(data, 
+                         mapping = aes(), 
+                         ...,
+                         legend_labeling = c("sub", "join", "main"),
+                         join_str = " - ",
+                         legend_title = NULL,
+                         main_keys = TRUE,
+                         nested_aes = c("fill", "color"),
+                         gradient_type = c("both", "shades", "tints"),
+                         min_l = 0.05,
+                         max_l = 0.95,
+                         main_palette = NULL, 
+                         base_clr = "#008CF0"
+){
+  # Define group and subgroup
+  group <- quo_name(mapping$main_group)
+  subgroup <- quo_name(mapping$sub_group)
+  
+  # Generate the nested palette
+  pal0 <- nested_palette(data, group, subgroup, gradient_type, min_l, max_l, 
+                         main_palette, base_clr, join_str)
+  
+  color_order_sub <- pal0$subgroup_colour
+  
+  pal_step1 <- data %>% select(all_of(subgroup), Abundance) %>%
+    group_by(across(all_of(subgroup))) %>%
+    reframe(tot_abun = sum(Abundance)) %>%
+    arrange(desc(tot_abun))
+  
+  pal_others <- pal_step1 %>% filter(str_detect(Genus, "Other"))
+  
+  reordered_pal <- pal_step1 %>%
+    filter(!str_detect(Genus, "Other")) %>%
+    rbind(., pal_others) %>%
+    pull(Genus)
+  
+  pal <- pal0 %>%
+    select(-subgroup_colour) %>%
+    group_by(Order) %>%
+    slice(match(reordered_pal, Genus)) %>%
+    cbind(subgroup_colour = color_order_sub) %>%
+    relocate(subgroup_colour, .after = group_colour)
+  
+  return(pal)
+}
+
 #### Data ####
 aggregation_level <- 'none' #or none
 
@@ -660,6 +849,16 @@ plot_nested_bar(ps_obj = top_nested$ps_obj,
                 top_level = "Order",
                 nested_level = "Genus")
 
+#ordering
+look <- melted_ps %>%
+  group_by(Order) %>%
+  reframe(tot = sum(Abundance)) %>%
+  arrange(desc(tot)) %>%
+  filter(!is.na(Order))
+
+melted_ps %>% filter(Genus == "Cysteiniphilum") %>% select(Order, Family, Genus, Species)
+
+top_asv$top_taxa %>% as_tibble() %>% select(Order) %>% distinct()
 #custom
 
 top_level <- "Order"
@@ -669,25 +868,8 @@ sample_order <- NULL
 top_asv <- nested_top_taxa(updated_microbiome_data,
                               top_tax_level = "Order",
                               nested_tax_level = "Genus",
-                              n_top_taxa = 10, 
+                              n_top_taxa = 11, 
                               n_nested_taxa = 4)
-
-# Generate a palette based  on the phyloseq object
-pal <- taxon_colours(top_asv$ps_obj,
-                     tax_level = top_level)
-
-custom_palette <- taxon_colours(top_asv$ps_obj, 
-                      tax_level = "Order", 
-                      palette = c(Rickettsiales = "#24820D", 
-                                  Spirochaetales = "#5A41BF",
-                                  Alteromonadales = "#7A5634",
-                                  Verrucomicrobiales = "#98B824",
-                                  Flavobacteriales = "#F36D19",
-                                  Rhodobacterales = "#F873BE",
-                                  Puniceicoccales = "#FDF1AE",
-                                  Saprospirales = "#8C146E",
-                                  Oceanospirillales = "#0BC8E1",
-                                  Vibrionales = "#DF2727"))
 
 # Create names for NA taxa
 ps_tmp <- top_asv$ps_obj %>%
@@ -745,26 +927,31 @@ if(!is.null(sample_order)){
 
 custom_palette <- taxon_colours(top_asv$ps_obj, 
                                 tax_level = "Order", 
-                                palette = c(Rickettsiales = "#114C02", 
-                                            Spirochaetales = "#5A41BF",
-                                            Alteromonadales = "#4E3117",
-                                            Verrucomicrobiales = "#98B824",
-                                            Flavobacteriales = "#F7B10F",
-                                            Rhodobacterales = "#F873BE",
-                                            Puniceicoccales = "#FDF1AE",
-                                            Saprospirales = "#8C146E",
-                                            Oceanospirillales = "#0BC8E1",
-                                            Vibrionales = "#DF2727"))
+                                palette = c(Rickettsiales = "#051900", 
+                                            Spirochaetales = "#500078",
+                                            Alteromonadales = "#2e1b09",
+                                            Verrucomicrobiales = "#7B9B08",
+                                            Flavobacteriales = "#F873BE",
+                                            Rhodobacterales = "#CA6200",
+                                            Puniceicoccales = "#71056B", ##111787
+                                            Saprospirales = "#111787", #F7B10F
+                                            Oceanospirillales = "#078090",
+                                            Vibrionales = "#7C2C00",
+                                            Thiotrichales = "#590404",
+                                            Other = "gray75"))
 
 # Generate the plot
-ggnested(psdf,
+
+
+mod_ggnested(psdf,
               aes_string(main_group = top_level,
                          sub_group = nested_level,
                          x = "Sample",
                          y = "Abundance"),
-              main_palette = custom_palette) +
+              main_palette = custom_palette,
+         gradient_type = "tints") +
   scale_y_continuous(expand = c(0, 0)) +
-  theme(axis.text.x = element_text(hjust = 1, vjust = 0.5, angle = 90)) +
+  #theme(axis.text.x = element_text(hjust = 1, vjust = 0.5, angle = 90)) +
   theme_nested(theme_bw) + 
   geom_col(position = position_fill()) + 
   facet_grid(col = vars(facet_level), space = "free", scales = "free") + 
@@ -775,6 +962,15 @@ ggnested(psdf,
   guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))),
          col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")))) +
   ylab("Relative Abundance")
+
+fantaxtic_palette <- get_mod_ggnested_palette(psdf,
+             aes_string(main_group = top_level,
+                        sub_group = nested_level,
+                        x = "Sample",
+                        y = "Abundance"),
+             main_palette = custom_palette,
+             gradient_type = "tints")
+
 
 
 #### Make Venn showing ASVs to keep ####
