@@ -416,6 +416,13 @@ simple_posthoc_sig_asvs <- significant_models %>%
   filter(significance) %>%
   select(-c(significance, direction))
 
+#how many initial posthoc results
+simple_posthoc_sig_asvs %>%
+  group_by(signatures) %>%
+  reframe(n = n())
+
+
+
 bacterial_signature_asv <- significant_models %>%
   select(asv_id, starts_with('fdr')) %>% 
   select(-contains(c('treatment', 'tank', 'genotype'))) %>%
@@ -472,7 +479,7 @@ classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>
                           values_from = significance,
                           values_fill = FALSE),
             by = 'asv_id') %>%
-  mutate(across(Field:Aquaria, ~ifelse(is.na(.), FALSE, .))) %>%
+  mutate(across(DD_early:DD_vs_DH_late, ~ifelse(is.na(.), FALSE, .))) %>%
   mutate(DD_continuous = ifelse(DD_early & DD_late, TRUE, FALSE)) %>%
   mutate(DD_early = ifelse(DD_continuous, FALSE, DD_early), DD_late = ifelse(DD_continuous, FALSE, DD_late))
 
@@ -517,7 +524,10 @@ sig_classified_asvs %>%
   ungroup() %>%
   group_by(Family, Genus, all_sigs) %>%
   reframe(n = n()) %>%
-  arrange(all_sigs)
+  arrange(all_sigs) %>% 
+  mutate(taxa = str_c(n, Genus, sep = " ")) %>% 
+  select(all_sigs, taxa)
+
 
 #how much tank effect
 classified_asv_taxonomy %>%
@@ -907,6 +917,7 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 ## Make Fancy Plots
 
 the_plots <- bacterial_signature_asv %>%
+  #filter(asv_id == "ASV_65") %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
   mutate(grouped_signatures = case_when(str_detect(signatures, "Aquaria") ~ "Tank Effect",
@@ -917,10 +928,13 @@ the_plots <- bacterial_signature_asv %>%
                                         str_detect(signatures, "DiseaseOutcome") ~ "Unlikely Pathogens",
                                         str_detect(signatures, "HealthyOutcome") ~ "Healthy Associated",
                                         TRUE ~ signatures)) %>%
+  #don't bother plotting tank effect, etc...
+  filter(grouped_signatures %in% c("Putative Early Pathogens", "Putative Late Pathogens", "Specialized Opportunists", "Healthy Associated")) %>%
   group_by(asv_id, grouped_signatures) %>%
   distinct() %>%
   inner_join(significant_models,
              by = 'asv_id') %>%
+  mutate(across(Family:Species, ~ifelse(str_detect(., "NA"), NA, .))) %>%
   mutate(taxonomy_for_graph = case_when(is.na(Order) ~ Class,
                                         is.na(Family) ~ Order,
                                         is.na(Genus) ~ Family,
@@ -1005,9 +1019,13 @@ the_plots <- bacterial_signature_asv %>%
       scale_alpha_manual(values = c("sig" = 1, "nonsig" = 0), guide = "none") +
       scale_linetype_manual(values = c("D_H" = 1, "D_D" = 1, "H_H" = 6), guide = "none") +
       theme_bw() +
+      theme(legend.position="none") + #remove legend for combining plots
       #theme(plot.title = element_text(face = "italic")) +
-      xlab("Time") +
-      ylab(expression("Normalized log"[2]*" (cpm)")) +
+      #remove x and y labels for combo plots
+      xlab(NULL) +
+      ylab(NULL) +
+      #xlab("Time") +
+      #ylab(expression("Normalized log"[2]*" (cpm)")) +
       labs(title = prep) +
       #labs(title = case_when(is.na(Family) ~ bquote('hmm'~italic(.(taxonomy_for_graph))), 
       #                       TRUE ~ bquote(italic(.(taxonomy_for_graph))))) +
@@ -1027,11 +1045,66 @@ the_plots <- bacterial_signature_asv %>%
       ))
   )) %>%
   group_by(grouped_signatures) %>%
-  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto'))) # & plot_annotation(title = grouped_signatures)))
+  reframe(combo_plots = list(wrap_plots(plot, ncol = 2)), path_plot = list(plot[asv_id == "ASV_65"]))
 
 
+#old way  
+  #summarise(combo_plots = list(wrap_plots(plot))) %>%
+  #pull(combo_plots) + plot_layout(guides = "none") & plot_annotation(title = grouped_signatures)))
+
+  
 #view the plots
-the_plots$combo_plots[[3]]
+the_plots$combo_plots[[1]]
+
+#combine plots
+
+x_axis <- cowplot::get_plot_component(ggplot() + labs(x = "Time"), "xlab-b")
+y_axis <- cowplot::get_plot_component(ggplot() + labs(y = expression("Normalized log"[2]*" (cpm)")), "ylab-l")
+
+design = "
+EAAL
+#HHL
+FBBL
+#IIL
+GCCL
+#DDL
+"
+
+list(
+  the_plots$path_plot[[2]][[1]], # A
+  the_plots$combo_plots[[1]], # B
+  the_plots$combo_plots[[3]], # C
+  x_axis, # D
+  y_axis, # E
+  y_axis, # F
+  y_axis, # G
+  x_axis, # H
+  x_axis, # I
+  fancy_legend #L
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(1, 0.125, 1, 0.125, 10, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
+
+design = "
+EAAL
+EBBL
+ECCL
+#DD#
+"
+
+list(
+  the_plots$path_plot[[2]][[1]], # A
+  the_plots$combo_plots[[1]], # B
+  the_plots$combo_plots[[3]], # C
+  x_axis, # D
+  y_axis, # E
+  fancy_legend #L
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(1, 1, 8, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
+#export to 1300x1700
 
 
 #### Complex Upset with Doses ####
@@ -1532,7 +1605,12 @@ ylim(-0.3, 0.3) +
 #### Time 0 Microbiome ####
 
 normalized_asv_counts %>%
-  filter(time == "T0")
+  filter(time == "T0") %>%
+  group_by(exposure) %>%
+  reframe(min_dr_score = min(resistance), max_dr_score = max(resistance),
+          )
+
+normalized_asv_counts %>% filter(resistance < 0.1) %>% pull(genotype) %>% unique() #M1
 
 #### Emily Miscellaneous ####
 

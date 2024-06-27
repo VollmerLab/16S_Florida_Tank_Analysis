@@ -353,7 +353,6 @@ metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
   select(-retain_sample)
 
-#### Aggregate Samples ####
 if(aggregation_level != 'none'){
   microbiome_data <- aggregate_taxa(microbiome_data, aggregation_level)
   taxa_names(microbiome_data) <- str_replace_all(taxa_names(microbiome_data), ' |-', '_')
@@ -363,8 +362,7 @@ if(aggregation_level != 'none'){
   names(sequences) <- taxa_names(microbiome_data)
 }
 
-#look at sequences
-
+#### Look at Sequences ####
 colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
 
 colwell_seqs <- sequences[colwells_of_interest]
@@ -376,7 +374,6 @@ combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
 
 #write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
 
-
 cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
 cysteiniphilum_seqs <- sequences[cysteiniphilums]
 
@@ -384,7 +381,7 @@ sequences["ASV_65"]
 
 #write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
 
-
+#### Update Taxonomy where Possible ####
 #old taxonomy info
 taxonomy_tibble <- tax_table(microbiome_data) %>% 
   as.data.frame %>%
@@ -404,15 +401,21 @@ updated_taxonomy_above80 <- updated_taxonomy %>%
          Species = ifelse(Species_confidence > 80, Species, NA)
   )
 
+unclassified_below_class <-  updated_taxonomy_above80 %>%
+  filter(!if_all(Domain:Species, ~is.na(.))) %>%
+  filter((is.na(Order) & is.na(Family) & is.na(Genus) & is.na(Species))) %>%
+  pull(asv_id)
+
 #get old taxonomy info for ASVs that are all NA in updated taxonomy
 all_na_in_new_tax <- updated_taxonomy_above80 %>% 
-  filter(if_all(Domain:Species, ~is.na(.))) %>% 
+  filter(if_all(Domain:Species, ~is.na(.)) | asv_id %in% unclassified_below_class) %>% 
+  mutate(across(contains("confidence"), ~NA)) %>% 
   select(-c(Domain:Species)) %>%
   left_join(taxonomy_tibble, by = join_by("asv_id" == "asv_names"))
 
 #combine the old taxonomy with the updated version
 combined_taxonomy <- updated_taxonomy_above80 %>% 
-  filter(!if_all(Domain:Species, ~is.na(.))) %>%
+  filter(!(if_all(Domain:Species, ~is.na(.)) | asv_id %in% unclassified_below_class)) %>%
   full_join(all_na_in_new_tax)
 
 #get list of genera that have multiple described taxonomies
@@ -432,7 +435,7 @@ multiple_classifications_list <- combined_taxonomy %>%
 #   select(-c(db, Domain)) %>%
 #   dplyr::rename("Genus" = "query")
 # write_csv(ncbi_classifications_by_genus, "../intermediate_files/ncbi_classifications_for_overlaps.csv")
-ncbi_classifications_by_genus <- read_csv("../intermediate_files/ncbi_classifications_for_overlaps.csv")
+ncbi_classifications_by_genus <- read_csv("../intermediate_files/new_ncbi_classifications_for_overlaps.csv")
 
 #most updated taxonomy, just phylum:genus
 #each genus has only one described classification, is combined with old and new taxonomies
@@ -442,7 +445,8 @@ nonoverlapping_taxonomy <- combined_taxonomy %>%
   distinct() %>% 
   filter(!is.na(Genus)) %>%
   filter(!Genus %in% multiple_classifications_list) %>%
-  rbind(ncbi_classifications_by_genus)
+  rbind(ncbi_classifications_by_genus) %>%
+  distinct()
 
 #our ASVs with the most up to date taxonomy, use for downstream purposes
 full_taxonomy <- combined_taxonomy %>%
@@ -451,11 +455,8 @@ full_taxonomy <- combined_taxonomy %>%
   relocate(Phylum:Family, .after = Domain) %>%
   filter(!asv_id %in% c(combined_taxonomy %>% filter(is.na(Genus)) %>% pull(asv_id))) %>%
   rbind(combined_taxonomy %>% filter(is.na(Genus))) %>%
-  arrange(parse_number(asv_id)) %>%
-  filter(!(asv_id %in% c("ASV_121", "ASV_1535", "ASV_1909", "ASV_4075", "ASV_5598") & 
-             Class %in% c("Gammaproteobacteria", "Alphaproteobacteria") & Phylum != "Pseudomonadota")) %>% #remove duplicates of these w diff phyla
-  filter(!(asv_id == "ASV_121" & is.na(Class))) %>%
-  distinct()
+  arrange(parse_number(asv_id))
+
 
 #make version of microbiome data ps to update the taxonomy in
 updated_microbiome_data <- microbiome_data
@@ -666,7 +667,8 @@ alpha_significant_models %>%
 
 alpha_graphs_manuscript <- alpha_significant_models %>%
   mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
-  mutate(for_manuscript = ifelse(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1"), TRUE, FALSE)) %>%
+  filter(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1")) %>%
+  #mutate(for_manuscript = ifelse(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1"), TRUE, FALSE)) %>%
   rowwise() %>%
   mutate(plot_info = list(emmeans(model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
@@ -733,9 +735,30 @@ alpha_graphs_manuscript <- alpha_significant_models %>%
       xlab("Time") +
       ylab(metric) +
       labs(title = metric)
-  )) %>%
-  group_by(for_manuscript) %>%
-  summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto')))
+  )) #%>%
+  #group_by(for_manuscript) %>%
+  #summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto')))
+
+fancy_legend <- cowplot::get_legend(alpha_graphs_manuscript$plot[[2]])
+
+combined_alpha_plots <- ((alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") + 
+       ylab(str_wrap("Shannon-Weiner diversity index", 15)) + labs(title = NULL) +
+       xlab(NULL)) / #"Diversity"
+    (alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") + 
+       ylab(str_wrap("Chao1 Richness Index", 15)) + labs(title = NULL) +
+       xlab(NULL)) / #"Richness"
+    (alpha_graphs_manuscript$plot[[4]] + theme(legend.position="none") + 
+       ylab(str_wrap("Camargo's evenness index", 15)) + labs(title = NULL) +
+       xlab(NULL)) / #"Evenness"
+    (alpha_graphs_manuscript$plot[[3]] + theme(legend.position="none") + 
+       ylab(str_wrap("Core abundance dominance index", 15)) + labs(title = NULL)) 
+    ) + #"Dominance"
+  plot_annotation(tag_levels = "A")
+    
+  
+
+(combined_alpha_plots | fancy_legend) + 
+  plot_layout(widths = c(4, 1)) + plot_annotation(tag_levels = list(c("A", "B", "C", "D")))
 
 alpha_graphs_manuscript$combo_plots[[2]]
 
@@ -1045,8 +1068,8 @@ otu_tmm <- updated_microbiome_data %>%
   edgeR::calcNormFactors(method = 'TMMwsp') %>%
   filter_venn(not_t3t7_only) %>% #remove things that are only in T3 and T7
   #filter_venn(otus_to_analyze) %>% #only things in D and T3 and T7, aka potential pathogens
-  filter_samples(model_samples) %>% #remove samples not to be analyzed
-  filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
+  filter_samples(model_samples) #%>% #remove samples not to be analyzed
+  #filter_asv_meanCount(metadata, 100) #Remove ASVs with an average of less than N CPM per sample
 
 
 venn_group <- otu_tmm %>%
@@ -1146,6 +1169,18 @@ homogenate_data <- updated_microbiome_data %>%
   filter(asv_id %in% unique(full_data$asv_id)) %>%
   mutate(exposure = str_extract(sample_id, '[DH]'))
 write_csv(homogenate_data, '../intermediate_files/homogenate_cpm.csv')
+
+#### What's in the Homogenate Dose ####
+homogenate_data %>% 
+  left_join(tax_table(updated_microbiome_data) %>% 
+              as.data.frame() %>%
+              as_tibble(rownames = "asv_id"), by = join_by(asv_id)) %>%
+  filter(log2_cpm > 5.274105) %>% #normalized zero
+  select(-c(sample_id, log2_cpm, exposure)) %>%
+  distinct() %>%
+  group_by(Genus) %>% #change taxa level here
+  reframe(n = n()) %>%
+  nrow()
 
 #### Plot ASV number vs mean cpm ####
 otu_tmm %>%
