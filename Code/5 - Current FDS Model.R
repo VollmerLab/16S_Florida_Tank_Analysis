@@ -916,7 +916,7 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 
 ## Make Fancy Plots
 
-the_plots <- bacterial_signature_asv %>%
+the_plots1 <- bacterial_signature_asv %>%
   #filter(asv_id == "ASV_65") %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
@@ -1106,6 +1106,46 @@ list(
   plot_annotation(tag_levels = list(c("A", "B", "", "C")))
 #export to 1300x1700
 
+spacer <- ggplot() + theme_void()
+
+list(
+  the_plots$path_plot[[2]][[1]], # A
+  the_plots$combo_plots[[1]], # B
+  the_plots$combo_plots[[3]], # C
+  x_axis, # D
+  y_axis, # E
+  y_axis, # F
+  y_axis, # G
+  x_axis, # H
+  x_axis, # I
+  fancy_legend #L
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(1, 0.125, 1, 0.125, 10, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
+
+design = "
+EAAL
+EPPL
+EBBL
+ESSL
+ECCL
+#DD#
+"
+
+list(
+  the_plots$path_plot[[2]][[1]], # A
+  the_plots$combo_plots[[1]], # B
+  the_plots$combo_plots[[3]], # C
+  x_axis, # D
+  y_axis, # E
+  fancy_legend, #L
+  spacer, #P
+  spacer #S
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(1, 0.0325, 1, 0.0325, 8, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
 
 #### Complex Upset with Doses ####
 
@@ -1197,7 +1237,7 @@ ordiplot(asv_nmds,type="n")
 orditorp(asv_nmds,display="species",col="red",air=0.01)
 orditorp(asv_nmds,display="sites",cex=1.25,air=0.01)
 
-nmds_scores = as.data.frame(scores(asv_nmds)$sites)
+nmds_scores <-  as.data.frame(scores(asv_nmds)$sites)
 
 nmds_metadata <- normalized_asv_counts %>% 
   select(asv_id, time, exposure, final_disease_state, susceptability, genotype, 
@@ -1235,8 +1275,52 @@ ggplot(nmds_scores) +
                                 "T7_H_H" = 17),
                       size = 3)))
 
+#Nice legend separated out by day
 
-  scale_shape_manual(values = c("T0_F_F" = 1))
+ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
+  #Day 0
+  (geom_point(data = (nmds_scores %>% filter(time == "T0")), aes(colour0 = treatment, pch = time)) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour0"))) +
+  (stat_ellipse(data = (nmds_scores %>% filter(time == "T0")), aes(colour0 = treatment), show.legend=FALSE) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour0"))) +
+  scale_color_manual(aesthetics = "colour0", values = c("T0_F_F" = "#c389e0"), guide = "legend", 
+                     name = "Day 0", breaks = c("T0_F_F"), labels = c("Field-Collected")) +
+  #Day 3
+  (geom_point(data = (nmds_scores %>% filter(time == "T3")), aes(colour3 = treatment, pch = time)) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour3"))) +
+  (stat_ellipse(data = (nmds_scores %>% filter(time == "T3")), aes(colour3 = treatment), show.legend=FALSE) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour3"))) +
+  scale_color_manual(aesthetics = "colour3", values = c("T3_D_D" = "#E79B9B", "T3_D_H" = "#97D9E1",
+                                                        "T3_H_H" = "#95AC85"), guide = "legend", 
+                     name = "Day 3", breaks = c("T3_H_H", "T3_D_H", "T3_D_D"), 
+                     labels = c("Healthy Control", "Exposed, Healthy", "Infected")) +
+  #Day 7
+  (geom_point(data = (nmds_scores %>% filter(time == "T7")), aes(colour7 = treatment, pch = time)) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour7"))) +
+  (stat_ellipse(data = (nmds_scores %>% filter(time == "T7")), aes(colour7 = treatment), show.legend=FALSE) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour7"))) +
+  scale_color_manual(aesthetics = "colour7", values = c("T7_D_D" = "#A70000", "T7_D_H" = "#22A7B6",
+                                                        "T7_H_H" = "#406F23"), guide = "legend", 
+                     name = "Day 7", breaks = c("T7_H_H", "T7_D_H", "T7_D_D"), 
+                     labels = c("Healthy Control", "Exposed, Healthy", "Infected")) +
+  scale_shape_manual(values = c("T0" = 16, "T3" = 15, "T7" = 17), guide = "none") +
+  guides(color0 = guide_legend(
+    override.aes=list(shape = c("T0_F_F" = 16),
+                      size = 3), order = 1),
+    color3 = guide_legend(
+      override.aes=list(shape = c("T3_D_D" = 15,
+                                  "T3_D_H" = 15,
+                                  "T3_H_H" = 15),
+                        size = 3), order = 3),
+    color7 = guide_legend(
+      override.aes=list(shape = c(
+        "T7_D_D" = 17,
+        "T7_D_H" = 17,
+        "T7_H_H" = 17),
+        size = 3), order = 7)) +
+  theme_bw()
+
+
   
 adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, method = "bray", perm = 1000, data = nmds_metadata)  
 

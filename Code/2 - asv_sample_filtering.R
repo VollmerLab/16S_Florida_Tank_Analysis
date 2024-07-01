@@ -455,7 +455,10 @@ full_taxonomy <- combined_taxonomy %>%
   relocate(Phylum:Family, .after = Domain) %>%
   filter(!asv_id %in% c(combined_taxonomy %>% filter(is.na(Genus)) %>% pull(asv_id))) %>%
   rbind(combined_taxonomy %>% filter(is.na(Genus))) %>%
-  arrange(parse_number(asv_id))
+  arrange(parse_number(asv_id)) %>%
+  mutate(Order = ifelse(Family == "Puniceicoccaceae", "Puniceicoccales", Order)) %>%
+  mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
+         Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
 
 
 #make version of microbiome data ps to update the taxonomy in
@@ -872,6 +875,8 @@ plot_nested_bar(ps_obj = top_nested$ps_obj,
                 top_level = "Order",
                 nested_level = "Genus")
 
+
+
 #ordering
 look <- melted_ps %>%
   group_by(Order) %>%
@@ -881,12 +886,15 @@ look <- melted_ps %>%
 
 melted_ps %>% filter(Genus == "Cysteiniphilum") %>% select(Order, Family, Genus, Species)
 
+
 top_asv$top_taxa %>% as_tibble() %>% select(Order) %>% distinct()
 #custom
 
 top_level <- "Order"
 nested_level <- "Genus"
 sample_order <- NULL
+
+melted_ps %>% filter(Order == "Verrucomicrobiales") %>% select(Domain:Species) %>% distinct()
 
 top_asv <- nested_top_taxa(updated_microbiome_data,
                               top_tax_level = "Order",
@@ -956,7 +964,7 @@ custom_palette <- taxon_colours(top_asv$ps_obj,
                                             Verrucomicrobiales = "#7B9B08",
                                             Flavobacteriales = "#F873BE",
                                             Rhodobacterales = "#CA6200",
-                                            Puniceicoccales = "#71056B", ##111787
+                                            Puniceicoccales = "#380135", ##111787
                                             Saprospirales = "#111787", #F7B10F
                                             Oceanospirillales = "#078090",
                                             Vibrionales = "#7C2C00",
@@ -982,8 +990,8 @@ mod_ggnested(psdf,
                                                         "Healthy", "T3 Diseased" = str_wrap("Disease- Exposed", 10), "T3_H_H" = str_wrap("Healthy- Exposed", 10),
                                                       "T7_H_H" = str_wrap("Healthy Control", 10),
                                                       "T7_D_H" = str_wrap("Disease- Exposed Healthy", 10), "T7_D_D" = "Diseased")) +
-  guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))),
-         col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")))) +
+  guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")), ncol = 2),
+         col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))), ncol = 2) +
   ylab("Relative Abundance")
 
 fantaxtic_palette <- get_mod_ggnested_palette(psdf,
@@ -1178,7 +1186,7 @@ homogenate_data %>%
   filter(log2_cpm > 5.274105) %>% #normalized zero
   select(-c(sample_id, log2_cpm, exposure)) %>%
   distinct() %>%
-  group_by(Genus) %>% #change taxa level here
+  group_by(Class) %>% #change taxa level here
   reframe(n = n()) %>%
   nrow()
 

@@ -33,8 +33,11 @@ test_list <- c('**Other**' = 'white',
                'Alcanivorax' = '#5ED1E0',
                'Marinicella' = '#88E2ED',
                'Other Oceanospirillales' = '#B2F3FB',
-               'Coraliomargarita' = '#E60ADA',
-               'Ruficoccus' = '#F971F1',
+               'Coraliomargarita' = '#7E0277',
+               'Verruc-01' = "#9D2997",
+               'Lentimonas' = "#BD51B7",
+               'Cerasicoccus' = "#DD78D7",
+               'Other Puniceicoccales' = '#FDA0F8',
                'Ruegeria' = '#F97900',
                'Thalassovita' = '#FA912D',
                'Shimia' = '#FCA95B',
@@ -131,7 +134,7 @@ m_sig_classified_asvs <- sig_classified_asvs %>%
   rename("Healthy Outcome" = HealthyOutcome, "Diseased Outcome" = DiseaseOutcome, "Tank Effect" = TankEffect)
 
 
-plot_colors <- m_sig_classified_asvs %>% select(plot_genus, subgroup_colour, outline) %>% distinct()
+
 
 
 upset(m_sig_classified_asvs %>% select(-c(contains("DD"))),
@@ -142,8 +145,8 @@ upset(m_sig_classified_asvs %>% select(-c(contains("DD"))),
                                               bar_number_threshold = 25,
                                               mapping=aes(fill=plot_genus, col = outline) #, col = "gray10"
          ) +
-          scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) + #plot_colors$subgroup_colour, labels = plot_colors$plot_genus
-          scale_color_manual(values = c("yes" = "gray10", "no" = "white")) +
+          scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) +
+          scale_color_manual(values = c("yes" = "red", "no" = "white")) +
           theme_nested(legend.position=c(1.06,0.2)) +
           guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")),
                                    ncol = 1))
@@ -193,7 +196,7 @@ upset(m_sig_classified_asvs %>% select(-c(contains("DD"))),
                                               bar_number_threshold = 25,
                                               mapping=aes(fill=plot_genus) #, col = "gray10"
         ) +
-          scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) + #plot_colors$subgroup_colour, labels = plot_colors$plot_genus
+          scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) + 
           #scale_color_manual(values = c("yes" = "gray10", "no" = "white")) +
           theme_nested(legend.position=c(1.06,0.2)) +
           guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")),
@@ -233,4 +236,14 @@ upset(m_sig_classified_asvs %>% select(-c(contains("DD"))),
       )) +
   ggtitle("Significant Main Effects") +
   theme(plot.margin = margin(1, 5.5, 1, 1, "cm"))
+
+
+
+
+  
+  
+  
+
+
+
 
