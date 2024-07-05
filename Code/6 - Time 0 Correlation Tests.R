@@ -1,6 +1,11 @@
-agg_microbiome_data <- read_rds("../intermediate_files/updated_microbiome_data.rds")
+multiple_aggregation_levels <- c("none", "Genus", "Family", "Order")
 
-aggregation_level <- "Order"
+all_corr_results <- c()
+
+agg_microbiome_data <- read_rds("../intermediate_files/updated_microbiome_data.rds")
+for(var in multiple_aggregation_levels) {
+
+aggregation_level <- var
 
 if(aggregation_level != 'none'){
   agg_microbiome_data <- aggregate_taxa(agg_microbiome_data, aggregation_level)
@@ -10,6 +15,19 @@ if(aggregation_level != 'none'){
   taxa_names(agg_microbiome_data) <- str_c('ASV', 1:length(taxa_names(agg_microbiome_data)), sep = '_')
   names(sequences) <- taxa_names(agg_microbiome_data)
 }
+# library(strex)
+# 
+# fixed_taxonomy <- tax_table(agg_microbiome_data) %>% #some discrepancies in taxonomy above Family level leading to duplication
+#   as.data.frame() %>%
+#   as_tibble(rownames = "taxa_id") %>%
+#   mutate(taxa_id = ifelse(str_detect(taxa_id, "_"), str_after_last(taxa_id, "_"), taxa_id),
+#          unique = taxa_id) %>%
+#   as.data.frame() %>%
+#   as.matrix()
+# 
+# taxa_names(agg_microbiome_data) <- fixed_taxonomy[,1]
+# 
+# tax_table(agg_microbiome_data) <- fixed_taxonomy
 
 agg_metadata <- sample_data(agg_microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -90,8 +108,7 @@ if(aggregation_level == "none"){
     edgeR::calcNormFactors(method = 'TMMwsp') %>%
     filter_venn(agg_not_t3t7_only) %>% #remove things that are only in T3 and T7
     #filter_venn(otus_to_analyze) %>% #only things in D and T3 and T7, aka potential pathogens
-    filter_samples(agg_model_samples) %>% #remove samples not to be analyzed
-    filter_asv_meanCount(agg_metadata, 100) #Remove ASVs with an average of less than N CPM per sample
+    filter_samples(agg_model_samples) #remove samples not to be analyzed
   
 } else {
   agg_otu_tmm <- agg_microbiome_data %>%
@@ -109,8 +126,7 @@ if(aggregation_level == "none"){
     edgeR::calcNormFactors(method = 'TMMwsp') %>%
     filter_venn(agg_not_t3t7_only) %>% #remove things that are only in T3 and T7
     #filter_venn(otus_to_analyze) %>% #only things in D and T3 and T7, aka potential pathogens
-    filter_samples(agg_model_samples) %>% #remove samples not to be analyzed
-    filter_asv_meanCount(agg_metadata, 100) #Remove ASVs with an average of less than N CPM per sample
+    filter_samples(agg_model_samples) #remove samples not to be analyzed
   
 }
 
@@ -119,19 +135,7 @@ agg_venn_group <- agg_otu_tmm %>%
       normalized.lib.sizes = TRUE) %>%
   as_tibble(rownames = 'taxa_id') %>% pull(taxa_id)
 
-#### Variance weighting ####
-param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
-agg_dream_weights_fullInteraction <- voomWithDreamWeights(counts = agg_otu_tmm, 
-                                                      formula = ~ model_comp + (1 | genotype) + (1 | tank),
-                                                      
-                                                      data = filter(agg_metadata, !str_detect(tank, 'homo|HOMO')) %>%
-                                                        filter(genotype %in% agg_longitudinal_genos) %>% #genos present in T3 and T7
-                                                        filter(!(exposure == "H" & final_disease_state == "D")) %>%
-                                                        arrange(sample_id) %>%
-                                                        mutate(model_comp = str_c(time, exposure, susceptability)) %>%
-                                                        column_to_rownames('sample_id'),
-                                                      BPPARAM = param, 
-                                                      plot = TRUE)
+
 
 #### ASV Modelling ####
 agg_full_data <- agg_otu_tmm %>%
@@ -141,14 +145,6 @@ agg_full_data <- agg_otu_tmm %>%
   pivot_longer(cols = -taxa_id,
                names_to = 'sample_id',
                values_to = 'log2_cpm') %>%
-  left_join(agg_dream_weights_fullInteraction$weights %>% 
-              set_colnames(colnames(agg_dream_weights_fullInteraction$E)) %>%
-              set_rownames(rownames(agg_dream_weights_fullInteraction$E)) %>%
-              as_tibble(rownames = 'taxa_id') %>%
-              pivot_longer(cols = -taxa_id,
-                           names_to = 'sample_id',
-                           values_to = 'weight'),
-            by = c('taxa_id', 'sample_id')) %>%
   left_join(as_tibble(agg_otu_tmm$counts, rownames = 'taxa_id') %>%
               pivot_longer(cols = -taxa_id,
                            names_to = 'sample_id',
@@ -182,16 +178,47 @@ t0_corr_test <- agg_normalized_asv_counts %>%
   reframe(corr_val = broom::tidy(cor.test(log2_cpm, resistance))) %>%
   unnest(corr_val) %>%
   mutate(fdr_p.value = p.adjust(p.value, method = "fdr")) %>%
-  arrange(fdr_p.value)
+  arrange(fdr_p.value) %>%
+  mutate(agg_level = aggregation_level)
 
-#previous probiotic associations
-if(aggregation_level == "Genus"){
-  t0_corr_test %>% filter(taxa_id == "MD3_55") #fdr p-val of 0.983
-  t0_corr_test %>% filter(taxa_id == "Endozoicomonas") #fdr p-val of 0.792
-} else if(aggregation_level == "Order"){
-  t0_corr_test %>% filter(taxa_id == "Myxococcales") #fdr p-val of 0.997
+all_corr_results <- rbind(all_corr_results, t0_corr_test)
 }
 
+#previous probiotic associations
+all_corr_results %>% filter(taxa_id %in% c("MD3_55", "Endozoicomonas", "Myxococcales"))
 
+
+asv_corr <- all_corr_results %>% 
+  filter(agg_level == "none") %>% 
+  left_join(normalized_asv_counts %>% select(asv_id, Order:Genus) %>% distinct(), 
+            by = join_by("taxa_id" == "asv_id"))
+
+genus_corr <- all_corr_results %>% 
+  filter(agg_level == "Genus") %>% 
+  left_join(normalized_asv_counts %>% select(Order:Genus) %>% distinct(), 
+            by = join_by("taxa_id" == "Genus")) %>%
+  mutate(Genus = taxa_id)
+
+family_corr <- all_corr_results %>% 
+  filter(agg_level == "Family") %>% 
+  left_join(normalized_asv_counts %>% select(Order:Genus) %>% distinct(), 
+            by = join_by("taxa_id" == "Family")) %>%
+  mutate(Family = taxa_id, Genus = NA) %>%
+  arrange(desc(estimate)) %>%
+  mutate(Family = factor(Family, ordered = T))
+
+
+corr_plot <- family_corr %>%
+  rbind(genus_corr, asv_corr) %>%
+  arrange(Family) %>%
+  mutate(taxa_id = factor(taxa_id, ordered = T)) %>%
+  filter(!is.na(Family) & Family != "NA")
+
+
+ggplot(corr_plot) +
+  geom_point(aes(x =  fct_reorder(Family, estimate), y = estimate, col = agg_level)) + #data = (corr_plot %>% filter(agg_level == "none")),
+  scale_color_manual(values = c("none" = "#CB3309", "Genus" = "#E6AC0E", "Family" = "#397DBB")) +
+  coord_flip() +
+  theme_bw()
 
 

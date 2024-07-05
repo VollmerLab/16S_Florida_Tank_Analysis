@@ -21,6 +21,7 @@ library(Hmisc)
 library(broom.mixed)
 library(taxize)
 library(parallel)
+library(rempsyc)
 library(tidyverse)
 library(patchwork)
 
@@ -224,7 +225,6 @@ coord_panel_ranges <- function(panel_ranges, expand = TRUE, default = FALSE, cli
 normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samples.csv.gz', show_col_types = FALSE) %>%
   mutate(time = factor(time, ordered = TRUE)) %>%
   mutate(final_disease_state = ifelse(time == "T0", "F", final_disease_state)) %>%
-  filter(!c(exposure == "H" & final_disease_state == "D")) %>%
   mutate(treatment = str_c(time, exposure, final_disease_state, sep = '_'),
          time_exposure = str_c(time, exposure, sep = '_'),
          timeC = str_extract(time, '[0-9]+') %>% as.numeric,
@@ -232,6 +232,21 @@ normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samp
   mutate(asv_number = str_extract(asv_id, '[0-9]+') %>% as.integer)
 
 homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv')
+
+#metrics of disease resistance
+normalized_asv_counts %>%
+  filter(time == "T0") %>%
+  select(genotype, resistance) %>%
+  distinct() %>%
+  reframe(num_genotypes = length(genotype), minimum_DR = min(resistance), maximum_DR = max(resistance),
+          average_DR = mean(resistance), SE_DR = sd(resistance)/sqrt(length((resistance))))
+
+normalized_asv_counts %>%
+  filter(time == "T7") %>%
+  select(fragment_id, final_disease_state) %>%
+  distinct() %>%
+  group_by(final_disease_state) %>%
+  reframe(num_of_fragments = n())
 
 #### Prevalence of Cysteiniphilum ####
 
@@ -527,6 +542,20 @@ sig_classified_asvs %>%
   arrange(all_sigs) %>% 
   mutate(taxa = str_c(n, Genus, sep = " ")) %>% 
   select(all_sigs, taxa)
+
+
+#asv_ids for sigs
+look_at_asvs <- sig_classified_asvs %>% 
+  filter(!TankEffect) %>% 
+  pivot_longer(cols = -c(colnames(taxonomy_tibble %>% select(-asv_names)), asv_id), 
+               names_to = "signature", values_to = "significance") %>%
+  filter(significance) %>%
+  select(-significance) %>%
+  group_by(asv_id) %>%
+  reframe(asv_id, Family, Genus, all_sigs = str_c(signature, collapse = ", ")) %>%
+  distinct() %>%
+  ungroup() %>%
+  group_by(Family, Genus, all_sigs)
 
 
 #how much tank effect
@@ -1127,9 +1156,9 @@ list(
 design = "
 EAAL
 EPPL
-EBBL
-ESSL
 ECCL
+ESSL
+EBBL
 #DD#
 "
 
@@ -1144,8 +1173,8 @@ list(
   spacer #S
 ) %>% 
   wrap_plots() + 
-  plot_layout(heights = c(1, 0.0325, 1, 0.0325, 8, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
-  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
+  plot_layout(heights = c(1, 0.0325, 8, 0.0325, 1, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "C", "", "B")))
 
 #### Complex Upset with Doses ####
 
@@ -1322,8 +1351,25 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
 
 
   
-adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, method = "bray", perm = 1000, data = nmds_metadata)  
+permanova_results <- adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, 
+        method = "bray", perm = 10000, data = nmds_metadata)  
 
+tidy_permanova_results <- broom::tidy(permanova_results) %>%
+  rename("Sums of Squares" = "SumOfSqs") %>%
+  mutate(term = case_when(term == "time" ~ "Time",
+                          term == "final_disease_state" ~ "Disease Outcome",
+                          term == "exposure" ~ "Exposure",
+                          term == "genotype" ~ "Genotype",
+                          term == "time:final_disease_state" ~ "Time:Disease Outcome",
+                          term == "time:exposure" ~ "Time:Exposure",
+                          term == "tank" ~ "Tank",
+                          TRUE ~ term)) %>%
+  rename("F" = "statistic")
+
+permanova_table <- nice_table(tidy_permanova_results, broom = "lm")
+
+print(permanova_table, preview = "docx")
+#flextable::save_as_docx(permanova_table, path = "../")
 
 #library(pairwiseAdonis)
 #pairwise.adonis2(nmds_matrix ~treatment, data = nmds_metadata) %>% broom::tidy()

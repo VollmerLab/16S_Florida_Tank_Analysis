@@ -12,10 +12,11 @@ library(ggvenn)
 library(cowplot)
 library(ComplexUpset)
 library(microshades) #remotes::install_github("KarstensLab/microshades", dependencies = TRUE)
-library(lme4)
+library(lmerTest)
 library(tidyverse)
 library(emmeans)
 library(relayer)
+library(rempsyc)
 library(fantaxtic) #devtools::install_github("gmteunisse/fantaxtic")
 library(ggnested) #devtools::install_github("gmteunisse/ggnested")
 
@@ -345,6 +346,138 @@ get_mod_ggnested_palette <- function(data,
   return(pal)
 }
 
+safe_qvalue <- possibly(.f = ~qvalue(.)$qvalues, otherwise = NA_real_)
+
+# df <- asv_models
+reorder_columns <- function(df){
+  p_cols <- str_subset(colnames(df), 'pvalue')
+  fdr_cols <- str_replace(p_cols, 'pvalue', 'fdr')
+  q_cols <- str_replace(p_cols, 'pvalue', 'qvalue')
+  
+  for(col_num in 1:length(p_cols)){
+    df <- relocate(df, fdr_cols[col_num], q_cols[col_num], .after = p_cols[col_num])
+  }
+  df
+}
+
+p_adjust <- function(df, exclude_cols = NA_character_){
+  exclude_cols <- if_else(is.na(exclude_cols), '@@@', exclude_cols)
+  mutate(df, across(c(contains('pvalue'), -contains(exclude_cols)), ~p.adjust(., method = 'fdr'),
+                    .names = 'fdr_{.col}')) %>% 
+    rename_with(~str_replace_all(., 'fdr_pvalue', 'fdr')) %>% 
+    
+    mutate(across(c(contains('pvalue'), -contains(exclude_cols)), safe_qvalue,
+                  .names = 'qvalue_{.col}')) %>%
+    rename_with(~str_replace_all(., 'qvalue_pvalue', 'qvalue')) %>%
+    reorder_columns 
+}
+
+fit_model <- function(formula, data, use_weights = TRUE){
+  if(!use_weights){
+    data$weight <- 1
+  }
+  
+  full_model <- lmer(formula, 
+                     weights = data$weight,
+                     data = data, 
+                     REML = TRUE,
+                     control = variancePartition:::vpcontrol)
+  
+  
+  main_formula <- as.character(formula)
+  re_formula <- str_c(main_formula[2], main_formula[1], str_extract_all(main_formula[3], '\\(.*\\)')) %>%
+    as.formula()
+  
+  re_model <- lmer(re_formula, 
+                   weights = data$weight,
+                   data = data, 
+                   REML = TRUE,
+                   control = variancePartition:::vpcontrol)
+  tibble(model = list(full_model), re_model = list(re_model))
+}
+
+# model <- asv_models$model[[1]]; re_model <- asv_models$re_model[[1]]; random_anova <- asv_models$random_anova[[1]]
+process_model <- function(model, re_model, random_anova){
+  #create type 3 anova table with KR based p-values, marginal & conditional r2 and eta2 effect size
+  #also output as single row all anova results sorted nicely
+  #needs fit model and null model with only random effects 
+  aov_tab <- anova(model, type = '3', ddf = 'Kenward-Roger')
+  
+  global_row <- anova(model, re_model) %>% 
+    broom::tidy() %>%
+    filter(term == 'model') %>%
+    select(statistic, df, p.value) %>%
+    rename(chisq = statistic,
+           pvalue = p.value) %>%
+    rename_with(~str_c(., '_global'))
+  
+  r2_row <- performance::r2(model) %>%
+    as_tibble
+  
+  aov_row <- as_tibble(aov_tab, rownames = 'term') %>%
+    mutate(term = str_replace(term, 'time_exposure', 'timeXexposure')) %>%
+    rename(ss = 'Sum Sq',
+           ms = 'Mean Sq',
+           n.DF = NumDF,
+           d.DF = DenDF,
+           fvalue = 'F value',
+           pvalue = 'Pr(>F)') %>%
+    rowwise %>%
+    mutate(eta2Partial = effectsize::F_to_eta2(fvalue, n.DF, d.DF, ci = NULL)$Eta2_partial) %>%
+    tidyr::pivot_wider(names_from = term,
+                       values_from = where(is.numeric),
+                       names_vary = 'slowest') %>%
+    rename_with(~str_replace_all(., ':', 'X'))
+  
+  varDecomp_row <- VarCorr(model) %>%
+    as_tibble() %>%
+    mutate(varComp = sdcor^2 / sum(sdcor^2)) %>%
+    select(grp, varComp) %>%
+    filter(grp != 'Residual') %>%
+    left_join(random_anova %>%
+                as_tibble(rownames = 'term') %>%
+                mutate(term = str_extract(term, '\\| [0-9a-zA-Z]+') %>%
+                         str_remove('\\| +')) %>%
+                filter(!is.na(term)) %>%
+                select(term, Df, LRT, `Pr(>Chisq)`) %>%
+                rename(df = Df,
+                       chisq = LRT,
+                       pvalue = `Pr(>Chisq)`),
+              by = c('grp' = 'term')) %>%
+    tidyr::pivot_wider(names_from = 'grp',
+                       values_from = c('varComp', 'df', 'chisq', 'pvalue'),
+                       names_vary = 'slowest') #%>%
+  # rename_with(~str_replace_all(., '_', '.'))
+  
+  tibble::tibble(anova_table = list(aov_tab)) %>%
+    bind_cols(global_row, r2_row, varDecomp_row, ., aov_row)
+}
+
+run_posthoc <- function(model, contrast_list){
+  em_out <- emmeans(model, ~treatment)
+  
+  contrast_list %>%
+    rowwise(direction) %>%
+    reframe(emmeans::contrast(em_out,
+                              method = contrast$contrasts, 
+                              adjust = 'none',
+                              side = direction) %>%
+              as_tibble)
+}
+
+# posthoc <- asv_models$posthoc[[1]]
+process_postHoc <- function(posthoc){
+  post_row <- as_tibble(posthoc) %>%
+    dplyr::rename(tvalue = t.ratio,
+                  pvalue = p.value) %>%
+    mutate(contrast = str_c(contrast, direction, sep = '_'), .keep = 'unused') %>%
+    pivot_wider(names_from = c('contrast'),
+                values_from = c('estimate', 'SE', 'df', 'tvalue', 'pvalue'),
+                names_vary = 'slowest')
+  post_row
+}
+
+
 #### Data ####
 aggregation_level <- 'none' #or none
 
@@ -612,6 +745,22 @@ alpha_significant_models %>%
 
 alpha_significant_models$anova_table[[1]]
 
+formatted_alpha_table <- alpha_significant_models %>%
+  select(metric, contains("aquarium"), contains("exposure"), contains("outcome")) %>%
+  pivot_longer(-metric, names_to = "value_type", values_to = "value") %>%
+  mutate(split_vals = str_split(value_type, "_")) %>%
+  rowwise() %>%
+  mutate(stat_term = split_vals[[1]][1],
+         sig_term = split_vals[[2]][1]) %>%
+  select(-c(value_type, split_vals)) %>%
+  pivot_wider(names_from = stat_term, values_from = value) %>%
+  filter(metric %in% c("chao1", "dominance_core_abundance")) %>%
+  select(-c(qvalue, pvalue)) %>%
+  rename("pvalue" = "fdr", "t" = "tvalue")
+
+alpha_table <- nice_table(formatted_alpha_table)
+print(alpha_table, preview = "docx")  
+
 #which of the posthocs are significant
 alpha_metric_signatures <- alpha_significant_models %>%
   select(metric, starts_with('fdr')) %>% 
@@ -667,6 +816,26 @@ alpha_significant_models %>%
 
 
 #### Alpha Div Plots ####
+
+#alpha div values by time
+alpha_significant_models %>%
+  mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
+  filter(metric %in% c("dominance_core_abundance", "richness_chao1")) %>%
+  rowwise() %>%
+  mutate(average_values = list(emmeans(model, ~treatment) %>%
+                            broom::tidy(conf.int = TRUE) %>%
+                            separate(treatment, into = c('time', 'exposure', 'final_disease_state')) %>%
+                            group_by(time) %>%
+                            reframe(ave_value = mean(estimate))
+  )) %>%
+  select(metric, average_values) %>%
+  unnest(average_values)
+
+
+ggplot(test$plot_info[[1]]) +
+  geom_point(aes(x = time, y = estimate))
+
+
 
 alpha_graphs_manuscript <- alpha_significant_models %>%
   mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
@@ -757,11 +926,21 @@ combined_alpha_plots <- ((alpha_graphs_manuscript$plot[[2]] + theme(legend.posit
        ylab(str_wrap("Core abundance dominance index", 15)) + labs(title = NULL)) 
     ) + #"Dominance"
   plot_annotation(tag_levels = "A")
+
+#NEW just two metrics
+combined_alpha_plots <- (
+                           (alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") + 
+                              ylab(str_wrap("Chao1 Richness Index", 15)) + labs(title = NULL) +
+                              xlab(NULL)) / #"Richness"
+                           (alpha_graphs_manuscript$plot[[3]] + theme(legend.position="none") + 
+                              ylab(str_wrap("Core abundance dominance index", 15)) + labs(title = NULL)) 
+) + #"Dominance"
+  plot_annotation(tag_levels = "A")
     
   
 
 (combined_alpha_plots | fancy_legend) + 
-  plot_layout(widths = c(4, 1)) + plot_annotation(tag_levels = list(c("A", "B", "C", "D")))
+  plot_layout(widths = c(4, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
 
 alpha_graphs_manuscript$combo_plots[[2]]
 
