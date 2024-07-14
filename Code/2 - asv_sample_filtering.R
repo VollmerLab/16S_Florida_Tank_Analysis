@@ -495,24 +495,6 @@ if(aggregation_level != 'none'){
   names(sequences) <- taxa_names(microbiome_data)
 }
 
-#### Look at Sequences ####
-colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
-
-colwell_seqs <- sequences[colwells_of_interest]
-
-outside_colwells <- c("TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGTTTGATAAGCCAGATGTGAAATCCCGGGGCTTAACCTCGGAACTGCATTTGGAACTGTTTGACTAGAGTACTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAGATACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG",
-                      "TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGATAGTTAAGCGAGATGTGAAATCCCGGGGCTCAACCTCGGAACTGCATTTCGAACTGGCTGTCTAGAGTCTTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAAAGACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG")
-names(outside_colwells) <- c("schul66", "schul65")
-combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
-
-#write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
-
-cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
-cysteiniphilum_seqs <- sequences[cysteiniphilums]
-
-sequences["ASV_65"]
-
-#write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
 
 #### Update Taxonomy where Possible ####
 #old taxonomy info
@@ -570,6 +552,10 @@ multiple_classifications_list <- combined_taxonomy %>%
 # write_csv(ncbi_classifications_by_genus, "../intermediate_files/ncbi_classifications_for_overlaps.csv")
 ncbi_classifications_by_genus <- read_csv("../intermediate_files/new_ncbi_classifications_for_overlaps.csv")
 
+
+
+
+
 #most updated taxonomy, just phylum:genus
 #each genus has only one described classification, is combined with old and new taxonomies
 #doesnt contain NA for genus rows
@@ -581,6 +567,10 @@ nonoverlapping_taxonomy <- combined_taxonomy %>%
   rbind(ncbi_classifications_by_genus) %>%
   distinct()
 
+tax_name("Candidatus Berkiella", db = "ncbi", get = c("Phylum", "Class", "Order", "Family")) %>%
+  select(-db) %>%
+  dplyr::rename("Genus" = "query")
+
 #our ASVs with the most up to date taxonomy, use for downstream purposes
 full_taxonomy <- combined_taxonomy %>%
   select(-c(Phylum:Family)) %>%
@@ -590,8 +580,9 @@ full_taxonomy <- combined_taxonomy %>%
   rbind(combined_taxonomy %>% filter(is.na(Genus))) %>%
   arrange(parse_number(asv_id)) %>%
   mutate(Order = ifelse(Family == "Puniceicoccaceae", "Puniceicoccales", Order)) %>%
-  mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
-         Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
+  mutate(Family = ifelse(Family == "Unknown Family_4", "Coxiellaceae", Family))
+#mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
+#       Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
 
 
 #make version of microbiome data ps to update the taxonomy in
@@ -601,6 +592,59 @@ tax_table(updated_microbiome_data) <- full_taxonomy %>%
   select(-contains("confidence")) %>%
   arrange(parse_number(asv_id)) %>%
   column_to_rownames("asv_id") %>%
+  as.matrix()
+
+metadata <- sample_data(updated_microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  dplyr::select(-retain_sample) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
+         .after = sample_id)
+
+
+#resolve multiple classifications
+# i.e. one family is listed as different classes or orders
+
+aggregated_microbiome_data <- aggregate_taxa(updated_microbiome_data, "Family")
+
+nonunique_taxonomy_families <- tax_table(aggregated_microbiome_data) %>%
+  as.data.frame() %>%
+  as_tibble() %>%
+  filter(str_detect(unique, "_")) %>%
+  pull(Family) %>%
+  unique()
+
+# ncbi_classifications_by_family <- tax_name(nonunique_taxonomy_families, db = "ncbi",
+#                                            get = c("Domain", "Phylum", "Class", "Order")) %>%
+#   select(-c(db, Domain)) %>%
+#   dplyr::rename("Family" = "query") %>%
+#   mutate(Class = ifelse(Order == "Nannocystales" & is.na(Class), "Polyangia", Class))
+# 
+# write_csv(ncbi_classifications_by_family, "../intermediate_files/ncbi_classifications_for_family_overlaps.csv")
+
+
+
+ncbi_classifications_by_family <- read_csv("../intermediate_files/ncbi_classifications_for_family_overlaps.csv")
+
+new_tax_just_non_unique <- tax_table(updated_microbiome_data) %>% 
+  as.data.frame() %>%
+  as_tibble(rownames = "asv_names") %>%
+  filter(Family %in% nonunique_taxonomy_families) %>%
+  select(-c(Phylum, Class, Order)) %>%
+  left_join(ncbi_classifications_by_family, by = join_by("Family")) %>%
+  relocate(c(Phylum, Class, Order), .after = Domain)
+
+unique_family_level_taxonomy <-  tax_table(updated_microbiome_data) %>% 
+  as.data.frame() %>%
+  as_tibble(rownames = "asv_names") %>%
+  filter(!Family %in% nonunique_taxonomy_families) %>%
+  rbind(new_tax_just_non_unique) %>%
+  arrange(parse_number(asv_names)) %>%
+  mutate(Class = ifelse(is.na(Class) & Order == "Polyangiales", "Polyangia", Class),
+         Class = ifelse(is.na(Class) & Order == "Haliangiales", "Polyangia", Class))
+
+#re-add back to phyloseq object
+tax_table(updated_microbiome_data) <- unique_family_level_taxonomy %>%
+  column_to_rownames("asv_names") %>%
   as.matrix()
 
 metadata <- sample_data(updated_microbiome_data) %>%
@@ -649,6 +693,25 @@ melted_ps %>%
   group_by(time, exposure, final_disease_state) %>%
   reframe(n = n())
 
+#### Look at Sequences ####
+colwells_of_interest <- c("ASV_144", "ASV_148", "ASV_274", "ASV_88", "ASV_939")
+
+colwell_seqs <- sequences[colwells_of_interest]
+
+outside_colwells <- c("TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGTTTGATAAGCCAGATGTGAAATCCCGGGGCTTAACCTCGGAACTGCATTTGGAACTGTTTGACTAGAGTACTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAGATACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG",
+                      "TACGGAGGGTGCGAGCGTTAATCGGAATTACTGGGCGTAAAGCGTGCGTAGGCGGATAGTTAAGCGAGATGTGAAATCCCGGGGCTCAACCTCGGAACTGCATTTCGAACTGGCTGTCTAGAGTCTTGTAGAGGGTGGTGGAATTTCCAGTGTAGCGGTGAAATGCGTAGAGATTGGAAGGAACATCAGTGGCGAAGGCGGCCACCTGGACAAAGACTGACGCTGAGGCACGAAAGCGTGGGGAGCGAACAGG")
+names(outside_colwells) <- c("schul66", "schul65")
+combined_colwells <- c(as.list(colwell_seqs), outside_colwells)
+
+#write.fasta(as.list(combined_colwells), names = names(combined_colwells), open = "w", file.out = "colwells.fa")
+
+cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(asv_id)
+cysteiniphilum_seqs <- sequences[cysteiniphilums]
+
+sequences["ASV_65"]
+
+#write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
+
 #### Alpha Posthocs ####
 # posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
 # emmeans(model, ~treatment)
@@ -658,10 +721,18 @@ alpha_posthoc_exp <- list('exposure' = c(0, 1/4, 1/4, -1/2, 1/4, 1/4, -1/2))
 
 alpha_posthoc_outc <- list('outcome' = c(0, 1/2, -1/4, -1/4, 1/2, -1/4, -1/4))
 
+alpha_t0_t3 <- list('t0_t3' = c(-1, 1/3, 1/3, 1/3, 0, 0, 0))
+
+alpha_t0_t7 <- list('t0_t7' = c(-1, 0, 0, 0, 1/3, 1/3, 1/3))
+
+alpha_t3_t7 <- list('t3_t7' = c(0, -1/3, -1/3, -1/3, 1/3, 1/3, 1/3))
 
 
-alpha_two_sided_tests <- tibble(microbial_signature = c('alpha_posthoc_time', 'alpha_posthoc_exp', 'alpha_posthoc_outc'),
-                                contrasts = list(alpha_posthoc_time, alpha_posthoc_exp, alpha_posthoc_outc),
+
+alpha_two_sided_tests <- tibble(microbial_signature = c('alpha_posthoc_time', 'alpha_posthoc_exp', 'alpha_posthoc_outc',
+                                                        'alpha_t0_t3', 'alpha_t0_t7', 'alpha_t3_t7'),
+                                contrasts = list(alpha_posthoc_time, alpha_posthoc_exp, alpha_posthoc_outc,
+                                                 alpha_t0_t3, alpha_t0_t7, alpha_t3_t7),
                                 direction = '=') #=
 
 alpha_posthoc_categories <- alpha_two_sided_tests %>%
@@ -831,15 +902,10 @@ alpha_significant_models %>%
   select(metric, average_values) %>%
   unnest(average_values)
 
-
-ggplot(test$plot_info[[1]]) +
-  geom_point(aes(x = time, y = estimate))
-
-
-
 alpha_graphs_manuscript <- alpha_significant_models %>%
-  mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
-  filter(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1")) %>%
+  filter(metric %in% c("dominance_core_abundance", "chao1")) %>%
+  #mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
+  #filter(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1")) %>%
   #mutate(for_manuscript = ifelse(metric %in% c("diversity_shannon", "dominance_core_abundance", "evenness_camargo", "richness_chao1"), TRUE, FALSE)) %>%
   rowwise() %>%
   mutate(plot_info = list(emmeans(model, ~treatment) %>%
@@ -911,8 +977,61 @@ alpha_graphs_manuscript <- alpha_significant_models %>%
   #group_by(for_manuscript) %>%
   #summarise(combo_plots = list(wrap_plots(plot) + plot_layout(guides = 'auto')))
 
+sig_lines <- alpha_significant_models %>%
+  select(metric, contains("t0"), contains("t3"), contains("t7")) %>% 
+  select(metric, contains("fdr")) %>%
+  filter(metric %in% c("dominance_core_abundance", "chao1")) %>%
+  pivot_longer(-metric, names_to = c("time1", "time2", "sign"), values_to = "significance", 
+               names_sep = "_", names_prefix = "fdr_") %>%
+  mutate(pval_label = case_when(significance < 0.001 ~ "***",
+                                significance < 0.01 ~ "**",
+                                significance < 0.05 ~ "*",
+                                TRUE ~ "")) %>%
+  mutate(significance = ifelse(significance < 0.05, "yes", "no")) %>%
+  mutate(time1 = parse_number(time1), time2 = parse_number(time2)) %>%
+  select(-sign) %>%
+  rowwise() %>%
+  mutate(conf.low = 0, conf.high = 0, text_x = mean(c(time1, time2)),
+         line_order = case_when(sum(time1, time2) == 7 ~ 3.5,
+                                sum(time1, time2) == 10 ~ 2,
+                                sum(time1, time2) == 3 ~ 1))
+
+#CHAO1
+chao1_plot <- alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") +
+  ylab(str_wrap("Chao1 Richness Index", 15)) + labs(title = NULL) +
+  xlab(NULL) +
+  geom_segment(data = sig_lines %>% filter(metric == "chao1"), 
+               aes(x = time1, xend = time2, y = 400 + line_order*26.667, 
+                   yend = 400 + line_order*26.667,
+                   alpha = significance), col = "gray20") +
+  geom_text(data = sig_lines %>% filter(metric == "chao1"),
+             aes(x = text_x, y = 400 + 10 + line_order*26.667,
+                 label = pval_label), col = "gray20", size = 6) +
+  scale_alpha_manual(values = c("yes" = 1, "no" = 0))
+
+#CORE ABUN
+core_abun_plot <- alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") +
+  ylab(str_wrap("Core abundance dominance index", 15)) + labs(title = NULL) +
+  geom_segment(data = sig_lines %>% filter(metric == "dominance_core_abundance"), 
+               aes(x = time1, xend = time2, y = 0.75 + line_order*0.05, 
+                   yend = 0.75 + line_order*0.05,
+                   alpha = significance), col = "gray20") +
+  geom_text(data = sig_lines %>% filter(metric == "dominance_core_abundance"),
+            aes(x = text_x, y = 0.75 + 0.01 + line_order*0.05,
+                label = pval_label), col = "gray20", size = 6) +
+  scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
+  ylim(0, 1)
+
+
 fancy_legend <- cowplot::get_legend(alpha_graphs_manuscript$plot[[2]])
 
+both_alphas <- chao1_plot / core_abun_plot + plot_annotation(tag_levels = "A")
+
+(both_alphas | fancy_legend) + 
+  plot_layout(widths = c(4, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
+# 1000x600
+
+#outdated
 combined_alpha_plots <- ((alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") + 
        ylab(str_wrap("Shannon-Weiner diversity index", 15)) + labs(title = NULL) +
        xlab(NULL)) / #"Diversity"
@@ -950,7 +1069,20 @@ group_by(alpha_type) %>%
 alpha_graphs$combo_plots[[2]]
 
 
-
+normalized_asv_counts %>%
+  select(fragment_id) %>%
+  distinct() %>%
+  filter(!str_detect(fragment_id, "Field")) %>%
+  nrow()
+#108 fragments
+  
+normalized_asv_counts %>%
+  select(exposure, fragment_id) %>%
+  distinct() %>%
+  filter(!str_detect(fragment_id, "Field")) %>%
+  group_by(exposure) %>%
+  reframe(frag_num = n())
+#64 D exposed, 44 H exposed
 
 
 #### Microshades Microbe Abundance ####
@@ -1181,6 +1313,55 @@ fantaxtic_palette <- get_mod_ggnested_palette(psdf,
              main_palette = custom_palette,
              gradient_type = "tints")
 
+#aquarickettsias 
+psdf %>%
+  filter(Sample %in% c("T7_D_D", "T7_D_H"), Genus == "MD3-55") %>%
+  as_tibble() %>%
+  #group_by(Sample) %>%
+  summarise_at(vars(Abundance), list(t_test = ~ list(t.test(. ~ Sample)))) %>%
+  rowwise() %>%
+  mutate(t_stderr = t_test$stderr) %>%
+  mutate(t_test = broom::tidy(t_test)) %>%
+  unnest(t_test) %>%
+  rename("T7_D_H" = "estimate1", "T7_D_D" = "estimate2", "DH_minus_DD" = "estimate") %>%
+  select(-c(parameter, conf.low, conf.high, method, alternative))
+
+
+#relative abundance
+psdf %>%
+  select(OTU, Genus, Sample, Abundance, old_sample) %>%
+  group_by(Sample) %>%
+  mutate(tot_abun = sum(Abundance)) %>%
+  ungroup() %>%
+  mutate(rel_abun = Abundance/tot_abun) %>%
+  group_by(old_sample, Genus) %>%
+  reframe(Sample, genus_rel_abun = sum(rel_abun)) %>%
+  filter(Sample %in% c("T7_D_D", "T7_D_H"), Genus == "MD3-55") %>%
+  summarise_at(vars(genus_rel_abun), list(t_test = ~ list(t.test(. ~ Sample)))) %>%
+  rowwise() %>%
+  mutate(t_stderr = t_test$stderr) %>%
+  mutate(t_test = broom::tidy(t_test)) %>%
+  unnest(t_test) %>%
+  rename("T7_D_H" = "estimate1", "T7_D_D" = "estimate2", "DH_minus_DD" = "estimate") %>%
+  select(-c(parameter, conf.low, conf.high, method, alternative))
+
+
+psdf %>%
+  select(OTU, Genus, Sample, Abundance, old_sample) %>%
+  group_by(Sample) %>%
+  mutate(tot_abun = sum(Abundance)) %>%
+  ungroup() %>%
+  mutate(rel_abun = Abundance/tot_abun) %>%
+  group_by(old_sample, Genus) %>%
+  reframe(Sample, genus_rel_abun = sum(rel_abun)) %>%
+  filter(Sample %in% c("T3_H_H", "T3 Diseased"), Genus == "MD3-55") %>%
+  summarise_at(vars(genus_rel_abun), list(t_test = ~ list(t.test(. ~ Sample)))) %>%
+  rowwise() %>%
+  mutate(t_stderr = t_test$stderr) %>%
+  mutate(t_test = broom::tidy(t_test)) %>%
+  unnest(t_test) %>%
+  rename("T3_H_H" = "estimate1", "T3 Diseased" = "estimate2", "H_minus_D" = "estimate") %>%
+  select(-c(parameter, conf.low, conf.high, method, alternative))
 
 
 #### Make Venn showing ASVs to keep ####
@@ -1286,18 +1467,18 @@ otu_tmm$counts %>%
 
 
 #### Variance weighting ####
-param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
-dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm, 
-                                  formula = ~ model_comp + (1 | genotype) + (1 | tank),
-                                  
-                                  data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
-                                    filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
-                                    filter(!(exposure == "H" & final_disease_state == "D")) %>%
-                                    arrange(sample_id) %>%
-                                    mutate(model_comp = str_c(time, exposure, susceptability)) %>%
-                                    column_to_rownames('sample_id'),
-                                  BPPARAM = param, 
-                                  plot = TRUE)
+# param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
+# dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm, 
+#                                   formula = ~ model_comp + (1 | genotype) + (1 | tank),
+#                                   
+#                                   data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
+#                                     filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
+#                                     filter(!(exposure == "H" & final_disease_state == "D")) %>%
+#                                     arrange(sample_id) %>%
+#                                     mutate(model_comp = str_c(time, exposure, susceptability)) %>%
+#                                     column_to_rownames('sample_id'),
+#                                   BPPARAM = param, 
+#                                   plot = TRUE)
 
 #### ASV Modelling ####
 full_data <- otu_tmm %>%
@@ -1307,14 +1488,14 @@ full_data <- otu_tmm %>%
   pivot_longer(cols = -asv_id,
                names_to = 'sample_id',
                values_to = 'log2_cpm') %>%
-  left_join(dream_weights_fullInteraction$weights %>% 
-              set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
-              set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
-              as_tibble(rownames = 'asv_id') %>%
-              pivot_longer(cols = -asv_id,
-                           names_to = 'sample_id',
-                           values_to = 'weight'),
-            by = c('asv_id', 'sample_id')) %>%
+  # left_join(dream_weights_fullInteraction$weights %>% 
+  #             set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
+  #             set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
+  #             as_tibble(rownames = 'asv_id') %>%
+  #             pivot_longer(cols = -asv_id,
+  #                          names_to = 'sample_id',
+  #                          values_to = 'weight'),
+  #           by = c('asv_id', 'sample_id')) %>%
   left_join(as_tibble(otu_tmm$counts, rownames = 'asv_id') %>%
               pivot_longer(cols = -asv_id,
                            names_to = 'sample_id',

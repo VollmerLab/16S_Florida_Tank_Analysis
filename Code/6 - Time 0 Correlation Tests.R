@@ -15,19 +15,6 @@ if(aggregation_level != 'none'){
   taxa_names(agg_microbiome_data) <- str_c('ASV', 1:length(taxa_names(agg_microbiome_data)), sep = '_')
   names(sequences) <- taxa_names(agg_microbiome_data)
 }
-# library(strex)
-# 
-# fixed_taxonomy <- tax_table(agg_microbiome_data) %>% #some discrepancies in taxonomy above Family level leading to duplication
-#   as.data.frame() %>%
-#   as_tibble(rownames = "taxa_id") %>%
-#   mutate(taxa_id = ifelse(str_detect(taxa_id, "_"), str_after_last(taxa_id, "_"), taxa_id),
-#          unique = taxa_id) %>%
-#   as.data.frame() %>%
-#   as.matrix()
-# 
-# taxa_names(agg_microbiome_data) <- fixed_taxonomy[,1]
-# 
-# tax_table(agg_microbiome_data) <- fixed_taxonomy
 
 agg_metadata <- sample_data(agg_microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -187,7 +174,6 @@ all_corr_results <- rbind(all_corr_results, t0_corr_test)
 #previous probiotic associations
 all_corr_results %>% filter(taxa_id %in% c("MD3_55", "Endozoicomonas", "Myxococcales"))
 
-
 asv_corr <- all_corr_results %>% 
   filter(agg_level == "none") %>% 
   left_join(normalized_asv_counts %>% select(asv_id, Order:Genus) %>% distinct(), 
@@ -204,9 +190,11 @@ family_corr <- all_corr_results %>%
   left_join(normalized_asv_counts %>% select(Order:Genus) %>% distinct(), 
             by = join_by("taxa_id" == "Family")) %>%
   mutate(Family = taxa_id, Genus = NA) %>%
-  arrange(desc(estimate)) %>%
-  mutate(Family = factor(Family, ordered = T))
-
+  distinct() %>%
+  filter(is.na(Order) | Order != "Chitinophagales") %>% #duplicate
+  mutate(estimate = ifelse(is.na(estimate), 0, estimate)) %>%
+  arrange(estimate) %>%
+  mutate(Family = factor(Family, ordered = T, levels = .$Family))
 
 corr_plot <- family_corr %>%
   rbind(genus_corr, asv_corr) %>%
@@ -214,11 +202,10 @@ corr_plot <- family_corr %>%
   mutate(taxa_id = factor(taxa_id, ordered = T)) %>%
   filter(!is.na(Family) & Family != "NA")
 
-
 ggplot(corr_plot) +
-  geom_point(aes(x =  fct_reorder(Family, estimate), y = estimate, col = agg_level)) + #data = (corr_plot %>% filter(agg_level == "none")),
+  geom_hline(yintercept = 0) +
+  geom_point(aes(x = Family, y = estimate, col = agg_level), position = position_dodge(0.75)) + #data = (corr_plot %>% filter(agg_level == "none")),
   scale_color_manual(values = c("none" = "#CB3309", "Genus" = "#E6AC0E", "Family" = "#397DBB")) +
   coord_flip() +
   theme_bw()
-
-
+#export 1200x900
