@@ -1,11 +1,12 @@
 # Making the model based on FDS instead of Resistance
 
-setwd("/Users/emilytrytten/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("/Users/Emily/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
+
 
 #### Libraries ####
 library(vegan)
-library(phyloseq)
-library(EcolUtils)
+library(phyloseq) #BiocManager::install("phyloseq")
+library(EcolUtils) #remotes::install_github("GuillemSalazar/EcolUtils")
 library(formattable)
 library(RColorBrewer)
 library(magrittr)
@@ -13,7 +14,7 @@ library(lmerTest)
 library(emmeans)
 library(multidplyr)
 library(ggupset)
-library(qvalue)
+library(qvalue) #devtools::install_github("jdstorey/qvalue")
 library(relayer) #devtools::install_github("clauswilke/relayer")
 library(ComplexUpset)
 library(corrplot)
@@ -22,6 +23,7 @@ library(broom.mixed)
 library(taxize)
 library(parallel)
 library(rempsyc)
+library(variancePartition) #BiocManager::install("variancePartition")
 library(tidyverse)
 library(patchwork)
 
@@ -248,6 +250,22 @@ normalized_asv_counts %>%
   group_by(final_disease_state) %>%
   reframe(num_of_fragments = n())
 
+#### Genotype and Sample Numbers ####
+
+#number of samples
+normalized_asv_counts %>%
+  select(treatment, genotype, sample_id) %>%
+  distinct() %>%
+  group_by(treatment) %>%
+  reframe(samples = n())
+
+#number of genotypes
+normalized_asv_counts %>%
+  select(treatment, genotype) %>%
+  distinct() %>%
+  group_by(treatment) %>%
+  reframe(samples = n())
+
 #### Prevalence of Cysteiniphilum ####
 
 normalized_asv_counts %>% 
@@ -345,7 +363,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + #(1 | tank),
                        (0 + dummy(tank_field, c("tank")) | tank),
                      data, 
-                     use_weights = FALSE),
+                     use_weights = TRUE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
            posthoc = list(run_posthoc(model, posthoc_categories))) %>%
@@ -502,10 +520,10 @@ classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>
 
 #how many in each category
 classified_asv_taxonomy %>% 
-  mutate(across(Field:DD_continuous, ~ifelse(. == TRUE, 1, 0))) %>%
+  mutate(across(DD_early:DD_continuous, ~ifelse(. == TRUE, 1, 0))) %>%
   select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
   select(-asv_id) %>%
-  mutate(across(Field:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
+  mutate(across(DD_early:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
   colSums(.)
 
 #how many in each category without tank effect
@@ -555,10 +573,11 @@ look_at_asvs <- sig_classified_asvs %>%
   reframe(asv_id, Family, Genus, all_sigs = str_c(signature, collapse = ", ")) %>%
   distinct() %>%
   ungroup() %>%
-  group_by(Family, Genus, all_sigs)
+  group_by(Family, Genus, all_sigs) %>%
+  arrange(all_sigs)
 
 
-#how much tank effect
+#how much tank effect BY FAMILY
 classified_asv_taxonomy %>%
   filter(Aquaria | Field) %>%
   select(colnames(taxonomy_tibble %>% select(-asv_names)), asv_id, Aquaria, Field) %>%
@@ -733,29 +752,31 @@ upset(sig_classified_asvs %>% select(c(asv_id, contains("pathogen"), colnames(ta
 
 #### More Upsets ####
 
-non_tank_sig_classified_asvs %>% select(Family) %>% distinct()
-
-cu_family_colors <- c("Fastidiosibacteraceae" = '#e6194B', 
-                      "Fokiniaceae" = '#3cb44b', 
-                      "Francisellaceae" = '#42d4f4', 
-                      "Oceanospirillaceae" = '#ffe119', 
-                      "Colwelliaceae" = '#f58231', 
-                      "Hyphomonadaceae" = '#fffac8',
-                      "Thiotrichaceae" = '#469990', 
-                      "Puniceicoccaceae" = '#dcbeff', 
-                      "Erythrobacteraceae" = '#9A6324', 
-                      "Roseobacteraceae" = '#fabed4',
-                      "Cellvibrionaceae" = "purple",
-                      "Vibrionaceae" = "darkred",
-                      "Arenicellaceae" = "lightgreen",
-                      "Planctomycetaceae" = "tan",
-                      "NA" = "gray60",
-                      "Unclassified" = "gray60")
-
 non_tank_sig_classified_asvs <- sig_classified_asvs %>%
   filter(!TankEffect) %>%
   left_join(sig_homog_dose_data, by = join_by(asv_id)) %>%
   select(-TankEffect)
+
+non_tank_sig_classified_asvs %>% select(Family) %>% distinct()
+
+cu_family_colors <- c("Fastidiosibacteraceae" = '#e6194B', 
+                      "Fokiniaceae" = '#3cb44b', 
+                      "Francisellaceae" = '#', #
+                      "Oceanospirillaceae" = '#ffe119', # tan
+                      "Colwelliaceae" = '#f58231', 
+                      "Hyphomonadaceae" = '#fffac8',
+                      "Thiotrichaceae" = '#469990',  #
+                      "Puniceicoccaceae" = 'purple', 
+                      "Erythrobacteraceae" = '#9A6324', 
+                      "Roseobacteraceae" = '#fabed4',
+                      "Cellvibrionaceae" = "#42d4f4",
+                      "Vibrionaceae" = "darkred",
+                      "Arenicellaceae" = "lightgreen",
+                      "Planctomycetaceae" = "#ffe119",
+                      "NA" = "gray60",
+                      "Unclassified" = "gray60")
+
+
 
 fantaxtic_palette
 
@@ -945,8 +966,8 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 
 ## Make Fancy Plots
 
-the_plots1 <- bacterial_signature_asv %>%
-  #filter(asv_id == "ASV_65") %>%
+the_plots <- bacterial_signature_asv %>%
+  #filter(asv_id == "ASV_345") %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
   mutate(grouped_signatures = case_when(str_detect(signatures, "Aquaria") ~ "Tank Effect",
@@ -1083,12 +1104,14 @@ the_plots1 <- bacterial_signature_asv %>%
 
   
 #view the plots
-the_plots$combo_plots[[1]]
+the_plots1$combo_plots[[3]]
 
 #combine plots
 
 x_axis <- cowplot::get_plot_component(ggplot() + labs(x = "Time"), "xlab-b")
 y_axis <- cowplot::get_plot_component(ggplot() + labs(y = expression("Normalized log"[2]*" (cpm)")), "ylab-l")
+
+fancy_legend <- cowplot::get_legend(the_plots1$combo_plots[[1]])
 
 design = "
 EAAL
@@ -1175,6 +1198,7 @@ list(
   wrap_plots() + 
   plot_layout(heights = c(1, 0.0325, 8, 0.0325, 1, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
   plot_annotation(tag_levels = list(c("A", "C", "", "B")))
+#save at 1000x1125
 
 #### Complex Upset with Doses ####
 
