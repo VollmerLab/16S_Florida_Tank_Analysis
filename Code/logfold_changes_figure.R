@@ -406,7 +406,7 @@ ggplot(model_for_plot) +
 #named_model_for_plot <- model_for_plot %>%
 #  left_join(list_of_stylized_names, by = join_by(asv_id))
 
-logfold_change_plot <- ggplot(model_for_plot) +
+logfold_change_plot <- ggplot(model_for_plot %>% filter(grouped_signatures != "Healthy- Associated")) +
   geom_hline(yintercept = 0) +
   geom_pointrange(aes(x = asv_id, y = estimate, fill = graph_pval, col = comparison, pch = comparison, ymin = estimate - t_stderr, ymax = estimate + t_stderr), 
                   size = 1, stroke = 1, position = position_dodge(width = 0.65), linewidth = 0.8) + #position = position_dodge(width = 1)
@@ -433,12 +433,13 @@ logfold_change_plot <- ggplot(model_for_plot) +
   facet_grid(rows = vars(grouped_signatures), space = "free", scales = "free",
              labeller = label_wrap_gen(width = 15)) +
   xlab(NULL) +
-  ylab("Logfold Change (Diseased vs. Healthy)")
+  ylab("Log Fold Change (Diseased vs. Healthy)")
 
 
 
 (logfold_change_plot | relayer_logfold_legend) + plot_layout(widths = c(5, 1))
 #export 1300 x 800
+# 1300 x 750 for no Healthies
 
 design = "
 A##

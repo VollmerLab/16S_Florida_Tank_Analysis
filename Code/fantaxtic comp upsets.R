@@ -28,10 +28,10 @@ test_list <- c('**Other**' = 'white',
                'Allomuricauda' = '#FBACD9',
                'Flavobacterium' = '#FCBFE2',
                'Other Flavobacteriales' = '#FDD3EB',
-               'Oceanobacter' = '#0AAFC5',
-               'Neptuniibacter' = '#34C0D2',
-               'Alcanivorax' = '#5ED1E0',
-               'Marinicella' = '#88E2ED',
+               'Oleiphilus' = '#0AAFC5',
+               'Oceanobacter' = '#34C0D2',
+               'Neptuniibacter' = '#5ED1E0',
+               'Alcanivorax' = '#88E2ED',
                'Other Oceanospirillales' = '#B2F3FB',
                'Coraliomargarita' = '#7E0277',
                'Verruc-01' = "#9D2997",
@@ -58,8 +58,8 @@ test_list <- c('**Other**' = 'white',
                'Other Spirochaetales' = '#D88AFF',
                'Cysteiniphilum' = '#970707',
                'Francisella' = '#B02F2F',
-               'Thiomicrorhabdus' = '#C95757',
-               'Methylophaga' = '#E27F7F',
+               'Methylophaga' = '#C95757',
+               'Candidatus Endoecteinascidia' = '#E27F7F',
                'Other Thiotrichales' = '#FBA8A8',
                'Haloferula' = '#A3CE0B',
                'Rubritalea' = '#B5D935',
@@ -205,7 +205,9 @@ no_outline_fantaxtic_upset <- upset(m_sig_classified_asvs %>% select(-c(contains
           theme_nested() + #legend.position=c(1.06,0.2)
           guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")),
                                    ncol = 1)) + 
-          theme(legend.position = "none")
+          theme(legend.position = "none",
+                axis.text = element_text(size=12),
+                axis.title = element_text(size=13))
       ),
       
       matrix=(
@@ -240,8 +242,10 @@ no_outline_fantaxtic_upset <- upset(m_sig_classified_asvs %>% select(-c(contains
         'Tank Effect'
       )) +
   ggtitle("Significant Main Effects") +
-  theme(axis.text = element_text(size=12))
+  theme(axis.text = element_text(size=12),
+        axis.title = element_text(size=12))
 
+no_outline_fantaxtic_upset
   #theme(plot.margin = margin(1, 5.5, 1, 1, "cm"))
 
 #export 2000x1100
