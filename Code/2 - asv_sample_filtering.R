@@ -17,6 +17,9 @@ library(tidyverse)
 library(emmeans)
 library(relayer)
 library(rempsyc)
+library(flextable)
+library(taxize)
+library(seqateurs) #remotes::install_github("alexpiper/seqateurs")
 library(fantaxtic) #devtools::install_github("gmteunisse/fantaxtic")
 library(ggnested) #devtools::install_github("gmteunisse/ggnested")
 
@@ -159,6 +162,7 @@ phyloseq_filter_prevalence <- function(physeq, prev.trh = 0.05, abund.trh = NULL
 
 #modified version of ggnested that creates the color palette for the ggnested plot based on genus abundance
 #so the most abundant overall genus has the darkest color and the least abundant has the lightest
+#also added a blank row before Rickettsiales to push that title onto the next column
 mod_ggnested <- function(data, 
                          mapping = aes(), 
                          ...,
@@ -242,6 +246,12 @@ mod_ggnested <- function(data,
              group_subgroup = ifelse(is.na(group_subgroup), sprintf("**%s**", as.character(label)), group_subgroup)) %>%
       as.data.frame() 
   }
+  
+  #####HERE
+  colours <- colours %>% add_row(.before = 33) %>% 
+    mutate(subgroup_colour = ifelse(is.na(subgroup_colour), "#FFFFFF", subgroup_colour),
+           group_subgroup = ifelse(is.na(group_subgroup), " ", group_subgroup))
+  
   
   # Get the final colours
   vals <- colours$subgroup_colour
@@ -565,11 +575,16 @@ nonoverlapping_taxonomy <- combined_taxonomy %>%
   filter(!is.na(Genus)) %>%
   filter(!Genus %in% multiple_classifications_list) %>%
   rbind(ncbi_classifications_by_genus) %>%
+  mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class),
+         Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class)) %>%
+  filter(!(Genus == "Sedimenticola" & is.na(Family))) %>%
   distinct()
 
-tax_name("Candidatus Berkiella", db = "ncbi", get = c("Phylum", "Class", "Order", "Family")) %>%
-  select(-db) %>%
-  dplyr::rename("Genus" = "query")
+#nonoverlapping_taxonomy %>% group_by(Genus) %>% reframe(n = n()) %>% arrange(desc(n))
+
+# tax_name("Candidatus Berkiella", db = "ncbi", get = c("Phylum", "Class", "Order", "Family")) %>%
+#   select(-db) %>%
+#   dplyr::rename("Genus" = "query")
 
 #our ASVs with the most up to date taxonomy - almost
 full_taxonomy <- combined_taxonomy %>%
@@ -581,8 +596,12 @@ full_taxonomy <- combined_taxonomy %>%
   arrange(parse_number(asv_id)) %>%
   mutate(Order = ifelse(Family == "Puniceicoccaceae", "Puniceicoccales", Order)) %>%
   mutate(Family = ifelse(Family == "Unknown Family_4", "Coxiellaceae", Family))
+<<<<<<< HEAD:Code/2 - asv_sample_filtering.R
   #mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
   #      Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
+=======
+
+>>>>>>> c82156a89c557178bbc85c1fec2ba339d5163500:Code/2 - asv_sample_filtering_outdated.R
 
 
 #make version of microbiome data ps to update the taxonomy in
@@ -639,7 +658,10 @@ unique_family_level_taxonomy <-  tax_table(updated_microbiome_data) %>%
   rbind(new_tax_just_non_unique) %>%
   arrange(parse_number(asv_names)) %>%
   mutate(Class = ifelse(is.na(Class) & Order == "Polyangiales", "Polyangia", Class),
-         Class = ifelse(is.na(Class) & Order == "Haliangiales", "Polyangia", Class))
+         Class = ifelse(is.na(Class) & Order == "Haliangiales", "Polyangia", Class),
+         Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class),
+         Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class),
+         Phylum = ifelse(Order == "Rickettsiales", "Proteobacteria", Phylum))
 
 # fix by order now
 
@@ -718,7 +740,7 @@ metadata <- sample_data(updated_microbiome_data) %>%
 tax_table(updated_microbiome_data) %>% 
   as.data.frame() %>% 
   as_tibble() %>%
-  select(Family) %>% #change taxa level here
+  select(Genus) %>% #change taxa level here
   filter(!is.na(.)) %>%
   distinct() %>%
   nrow()
@@ -742,7 +764,7 @@ longitudinal_genos <- melted_ps %>%
 
 model_samples <- filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
   filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
-  filter(!(exposure == "H" & final_disease_state == "D")) %>%
+  #filter(!(exposure == "H" & final_disease_state == "D")) %>%
   pull(sample_id)
 
 #roughly check evenness across groups
@@ -770,6 +792,11 @@ cysteiniphilums <- full_taxonomy %>% filter(Genus == "Cysteiniphilum") %>% pull(
 cysteiniphilum_seqs <- sequences[cysteiniphilums]
 
 sequences["ASV_65"]
+
+#Key Vibrio
+sequences["ASV_134"]
+
+#write.fasta(sequences["ASV_134"], open = "w", file.out = "../intermediate_files/vibrio_asv134.fa")
 
 #write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
 library(seqinr)
@@ -810,6 +837,8 @@ fl_seqs <- seq_lengths %>%
   xlim(380, 420)
 
 max(seq_lengths$seq_length)
+
+
 
 #### Alpha Posthocs ####
 # posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
@@ -928,8 +957,8 @@ formatted_alpha_table <- alpha_significant_models %>%
   select(-c(qvalue, pvalue)) %>%
   rename("pvalue" = "fdr", "t" = "tvalue")
 
-alpha_table <- nice_table(formatted_alpha_table)
-print(alpha_table, preview = "docx")  
+manuscript_alpha_table <- nice_table(formatted_alpha_table)
+print(manuscript_alpha_table, preview = "docx")  
 
 #which of the posthocs are significant
 alpha_metric_signatures <- alpha_significant_models %>%
@@ -991,13 +1020,13 @@ alpha_significant_models %>%
 alpha_significant_models %>%
   mutate(metric = ifelse(str_detect(metric, "chao1"), "richness_chao1", metric)) %>%
   filter(metric %in% c("dominance_core_abundance", "richness_chao1")) %>%
+  unnest(data) %>%
   rowwise() %>%
   mutate(average_values = list(emmeans(model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
                             separate(treatment, into = c('time', 'exposure', 'final_disease_state')) %>%
                             group_by(time) %>%
-                            reframe(ave_value = mean(estimate))
-  )) %>%
+                            reframe(ave_value = mean(estimate), std_error = sd(estimate)/sqrt(length((estimate)))))) %>%
   select(metric, average_values) %>%
   unnest(average_values)
 
@@ -1388,9 +1417,13 @@ custom_palette <- taxon_colours(top_asv$ps_obj,
                                             Other = "gray75"))
 
 # Generate the plot
+<<<<<<< HEAD:Code/2 - asv_sample_filtering.R
 
 
 checking <- mod_ggnested(psdf,
+=======
+mod_ggnested(psdf,
+>>>>>>> c82156a89c557178bbc85c1fec2ba339d5163500:Code/2 - asv_sample_filtering_outdated.R
               aes_string(main_group = top_level,
                          sub_group = nested_level,
                          x = "Sample",
@@ -1425,6 +1458,8 @@ editGrob(hmm$grobs[[1]], )
 hmm$layout
 
 ggplot() + hmm
+
+#export 1500x850
 
 fantaxtic_palette <- get_mod_ggnested_palette(psdf,
              aes_string(main_group = top_level,
@@ -1531,9 +1566,9 @@ upset(venn_all_times_and_doses %>% left_join(taxonomy_tibble, by = c("OTU" = "as
       name='asv_names', width_ratio=0.1, min_size = 1, sort_sets = FALSE) + 
   ggtitle("Minimal Filtering")
 
-otus_to_analyze <- filter(otu_timepoint_presence, 
-                          (D & T3 & T7)) %>%
-  pull(OTU)
+# otus_to_analyze <- filter(otu_timepoint_presence, 
+#                           (D & T3 & T7)) %>%
+#   pull(OTU)
 
 not_t3t7_only <- filter(venn_all_times_and_doses, 
                     !c(!D & !H & !T0 & T3 & T7 & !T0_H)) %>%
@@ -1546,8 +1581,8 @@ otu_tmm <- updated_microbiome_data %>%
   phyloseq_filter_prevalence(prev.trh = 0.2) %>%
   otu_table() %>% 
   t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
-  as.data.frame %>%
-  as.matrix %>% 
+  as.data.frame() %>%
+  as.matrix() %>% 
   DGEList(remove.zeros = TRUE) %>%
   
   #Add any other filtering here
@@ -1588,18 +1623,18 @@ otu_tmm$counts %>%
 
 
 #### Variance weighting ####
-# param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
-# dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm, 
-#                                   formula = ~ model_comp + (1 | genotype) + (1 | tank),
-#                                   
-#                                   data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
-#                                     filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
-#                                     filter(!(exposure == "H" & final_disease_state == "D")) %>%
-#                                     arrange(sample_id) %>%
-#                                     mutate(model_comp = str_c(time, exposure, susceptability)) %>%
-#                                     column_to_rownames('sample_id'),
-#                                   BPPARAM = param, 
-#                                   plot = TRUE)
+param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
+dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm,
+                                  formula = ~ model_comp + (1 | genotype) + (1 | tank),
+
+                                  data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
+                                    filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
+                                    #filter(!(exposure == "H" & final_disease_state == "D")) %>%
+                                    arrange(sample_id) %>%
+                                    mutate(model_comp = str_c(time, exposure, susceptability)) %>%
+                                    column_to_rownames('sample_id'),
+                                  BPPARAM = param,
+                                  plot = TRUE)
 
 #### ASV Modelling ####
 full_data <- otu_tmm %>%
@@ -1609,14 +1644,14 @@ full_data <- otu_tmm %>%
   pivot_longer(cols = -asv_id,
                names_to = 'sample_id',
                values_to = 'log2_cpm') %>%
-  # left_join(dream_weights_fullInteraction$weights %>% 
-  #             set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
-  #             set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
-  #             as_tibble(rownames = 'asv_id') %>%
-  #             pivot_longer(cols = -asv_id,
-  #                          names_to = 'sample_id',
-  #                          values_to = 'weight'),
-  #           by = c('asv_id', 'sample_id')) %>%
+  left_join(dream_weights_fullInteraction$weights %>%
+              set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
+              set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
+              as_tibble(rownames = 'asv_id') %>%
+              pivot_longer(cols = -asv_id,
+                           names_to = 'sample_id',
+                           values_to = 'weight'),
+            by = c('asv_id', 'sample_id')) %>%
   left_join(as_tibble(otu_tmm$counts, rownames = 'asv_id') %>%
               pivot_longer(cols = -asv_id,
                            names_to = 'sample_id',
@@ -1635,6 +1670,14 @@ full_data <- otu_tmm %>%
 
 
 full_data %>% group_by(Order) %>% summarize(counts = sum(log2_cpm)) %>% arrange(desc(counts))
+
+full_data %>% filter(time == "T0") %>%
+  select(sample_id, genotype, time) %>% distinct() %>%
+  pull(genotype) %>% unique() %>% length()
+
+full_data %>% filter(time == "T3" | time == "T7") %>%
+  select(sample_id, genotype, time) %>% distinct() %>% #nrow()
+  pull(genotype) %>% unique() %>% length()
 
 
 #filtered for the 
