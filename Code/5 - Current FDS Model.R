@@ -1,6 +1,6 @@
 # Making the model based on FDS instead of Resistance
 
-setwd("/Users/emilytrytten/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("/Users/Emily/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### Libraries ####
 library(vegan)
@@ -233,6 +233,10 @@ normalized_asv_counts <- read_csv('../intermediate_files/fully_preprocessed_samp
 
 homogenate_data <- read_csv('../intermediate_files/homogenate_cpm.csv')
 
+taxonomy_tibble <- tax_table(read_rds("../intermediate_files/updated_microbiome_data.rds")) %>% 
+  as.data.frame() %>% 
+  as_tibble()
+
 #metrics of disease resistance
 normalized_asv_counts %>%
   filter(time == "T0") %>%
@@ -280,6 +284,13 @@ mc_h_t7 <- sample(t7_mc_samples %>% filter(final_disease_state == "H") %>% pull(
 sum(mc_h_t7)/runs #prev of 0.11259
 
 sd(mc_h_t7)/sqrt(runs) #SE of 0.0009995724
+
+
+#T7 Healthy, Healthy Exposed
+mc_h_h_t7 <- sample(t7_mc_samples %>% filter(final_disease_state == "H" & exposure == "H") %>% pull(present), runs, replace = T)
+sum(mc_h_h_t7)/runs #prev of 0.1164
+
+sd(mc_h_h_t7)/sqrt(runs) #SE of 0.00101416
 
 #T0
 t0_mc_samples <- normalized_asv_counts %>% 
@@ -503,7 +514,7 @@ classified_asv_taxonomy <- select(significant_models, asv_id, Domain:Species) %>
 #how many in each category
 classified_asv_taxonomy %>% 
   mutate(across(Field:DD_continuous, ~ifelse(. == TRUE, 1, 0))) %>%
-  select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
+  select(-colnames(taxonomy_tibble)) %>%
   select(-asv_id) %>%
   mutate(across(Field:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
   colSums(.)
@@ -512,7 +523,7 @@ classified_asv_taxonomy %>%
 classified_asv_taxonomy %>% 
   filter(!Aquaria & !Field) %>%
   mutate(across(Field:DD_continuous, ~ifelse(. == TRUE, 1, 0))) %>%
-  select(-colnames(taxonomy_tibble %>% select(-asv_names))) %>%
+  select(-colnames(taxonomy_tibble)) %>%
   select(-asv_id) %>%
   mutate(across(Field:DD_continuous, ~ifelse(is.na(.), 0, .))) %>%
   colSums(.)
@@ -520,8 +531,7 @@ classified_asv_taxonomy %>%
 #### Bacterial Strategies Upset ####
 
 sig_classified_asvs <- classified_asv_taxonomy %>%
-  filter(!if_all(colnames(classified_asv_taxonomy %>% select(-c(asv_id, colnames(taxonomy_tibble %>%
-                                                                                   select(-asv_names))))), ~. == FALSE)) %>%
+  filter(!if_all(colnames(classified_asv_taxonomy %>% select(-c(asv_id, colnames(taxonomy_tibble)))), ~. == FALSE)) %>%
   mutate(DiseaseExposed = FALSE, HealthyExposed = FALSE) %>%
   mutate(TankEffect = ifelse(Field | Aquaria, TRUE, FALSE)) %>%
   select(-c(Field, Aquaria))
@@ -529,7 +539,7 @@ sig_classified_asvs <- classified_asv_taxonomy %>%
 #how many genera in which category
 sig_classified_asvs %>% 
   filter(!TankEffect) %>% 
-  pivot_longer(cols = -c(colnames(taxonomy_tibble %>% select(-asv_names)), asv_id), 
+  pivot_longer(cols = -c(colnames(taxonomy_tibble), asv_id), 
                names_to = "signature", values_to = "significance") %>%
   filter(significance) %>%
   select(-significance) %>%
@@ -547,7 +557,7 @@ sig_classified_asvs %>%
 #asv_ids for sigs
 look_at_asvs <- sig_classified_asvs %>% 
   filter(!TankEffect) %>% 
-  pivot_longer(cols = -c(colnames(taxonomy_tibble %>% select(-asv_names)), asv_id), 
+  pivot_longer(cols = -c(colnames(taxonomy_tibble), asv_id), 
                names_to = "signature", values_to = "significance") %>%
   filter(significance) %>%
   select(-significance) %>%
@@ -561,7 +571,7 @@ look_at_asvs <- sig_classified_asvs %>%
 #how much tank effect
 classified_asv_taxonomy %>%
   filter(Aquaria | Field) %>%
-  select(colnames(taxonomy_tibble %>% select(-asv_names)), asv_id, Aquaria, Field) %>%
+  select(colnames(taxonomy_tibble), asv_id, Aquaria, Field) %>%
   pivot_longer(cols = c(Aquaria, Field), names_to = "TankEffect", values_to = "sig") %>%
   filter(sig) %>%
   select(Family, TankEffect) %>%
@@ -945,7 +955,7 @@ add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>
 
 ## Make Fancy Plots
 
-the_plots1 <- bacterial_signature_asv %>%
+the_plots <- bacterial_signature_asv %>%
   #filter(asv_id == "ASV_65") %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
@@ -1048,7 +1058,7 @@ the_plots1 <- bacterial_signature_asv %>%
       scale_alpha_manual(values = c("sig" = 1, "nonsig" = 0), guide = "none") +
       scale_linetype_manual(values = c("D_H" = 1, "D_D" = 1, "H_H" = 6), guide = "none") +
       theme_bw() +
-      theme(legend.position="none") + #remove legend for combining plots
+      #theme(legend.position="none") + #remove legend for combining plots
       #theme(plot.title = element_text(face = "italic")) +
       #remove x and y labels for combo plots
       xlab(NULL) +
@@ -1076,6 +1086,7 @@ the_plots1 <- bacterial_signature_asv %>%
   group_by(grouped_signatures) %>%
   reframe(combo_plots = list(wrap_plots(plot, ncol = 2)), path_plot = list(plot[asv_id == "ASV_65"]))
 
+the_plots$path_plot[[1]]
 
 #old way  
   #summarise(combo_plots = list(wrap_plots(plot))) %>%
@@ -1085,10 +1096,18 @@ the_plots1 <- bacterial_signature_asv %>%
 #view the plots
 the_plots$combo_plots[[1]]
 
+plot_for_legend <- the_plots$combo_plots[[1]]
+
 #combine plots
+library(ggpubr)
+
+the_plots$path_plot[[2]][[1]] # 700 x 450
+
 
 x_axis <- cowplot::get_plot_component(ggplot() + labs(x = "Time"), "xlab-b")
 y_axis <- cowplot::get_plot_component(ggplot() + labs(y = expression("Normalized log"[2]*" (cpm)")), "ylab-l")
+
+fancy_legend <- ggpubr::get_legend(plot_for_legend)
 
 design = "
 EAAL
@@ -1137,6 +1156,8 @@ list(
 
 spacer <- ggplot() + theme_void()
 
+ggplot() + fancy_legend
+
 list(
   the_plots$path_plot[[2]][[1]], # A
   the_plots$combo_plots[[1]], # B
@@ -1163,9 +1184,9 @@ EBBL
 "
 
 list(
-  the_plots$path_plot[[2]][[1]], # A
-  the_plots$combo_plots[[1]], # B
-  the_plots$combo_plots[[3]], # C
+  the_plots1$path_plot[[2]][[1]], # A
+  the_plots1$combo_plots[[1]], # B
+  the_plots1$combo_plots[[3]], # C
   x_axis, # D
   y_axis, # E
   fancy_legend, #L
@@ -1175,6 +1196,30 @@ list(
   wrap_plots() + 
   plot_layout(heights = c(1, 0.0325, 8, 0.0325, 1, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
   plot_annotation(tag_levels = list(c("A", "C", "", "B")))
+
+# no healthies
+design = "
+EAAPL
+ESSPL
+EBBPL
+#DDP#
+"
+
+list(
+  the_plots$path_plot[[2]][[1]] + theme(legend.position="none"), # A
+  the_plots$combo_plots[[3]] + plot_layout(guides = "collect") & theme(legend.position = "none"), # C
+  x_axis, # D
+  y_axis, # E
+  fancy_legend, #L
+  spacer, #P
+  spacer #S
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(1, 0.0325, 8, 0.0325), widths = c(0.25, 200, 200, 10, 50), design = design) +
+  plot_annotation(tag_levels = list(c("A", "B")))
+
+#export 1000 x 950
+
 
 #### Complex Upset with Doses ####
 

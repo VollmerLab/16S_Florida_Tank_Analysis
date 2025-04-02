@@ -3,11 +3,15 @@
 library(tidyverse)
 library(magrittr)
 library(phyloseq)
+
 #library(seqateurs) #for outputting ps to fasta file
 
 #### Read in data ####
 preprocess_metadata <- read_csv('../intermediate_files/preprocess_metadata.csv', 
                                 show_col_types = FALSE)
+
+H_D_samples <- preprocess_metadata %>% filter((exposure == "H" & final_disease_state == "D")) %>%
+  pull(sample_id)
 
 microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>% #ps_fl_tank.rds
   subset_taxa(Domain == "Bacteria" & #Domain used to be Kingdom
@@ -17,8 +21,41 @@ microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>% #p
                 Class != "Chloroplast" & 
                 Order != "Chloroplast")
 
+#remove H exposed that contract disease
+microbiome_raw <- subset_samples(microbiome_raw, !sample_names(microbiome_raw) %in% H_D_samples) 
+#remove fragments used to make the doses
+microbiome_raw <- subset_samples(microbiome_raw, time != "Acerv")
+
+#check initial values
+#homogenate doses and fragments used to make them
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(tank == "HOMO" | is.na(exposure)) %>% nrow()
+
+# T0
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T0" & tank != "HOMO") %>% nrow()
+
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T0" & tank != "HOMO") %>% pull(genotype) %>% unique() %>% length()
+
+# T3/T7
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T3" | time == "T7") %>% nrow()
+
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T3" | time == "T7") %>% pull(genotype) %>% unique() %>% length()
+
 #filter for at least 1000 reads
 microbiome_raw <- prune_samples(sample_sums(microbiome_raw)>=1000, microbiome_raw)
+
+#check values after 1000 read filter
+#homogenate doses and fragments used to make them
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(tank == "HOMO" | is.na(exposure)) %>% nrow()
+
+# T0
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T0" & tank != "HOMO") %>% nrow()
+
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T0" & tank != "HOMO") %>% pull(genotype) %>% unique() %>% length()
+
+# T3/T7
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T3" | time == "T7") %>% nrow()
+
+sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T3" | time == "T7") %>% pull(genotype) %>% unique() %>% length()
 
 #### Process Data ####
 #Split into repeated measures portion and input portion

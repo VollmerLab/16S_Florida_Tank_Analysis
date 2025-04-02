@@ -2,6 +2,8 @@ multiple_aggregation_levels <- c("none", "Genus", "Family", "Order")
 
 all_corr_results <- c()
 
+#aggregation_level <-  "Genus"
+
 agg_microbiome_data <- read_rds("../intermediate_files/updated_microbiome_data.rds")
 for(var in multiple_aggregation_levels) {
 
@@ -122,6 +124,18 @@ agg_venn_group <- agg_otu_tmm %>%
       normalized.lib.sizes = TRUE) %>%
   as_tibble(rownames = 'taxa_id') %>% pull(taxa_id)
 
+param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
+agg_dream_weights_fullInteraction <- voomWithDreamWeights(counts = agg_otu_tmm,
+                                                      formula = ~ model_comp + (1 | genotype) + (1 | tank),
+                                                      
+                                                      data = filter(agg_metadata, !str_detect(tank, 'homo|HOMO')) %>%
+                                                        filter(genotype %in% agg_longitudinal_genos) %>% #genos present in T3 and T7
+                                                        #filter(!(exposure == "H" & final_disease_state == "D")) %>%
+                                                        arrange(sample_id) %>%
+                                                        mutate(model_comp = str_c(time, exposure, susceptability)) %>%
+                                                        column_to_rownames('sample_id'),
+                                                      BPPARAM = param,
+                                                      plot = TRUE)
 
 
 #### ASV Modelling ####
@@ -132,6 +146,14 @@ agg_full_data <- agg_otu_tmm %>%
   pivot_longer(cols = -taxa_id,
                names_to = 'sample_id',
                values_to = 'log2_cpm') %>%
+  left_join(agg_dream_weights_fullInteraction$weights %>%
+              set_colnames(colnames(agg_dream_weights_fullInteraction$E)) %>%
+              set_rownames(rownames(agg_dream_weights_fullInteraction$E)) %>%
+              as_tibble(rownames = 'taxa_id') %>%
+              pivot_longer(cols = -taxa_id,
+                           names_to = 'sample_id',
+                           values_to = 'weight'),
+            by = c('taxa_id', 'sample_id')) %>%
   left_join(as_tibble(agg_otu_tmm$counts, rownames = 'taxa_id') %>%
               pivot_longer(cols = -taxa_id,
                            names_to = 'sample_id',
@@ -171,6 +193,8 @@ t0_corr_test <- agg_normalized_asv_counts %>%
 all_corr_results <- rbind(all_corr_results, t0_corr_test)
 }
 
+all_corr_results %>% filter(fdr_p.value < 0.05)
+
 #previous probiotic associations
 all_corr_results %>% filter(taxa_id %in% c("MD3_55", "Endozoicomonas", "Myxococcales"))
 
@@ -208,4 +232,18 @@ ggplot(corr_plot) +
   scale_color_manual(values = c("none" = "#CB3309", "Genus" = "#E6AC0E", "Family" = "#397DBB")) +
   coord_flip() +
   theme_bw()
+#export 1200x900
+
+
+ggplot(corr_plot, aes(x = Family, y = estimate, col = agg_level)) +
+  geom_hline(yintercept = 0) +
+  geom_boxplot(position = position_dodge(0.75)) +
+  geom_point(data = corr_plot %>% filter(agg_level == "Family"), fill = "#397DBB", 
+             position = position_dodge(0.75), pch = 21, size = 2) + #data = (corr_plot %>% filter(agg_level == "none")),
+  scale_color_manual(values = c("none" = "#CB3309", "Genus" = "#E6AC0E", "Family" = "transparent"),
+                     name = "Aggregation Level", breaks = c("none", "Genus", "Family"), 
+                     labels = c("ASV", "Genus", "Family")) +
+  coord_flip() +
+  theme_bw() +
+  ylab("Correlation Coefficient (r)")
 #export 1200x900

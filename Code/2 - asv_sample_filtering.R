@@ -1,4 +1,4 @@
-setwd("/Users/emilytrytten/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
+setwd("/Users/Emily/Desktop/GitHub/16S_Florida_Tank_Analysis/Code")
 
 #### Libraries ####
 library(magrittr)
@@ -571,7 +571,7 @@ tax_name("Candidatus Berkiella", db = "ncbi", get = c("Phylum", "Class", "Order"
   select(-db) %>%
   dplyr::rename("Genus" = "query")
 
-#our ASVs with the most up to date taxonomy, use for downstream purposes
+#our ASVs with the most up to date taxonomy - almost
 full_taxonomy <- combined_taxonomy %>%
   select(-c(Phylum:Family)) %>%
   left_join(nonoverlapping_taxonomy, by = join_by(Genus)) %>%
@@ -581,8 +581,8 @@ full_taxonomy <- combined_taxonomy %>%
   arrange(parse_number(asv_id)) %>%
   mutate(Order = ifelse(Family == "Puniceicoccaceae", "Puniceicoccales", Order)) %>%
   mutate(Family = ifelse(Family == "Unknown Family_4", "Coxiellaceae", Family))
-#mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
-#       Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
+  #mutate(Class = ifelse(Order == "Verrucomicrobiales", "Verrucomicrobiia", Class), #fixing misclassifications of Class
+  #      Class = ifelse(Order == "Puniceicoccales", "Opitutia", Class))
 
 
 #make version of microbiome data ps to update the taxonomy in
@@ -603,7 +603,6 @@ metadata <- sample_data(updated_microbiome_data) %>%
 
 #resolve multiple classifications
 # i.e. one family is listed as different classes or orders
-
 aggregated_microbiome_data <- aggregate_taxa(updated_microbiome_data, "Family")
 
 nonunique_taxonomy_families <- tax_table(aggregated_microbiome_data) %>%
@@ -642,8 +641,70 @@ unique_family_level_taxonomy <-  tax_table(updated_microbiome_data) %>%
   mutate(Class = ifelse(is.na(Class) & Order == "Polyangiales", "Polyangia", Class),
          Class = ifelse(is.na(Class) & Order == "Haliangiales", "Polyangia", Class))
 
+# fix by order now
+
+aggregated_microbiome_data_o <- aggregate_taxa(updated_microbiome_data, "Order")
+
+nonunique_taxonomy_orders <- tax_table(aggregated_microbiome_data_o) %>%
+  as.data.frame() %>%
+  as_tibble() %>%
+  filter(str_detect(unique, "_")) %>%
+  pull(Order) %>%
+  unique()
+
+# ncbi_classifications_by_order <- tax_name(nonunique_taxonomy_orders, db = "ncbi",
+#                                            get = c("Phylum", "Class")) %>%
+#   select(-c(db)) %>%
+#   dplyr::rename("Order" = "query")
+# 
+# write_csv(ncbi_classifications_by_order, "../intermediate_files/ncbi_classifications_for_order_overlaps.csv")
+
+ncbi_classifications_by_order <- read_csv("../intermediate_files/ncbi_classifications_for_order_overlaps.csv")
+
+new_tax_just_non_unique_orders <- unique_family_level_taxonomy %>%
+  filter(Order %in% nonunique_taxonomy_orders) %>%
+  select(-c(Phylum, Class)) %>%
+  left_join(ncbi_classifications_by_order, by = join_by("Order")) %>%
+  relocate(c(Phylum, Class), .after = Domain)
+
+unique_family_order_level_taxonomy <-  unique_family_level_taxonomy %>%
+  filter(!Order %in% nonunique_taxonomy_orders) %>%
+  rbind(new_tax_just_non_unique_orders) %>%
+  arrange(parse_number(asv_names))
+
+# fix by class now
+
+aggregated_microbiome_data_c <- aggregate_taxa(updated_microbiome_data, "Class")
+
+nonunique_taxonomy_classes <- tax_table(aggregated_microbiome_data_c) %>%
+  as.data.frame() %>%
+  as_tibble() %>%
+  filter(str_detect(unique, "_")) %>%
+  pull(Class) %>%
+  unique()
+
+# ncbi_classifications_by_class <- tax_name(nonunique_taxonomy_classes, db = "ncbi",
+#                                            get = c("Phylum")) %>%
+#   select(-c(db)) %>%
+#   dplyr::rename("Class" = "query")
+# 
+# write_csv(ncbi_classifications_by_class, "../intermediate_files/ncbi_classifications_for_class_overlaps.csv")
+
+ncbi_classifications_by_class <- read_csv("../intermediate_files/ncbi_classifications_for_class_overlaps.csv")
+
+new_tax_just_non_unique_classes <- unique_family_order_level_taxonomy %>%
+  filter(Class %in% nonunique_taxonomy_classes) %>%
+  select(-c(Phylum)) %>%
+  left_join(ncbi_classifications_by_class, by = join_by("Class")) %>%
+  relocate(c(Phylum), .after = Domain)
+
+unique_family_order_class_level_taxonomy <-  unique_family_order_level_taxonomy %>%
+  filter(!Class %in% nonunique_taxonomy_classes) %>%
+  rbind(new_tax_just_non_unique_classes) %>%
+  arrange(parse_number(asv_names))
+
 #re-add back to phyloseq object
-tax_table(updated_microbiome_data) <- unique_family_level_taxonomy %>%
+tax_table(updated_microbiome_data) <- unique_family_order_class_level_taxonomy %>%
   column_to_rownames("asv_names") %>%
   as.matrix()
 
@@ -711,6 +772,44 @@ cysteiniphilum_seqs <- sequences[cysteiniphilums]
 sequences["ASV_65"]
 
 #write.fasta(as.list(cysteiniphilum_seqs), names = names(cysteiniphilum_seqs), open = "w", file.out = "cysteiniphilums.fa")
+library(seqinr)
+write.fasta(as.list(sequences), names = names(sequences), file.out = "florida_ch1_microbes.fa")
+
+temp_tax <- up_melt %>% as_tibble() %>% select(OTU, Domain:Species)
+
+seq_lengths <- sequences %>% stack() %>% as_tibble() %>% 
+  rename("asv_id" = "ind", "sequence" = "values") %>% 
+  relocate(asv_id, .before = sequence) %>%
+  mutate(seq_length = nchar(sequence)) %>%
+  left_join(temp_tax, by = join_by("asv_id" == "OTU"))
+
+#how many pass filtering
+normalized_asv_counts %>%
+  mutate(Genus = ifelse(Genus %in% c("Cysteiniphilum", "Vibrio", "Thalassotalea"), Genus, "Other"),
+         Genus = factor(Genus, levels = c("Cysteiniphilum", "Thalassotalea", "Vibrio", "Other"))) %>%
+  select(asv_id, Genus, Species) %>%
+  distinct() %>% group_by(Genus) %>% reframe(n = n())
+
+#how many initially
+seq_lengths %>%
+  mutate(Genus = ifelse(Genus %in% c("Cysteiniphilum", "Vibrio", "Thalassotalea"), Genus, "Other"),
+         Genus = factor(Genus, levels = c("Cysteiniphilum", "Thalassotalea", "Vibrio", "Other"))) %>%
+  distinct() %>% group_by(Genus) %>% reframe(n = n())
+
+
+fl_seqs <- seq_lengths %>%
+  mutate(Genus = ifelse(Genus %in% c("Cysteiniphilum", "Vibrio", "Thalassotalea"), Genus, "Other"),
+         Genus = factor(Genus, levels = c("Cysteiniphilum", "Thalassotalea", "Vibrio", "Other"))) %>%
+  filter(!is.na(Genus)) %>%
+  distinct() %>%
+  ggplot() +
+  geom_histogram(aes(x = seq_length, fill = Genus), bins = 17) +
+  theme_bw() +
+  scale_fill_manual(values = c("maroon", "forestgreen", "purple", "gray70")) +
+  ggtitle("Florida") + 
+  xlim(380, 420)
+
+max(seq_lengths$seq_length)
 
 #### Alpha Posthocs ####
 # posthoc_order <- c('T0.F.F', 'T3.D.D', 'T3.D.H', 'T3.H.H', 'T7.D.D', 'T7.D.H', 'T7.H.H')
@@ -1007,7 +1106,9 @@ chao1_plot <- alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") 
   geom_text(data = sig_lines %>% filter(metric == "chao1"),
              aes(x = text_x, y = 400 + 10 + line_order*26.667,
                  label = pval_label), col = "gray20", size = 6) +
-  scale_alpha_manual(values = c("yes" = 1, "no" = 0))
+  scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
+  theme(axis.text = element_text(size=11),
+        axis.title = element_text(size=12))
 
 #CORE ABUN
 core_abun_plot <- alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") +
@@ -1020,7 +1121,9 @@ core_abun_plot <- alpha_graphs_manuscript$plot[[2]] + theme(legend.position="non
             aes(x = text_x, y = 0.75 + 0.01 + line_order*0.05,
                 label = pval_label), col = "gray20", size = 6) +
   scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
-  ylim(0, 1)
+  ylim(0, 1) +
+  theme(axis.text = element_text(size=11),
+        axis.title = element_text(size=12))
 
 
 fancy_legend <- cowplot::get_legend(alpha_graphs_manuscript$plot[[2]])
@@ -1205,7 +1308,9 @@ top_level <- "Order"
 nested_level <- "Genus"
 sample_order <- NULL
 
-melted_ps %>% filter(Order == "Verrucomicrobiales") %>% select(Domain:Species) %>% distinct()
+up_melt <- updated_microbiome_data %>% psmelt()
+
+up_melt %>% as_tibble() %>% filter(Genus %in% c("MD3-55", "Rickettsia")) %>% select(Domain:Species) %>% distinct()
 
 top_asv <- nested_top_taxa(updated_microbiome_data,
                               top_tax_level = "Order",
@@ -1285,7 +1390,7 @@ custom_palette <- taxon_colours(top_asv$ps_obj,
 # Generate the plot
 
 
-mod_ggnested(psdf,
+checking <- mod_ggnested(psdf,
               aes_string(main_group = top_level,
                          sub_group = nested_level,
                          x = "Sample",
@@ -1301,9 +1406,25 @@ mod_ggnested(psdf,
                                                         "Healthy", "T3 Diseased" = str_wrap("Disease- Exposed", 10), "T3_H_H" = str_wrap("Healthy- Exposed", 10),
                                                       "T7_H_H" = str_wrap("Healthy Control", 10),
                                                       "T7_D_H" = str_wrap("Disease- Exposed Healthy", 10), "T7_D_D" = "Diseased")) +
-  guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")), ncol = 2),
-         col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))), ncol = 2) +
-  ylab("Relative Abundance")
+  guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")), nrow = 32),
+         col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))), nrow = 32) +
+  ylab("Relative Abundance") +
+  theme(axis.text = element_text(size=12),
+        axis.title = element_text(size=13),
+        legend.title = element_text(size=13),
+        strip.text = element_text(size=12))
+
+
+hmm <- ggpubr::get_legend(checking)
+
+hmm$grobs[[1]]
+hmm$grobs[[2]]
+
+editGrob(hmm$grobs[[1]], )
+
+hmm$layout
+
+ggplot() + hmm
 
 fantaxtic_palette <- get_mod_ggnested_palette(psdf,
              aes_string(main_group = top_level,
