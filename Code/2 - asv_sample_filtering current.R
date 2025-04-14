@@ -481,6 +481,9 @@ process_postHoc <- function(posthoc){
 #### Data ####
 aggregation_level <- 'none' #or none
 
+#for cyanos
+microbiome_data <- processed_microbiome
+
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
@@ -724,6 +727,15 @@ tax_table(updated_microbiome_data) %>%
   nrow()
 
 #write_rds(updated_microbiome_data, "../intermediate_files/updated_microbiome_data.rds")
+
+#### read in updated taxonomy ####
+updated_microbiome_data <- read_rds("../intermediate_files/updated_microbiome_data.rds")
+
+metadata <- sample_data(updated_microbiome_data) %>%
+  as_tibble(rownames = 'sample_id') %>%
+  dplyr::select(-retain_sample) %>%
+  mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
+         .after = sample_id)
 
 #melted ps
 melted_ps <- phyloseq_filter_prevalence(updated_microbiome_data, 
@@ -1626,7 +1638,7 @@ full_data <- otu_tmm %>%
 
 
 full_data %>% group_by(Order) %>% summarize(counts = sum(log2_cpm)) %>% arrange(desc(counts))
-
+full_data %>% filter(Phylum == "Cyanobacteria")
 
 #filtered for the 
 write_csv(full_data, '../intermediate_files/fully_preprocessed_samples.csv.gz')

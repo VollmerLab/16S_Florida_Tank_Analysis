@@ -21,6 +21,12 @@ microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>% #p
                 Class != "Chloroplast" & 
                 Order != "Chloroplast")
 
+#to investigate cyanobacteria
+microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>% #ps_fl_tank.rds
+  subset_taxa(Domain == "Bacteria" & #Domain used to be Kingdom
+                !is.na(Phylum) &
+                Family != "Mitochondria")
+
 #remove H exposed that contract disease
 microbiome_raw <- subset_samples(microbiome_raw, !sample_names(microbiome_raw) %in% H_D_samples) 
 #remove fragments used to make the doses
