@@ -252,6 +252,26 @@ normalized_asv_counts %>%
   group_by(final_disease_state) %>%
   reframe(num_of_fragments = n())
 
+normalized_asv_counts %>%
+  filter(time == "T3") %>%
+  select(fragment_id) %>%
+  distinct() %>%
+  reframe(num_of_fragments = n())
+
+
+library(ggvenn)
+#venn showing whether genos are fully crossed exposure and time
+normalized_asv_counts %>%
+  select(time, exposure, genotype) %>%
+  filter(time != "T0") %>%
+  distinct() %>%
+  mutate(cat = paste(time, exposure, sep = "_"), sig = TRUE) %>%
+  select(-c(time, exposure)) %>%
+  pivot_wider(names_from = cat, values_from = sig) %>%
+  mutate(across(T3_D:T7_H, ~ifelse(is.na(.), FALSE, .))) %>%
+  ggvenn()
+
+
 #### Prevalence of Cysteiniphilum ####
 
 normalized_asv_counts %>% 
@@ -356,7 +376,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
     mutate(fit_model(log2_cpm ~ treatment + (1 | genotype) + #(1 | tank),
                        (0 + dummy(tank_field, c("tank")) | tank),
                      data, 
-                     use_weights = FALSE),
+                     use_weights = TRUE),
            random_anova = list(rand(model)),
            process_model(model, re_model, random_anova),
            posthoc = list(run_posthoc(model, posthoc_categories))) %>%

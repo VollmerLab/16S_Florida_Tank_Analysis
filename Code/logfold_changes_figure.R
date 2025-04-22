@@ -335,23 +335,23 @@ relayer_logfold_change_for_legend <- ggplot(altered_data_make_legend, aes(x = as
   (geom_point(data = (altered_data_make_legend %>% filter(comparison == "outcome")), aes(colour1 = graph_pval, fill1 = graph_pval), pch = 23, size = 3, stroke = 1) %>%
      rename_geom_aes(new_aes = c("colour" = "colour1", "fill" = "fill1"))) + 
   scale_color_manual(aesthetics = "colour1", values = c("#FF7D1A", "#FF7D1A"), guide = "legend", 
-                     name = "Outcome Main Effect", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Non-Significant")) +
+                     name = "Outcome", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Nonsignificant")) +
   scale_fill_manual(aesthetics = "fill1", values = c("#FF7D1A", "transparent"), guide = "legend", 
-                    name = "Outcome Main Effect", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Non-Significant")) +
+                    name = "Outcome", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Nonsignificant")) +
   #Dose main effect
   (geom_point(data = (altered_data_make_legend %>% filter(comparison == "dose")), aes(colour3 = graph_pval, fill3 = graph_pval), pch = 22, size = 4, stroke = 1) %>%
      rename_geom_aes(new_aes = c("colour" = "colour3", "fill" = "fill3"))) + 
   scale_color_manual(aesthetics = "colour3", values = c("#732dcf", "#732dcf"), guide = "legend", 
-                     name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Non-Significant")) +
+                     name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Nonsignificant")) +
   scale_fill_manual(aesthetics = "fill3", values = c("#732dcf", "transparent"), guide = "legend", 
-                    name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Non-Significant")) +
+                    name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Nonsignificant")) +
   #exposure main effect
   (geom_point(data = (altered_data_make_legend %>% filter(comparison == "DD_vs_DH_late")), aes(colour4 = graph_pval, fill4 = graph_pval), pch = 24, size = 3, stroke = 1) %>%
      rename_geom_aes(new_aes = c("colour" = "colour4", "fill" = "fill4"))) + 
   scale_color_manual(aesthetics = "colour4", values = c("#BA0D0D", "#BA0D0D"), guide = "legend", 
-                     name = str_wrap("Outcome Post Hoc", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Non-Significant")) +
+                     name = str_wrap("Outcome within Disease-Exposed Tanks", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Nonsignificant")) +
   scale_fill_manual(aesthetics = "fill4", values = c("#BA0D0D", "transparent"), guide = "legend", 
-                    name = str_wrap("Outcome Post Hoc", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Non-Significant")) +
+                    name = str_wrap("Outcome within Disease-Exposed Tanks", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Nonsignificant")) +
   coord_flip() +
   theme_bw() +
   guides(#outcome

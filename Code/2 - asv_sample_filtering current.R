@@ -1200,6 +1200,15 @@ normalized_asv_counts %>%
 #64 D exposed, 44 H exposed
 
 
+# get alpha inc/dec stats for manuscript
+alpha_significant_models %>%
+  select(metric, contains("t0"), contains("t3"), contains("t7")) %>% 
+  filter(metric %in% c("dominance_core_abundance", "chao1")) %>%
+  pivot_longer(cols = !metric, names_to = "val", values_to = "num") %>%
+  mutate(time = str_after_first(val, "_"), val = str_before_first(val, "_")) %>%
+  pivot_wider(names_from = val, values_from = num)
+
+
 #### Microshades Microbe Abundance ####
 
 mdf_prep_test1 <- updated_microbiome_data %>%
@@ -1591,18 +1600,18 @@ otu_tmm$counts %>%
 
 
 #### Variance weighting ####
-# param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
-# dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm, 
-#                                   formula = ~ model_comp + (1 | genotype) + (1 | tank),
-#                                   
-#                                   data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
-#                                     filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
-#                                     filter(!(exposure == "H" & final_disease_state == "D")) %>%
-#                                     arrange(sample_id) %>%
-#                                     mutate(model_comp = str_c(time, exposure, susceptability)) %>%
-#                                     column_to_rownames('sample_id'),
-#                                   BPPARAM = param, 
-#                                   plot = TRUE)
+param <- SnowParam(parallel::detectCores() - 1, "SOCK", progressbar = TRUE)
+dream_weights_fullInteraction <- voomWithDreamWeights(counts = otu_tmm,
+                                  formula = ~ model_comp + (1 | genotype) + (1 | tank),
+
+                                  data = filter(metadata, !str_detect(tank, 'homo|HOMO')) %>%
+                                    filter(genotype %in% longitudinal_genos) %>% #genos present in T3 and T7
+                                    filter(!(exposure == "H" & final_disease_state == "D")) %>%
+                                    arrange(sample_id) %>%
+                                    mutate(model_comp = str_c(time, exposure, susceptability)) %>%
+                                    column_to_rownames('sample_id'),
+                                  BPPARAM = param,
+                                  plot = TRUE)
 
 #### ASV Modelling ####
 full_data <- otu_tmm %>%
@@ -1612,14 +1621,14 @@ full_data <- otu_tmm %>%
   pivot_longer(cols = -asv_id,
                names_to = 'sample_id',
                values_to = 'log2_cpm') %>%
-  # left_join(dream_weights_fullInteraction$weights %>% 
-  #             set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
-  #             set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
-  #             as_tibble(rownames = 'asv_id') %>%
-  #             pivot_longer(cols = -asv_id,
-  #                          names_to = 'sample_id',
-  #                          values_to = 'weight'),
-  #           by = c('asv_id', 'sample_id')) %>%
+  left_join(dream_weights_fullInteraction$weights %>%
+              set_colnames(colnames(dream_weights_fullInteraction$E)) %>%
+              set_rownames(rownames(dream_weights_fullInteraction$E)) %>%
+              as_tibble(rownames = 'asv_id') %>%
+              pivot_longer(cols = -asv_id,
+                           names_to = 'sample_id',
+                           values_to = 'weight'),
+            by = c('asv_id', 'sample_id')) %>%
   left_join(as_tibble(otu_tmm$counts, rownames = 'asv_id') %>%
               pivot_longer(cols = -asv_id,
                            names_to = 'sample_id',
