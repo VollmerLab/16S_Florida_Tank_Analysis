@@ -481,9 +481,6 @@ process_postHoc <- function(posthoc){
 #### Data ####
 aggregation_level <- 'none' #or none
 
-#for cyanos
-microbiome_data <- processed_microbiome
-
 microbiome_data <- read_rds("../intermediate_files/preprocess_microbiome.rds")
 metadata <- sample_data(microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
