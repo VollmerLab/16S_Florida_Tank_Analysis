@@ -1196,7 +1196,6 @@ normalized_asv_counts %>%
   reframe(frag_num = n())
 #64 D exposed, 44 H exposed
 
-
 # get alpha inc/dec stats for manuscript
 alpha_significant_models %>%
   select(metric, contains("t0"), contains("t3"), contains("t7")) %>% 

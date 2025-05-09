@@ -942,7 +942,7 @@ full_data <- otu_tmm %>%
 write_csv(full_data, '../intermediate_files/fully_preprocessed_samples.csv.gz')
 
 
-#### ProcessHomogenate Dose Data ####
+#### Process Homogenate Dose Data ####
 homogenate_data <- updated_microbiome_data %>%
   subset_samples(str_detect(tank, 'HOMO')) %>%
   otu_table() %>%

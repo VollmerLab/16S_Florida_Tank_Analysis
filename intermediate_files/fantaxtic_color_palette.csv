@@ -1,0 +1,51 @@
+Order,Genus,group_colour,subgroup_colour,group_subgroup
+Other,Other,gray75,gray75,Other - Other
+Alteromonadales,Thalassotalea,#2e1b09,#6A3E15,Alteromonadales - Thalassotalea
+Alteromonadales,Alteromonas,#2e1b09,#8B613B,Alteromonadales - Alteromonas
+Alteromonadales,Pseudoalteromonas,#2e1b09,#AC8661,Alteromonadales - Pseudoalteromonas
+Alteromonadales,Algicola,#2e1b09,#CDAA87,Alteromonadales - Algicola
+Alteromonadales,Other Alteromonadales,#2e1b09,#EFCEAE,Alteromonadales - Other Alteromonadales
+Flavobacteriales,Seonamhaeicola,#F873BE,#F986C7,Flavobacteriales - Seonamhaeicola
+Flavobacteriales,Dokdonia,#F873BE,#FA99D0,Flavobacteriales - Dokdonia
+Flavobacteriales,Allomuricauda,#F873BE,#FBACD9,Flavobacteriales - Allomuricauda
+Flavobacteriales,Flavobacterium,#F873BE,#FCBFE2,Flavobacteriales - Flavobacterium
+Flavobacteriales,Other Flavobacteriales,#F873BE,#FDD3EB,Flavobacteriales - Other Flavobacteriales
+Oceanospirillales,Oleiphilus,#078090,#0AAFC5,Oceanospirillales - Oleiphilus
+Oceanospirillales,Oceanobacter,#078090,#34C0D2,Oceanospirillales - Oceanobacter
+Oceanospirillales,Neptuniibacter,#078090,#5ED1E0,Oceanospirillales - Neptuniibacter
+Oceanospirillales,Alcanivorax,#078090,#88E2ED,Oceanospirillales - Alcanivorax
+Oceanospirillales,Other Oceanospirillales,#078090,#B2F3FB,Oceanospirillales - Other Oceanospirillales
+Puniceicoccales,Coraliomargarita,#380135,#C403BA,Puniceicoccales - Coraliomargarita
+Puniceicoccales,Ruficoccus,#380135,#FC5AF3,Puniceicoccales - Ruficoccus
+Rhodobacterales,Ruegeria,#CA6200,#F97900,Rhodobacterales - Ruegeria
+Rhodobacterales,Thalassovita,#CA6200,#FA912D,Rhodobacterales - Thalassovita
+Rhodobacterales,Shimia,#CA6200,#FCA95B,Rhodobacterales - Shimia
+Rhodobacterales,Sulfitobacter,#CA6200,#FDC188,Rhodobacterales - Sulfitobacter
+Rhodobacterales,Other Rhodobacterales,#CA6200,#FFDAB6,Rhodobacterales - Other Rhodobacterales
+Rickettsiales,MD3-55,#051900,#146600,Rickettsiales - MD3-55
+Rickettsiales,Rickettsia,#051900,#3A8C26,Rickettsiales - Rickettsia
+Rickettsiales,Lyticum,#051900,#60B24C,Rickettsiales - Lyticum
+Rickettsiales,Candidatus Cyrtobacter,#051900,#86D872,Rickettsiales - Candidatus Cyrtobacter
+Rickettsiales,Other Rickettsiales,#051900,#ADFF99,Rickettsiales - Other Rickettsiales
+Saprospirales,Aureispira,#111787,#171FB8,Saprospirales - Aureispira
+Saprospirales,Lewinella,#111787,#3F45C7,Saprospirales - Lewinella
+Saprospirales,Phaeodactylibacter,#111787,#676CD7,Saprospirales - Phaeodactylibacter
+Saprospirales,Saprospira,#111787,#8F93E6,Saprospirales - Saprospira
+Saprospirales,Other Saprospirales,#111787,#B7BAF6,Saprospirales - Other Saprospirales
+Spirochaetales,Spirochaeta 2,#500078,#8D00D3,Spirochaetales - Spirochaeta 2
+Spirochaetales,Treponema,#500078,#B245E9,Spirochaetales - Treponema
+Spirochaetales,Other Spirochaetales,#500078,#D88AFF,Spirochaetales - Other Spirochaetales
+Thiotrichales,Cysteiniphilum,#590404,#970707,Thiotrichales - Cysteiniphilum
+Thiotrichales,Francisella,#590404,#B02F2F,Thiotrichales - Francisella
+Thiotrichales,Methylophaga,#590404,#C95757,Thiotrichales - Methylophaga
+Thiotrichales,Candidatus Endoecteinascidia,#590404,#E27F7F,Thiotrichales - Candidatus Endoecteinascidia
+Thiotrichales,Other Thiotrichales,#590404,#FBA8A8,Thiotrichales - Other Thiotrichales
+Verrucomicrobiales,Haloferula,#7B9B08,#A3CE0B,Verrucomicrobiales - Haloferula
+Verrucomicrobiales,Rubritalea,#7B9B08,#B5D935,Verrucomicrobiales - Rubritalea
+Verrucomicrobiales,Fucophilus,#7B9B08,#C7E45F,Verrucomicrobiales - Fucophilus
+Verrucomicrobiales,Roseibacillus,#7B9B08,#D9EF89,Verrucomicrobiales - Roseibacillus
+Verrucomicrobiales,Other Verrucomicrobiales,#7B9B08,#ECFBB4,Verrucomicrobiales - Other Verrucomicrobiales
+Vibrionales,Vibrio,#7C2C00,#C44600,Vibrionales - Vibrio
+Vibrionales,Photobacterium,#7C2C00,#D76E34,Vibrionales - Photobacterium
+Vibrionales,Enterovibrio,#7C2C00,#EB9768,Vibrionales - Enterovibrio
+Vibrionales,Other Vibrionales,#7C2C00,#FFC09D,Vibrionales - Other Vibrionales
