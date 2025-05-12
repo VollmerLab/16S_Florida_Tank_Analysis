@@ -858,12 +858,6 @@ fantaxtic_palette <- get_mod_ggnested_palette(psdf,
 
 write_csv(fantaxtic_palette, "../intermediate_files/fantaxtic_color_palette.csv")
 
-
-
-
-
-
-
 #### ASV Sample Filtering ####
 
 #where are OTUs present across all times and in the doses

@@ -1,15 +1,11 @@
-fantaxtic_genus_colors <- fantaxtic_palette %>% 
-  ungroup() %>%
-  select(Genus, subgroup_colour)
 
-test <- fantaxtic_palette %>% 
-  ungroup() %>%
-  select(Genus, subgroup_colour) %>%
-  mutate(combo = str_c("'", Genus, "' = '", subgroup_colour, "'")) %>%
-  pull(combo)
+order_placeholders <- fantaxtic_palette %>% mutate(Genus = NA, group_colour = "white", subgroup_colour = "white", group_subgroup = NA) %>%
+  distinct() %>% mutate(Genus = sprintf("**%s**", as.character(Order)))
 
+full_palette <- rbind(fantaxtic_palette, order_placeholders)
 
-
+fantaxtic_testpalette <- full_palette$subgroup_colour
+names(fantaxtic_testpalette) <- full_palette$Genus
 
 m_sig_classified_asvs <-  sig_classified_asvs %>% left_join(fantaxtic_genus_colors, by = join_by(Genus)) %>%
   mutate(subgroup_colour = ifelse(is.na(subgroup_colour), "gray75", subgroup_colour))
@@ -100,6 +96,9 @@ ordered_fantaxtic_factoring <- fantaxtic_palette %>%
          Genus = ifelse(is.na(Genus), sprintf("**%s**", as.character(Order)), as.character(Genus)),
          group_subgroup = ifelse(is.na(group_subgroup), Genus, group_subgroup))
 
+test123 <- ordered_fantaxtic_factoring$subgroup_colour
+names(test123) <- ordered_fantaxtic_factoring$Genus
+
 m_sig_classified_asvs <- sig_classified_asvs %>% 
   left_join(fantaxtic_palette %>% select(-group_colour), by = join_by(Order, Genus)) %>%
   mutate(plot_genus = Genus) %>%
@@ -141,14 +140,15 @@ m_sig_classified_asvs <- sig_classified_asvs %>%
 
 
 upset(m_sig_classified_asvs %>% select(-c(contains("DD"))),
-      colnames(m_sig_classified_asvs %>% select(-c(asv_id, subgroup_colour, plot_genus, outline, group_subgroup, colnames(taxonomy_tibble %>% select(-asv_names)), contains("DD"))) %>%
+      colnames(m_sig_classified_asvs %>% select(-c(asv_id, subgroup_colour, plot_genus, outline, group_subgroup, colnames(taxonomy_tibble), contains("DD"))) %>%
                  relocate(`Tank Effect`, contains("Healthy"), contains("Outcome"))),
       base_annotations=list(
         'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                               bar_number_threshold = 25,
                                               mapping=aes(fill=plot_genus, col = outline) #, col = "gray10"
          ) +
-          scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) +
+          #scale_fill_manual(values = test_list, limits = m_sig_classified_asvs$plot_genus %>% unique()) +
+          scale_fill_manual(values = test123, limits = m_sig_classified_asvs$plot_genus %>% unique()) +
           scale_color_manual(values = c("yes" = "red", "no" = "white")) +
           theme_nested(legend.position=c(1.06,0.2)) +
           guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")),
