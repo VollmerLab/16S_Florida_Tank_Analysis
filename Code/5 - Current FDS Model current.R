@@ -1112,6 +1112,20 @@ the_plots$path_plot[[1]]
   #summarise(combo_plots = list(wrap_plots(plot))) %>%
   #pull(combo_plots) + plot_layout(guides = "none") & plot_annotation(title = grouped_signatures)))
 
+#doesnt work
+# mutate(asv_taxa_labels = case_when(
+#   #if family is NA, use a higher rank and add sp. and the ASV number (no italics)
+#   is.na(Family) ~ str_c(taxonomy_for_graph, "sp.", formatted_ASV, sep = " "),
+#   #if species is NA, use family genus sp. (family and genus italicized)
+#   is.na(Species) ~ list(substitute(italic(taxonomy_for_graph)~species_abbrev~formatted_ASV, 
+#                                    list(taxonomy_for_graph = taxonomy_for_graph, species_abbrev = "sp.", 
+#                                         formatted_ASV = formatted_ASV))),
+#   #if theres species-level classifications, use family genus species (all italicized)
+#   TRUE ~ list(substitute(italic(taxonomy_for_graph)~formatted_ASV, list(taxonomy_for_graph = taxonomy_for_graph, 
+#                                                                         formatted_ASV = formatted_ASV)))
+# ))
+
+
   
 #view the plots
 the_plots$combo_plots[[1]]

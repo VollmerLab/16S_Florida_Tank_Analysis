@@ -10,28 +10,14 @@ library(forcats)
 library(ComplexUpset)
 library(ggupset)
 library(ggnested)
-
-
-
-library(vegan)
-
-library(EcolUtils)
-library(formattable)
-library(RColorBrewer)
-library(magrittr)
-library(emmeans)
-library(ggupset)
-library(qvalue)
 library(relayer) #devtools::install_github("clauswilke/relayer")
-
-library(corrplot)
-library(Hmisc)
-library(broom.mixed)
-library(taxize)
-
-library(rempsyc)
-
 library(patchwork)
+library(ggpubr)
+library(vegan)
+library(emmeans)
+library(rempsyc)
+library(glue)
+library(ggtext)
 
 refit_models <- TRUE
 
@@ -246,6 +232,9 @@ taxonomy_tibble <- tax_table(read_rds("../intermediate_files/updated_microbiome_
   as.data.frame() %>% 
   as_tibble()
 
+#detection limit of 5.202306
+detection_limit <- normalized_asv_counts %>% select(log2_cpm) %>% min()
+
 #### Miscellaneous Manuscript Metrics ####
 
 #range of disease resistance scores for T0 corals
@@ -281,9 +270,6 @@ normalized_asv_counts %>% group_by(log2_cpm) %>% summarize(n = n()) %>%
   arrange(desc(n)) %>% slice(1:30) %>%
   ggplot() + geom_col(aes(x = fct_reorder(factor(log2_cpm), n), y = n), fill = "slategray3") +
   coord_flip() + theme_bw() + xlab("Log2 CPM") + ylab("Number of times observed")
-
-#detection limit of 5.202306
-detection_limit <- normalized_asv_counts %>% select(log2_cpm) %>% min()
 
 #T7
 t7_mc_samples <- normalized_asv_counts %>% 
@@ -393,7 +379,7 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
   write_csv(select(asv_models, -where(is.list)), '../intermediate_files/mixed_model_results.csv.gz')
 }
 
-#### Main Effects Upset ####
+#### Process Post Hoc Comparisons ####
 
 #229 ASVs are significant for treatment in the main model
 asv_models %>%
@@ -701,134 +687,145 @@ upset(upset_sig_classified_asvs %>% filter(!`Tank Effect`) %>% group_by(Order) %
 
 #export 2000x1100
 
-
-
-
-
-
-
-
-
-#### Fancy Plots ####
+#### Abundance Over Time Plots ####
 
 ## Prep Data for Homogenate Dose Panel
 
+#run homogenate linear models and prep data for plotting
 homogenate_models <- homogenate_data %>%
   nest_by(asv_id) %>%
-  mutate(model = list(lm(log2_cpm ~ exposure, data = data))) %>%
+  mutate(model = list(lm(log2_cpm ~ exposure, data = data))) %>% #run lm model for homogenate doses
   mutate(homogenate_pred = list(model %>%
                                   broom::tidy(conf.int = TRUE) %>%
                                   mutate(term = case_when(term == "(Intercept)" ~ "D",
                                                           term == "exposureH" ~ "H")) %>%
+                                  #D is the intercept, so you get the true values for H by adding the intercept value to the exposureH value:
                                   mutate(estimate = ifelse(term == "H", estimate[term == "H"] + estimate[term == "D"], estimate),
                                          std.error = NA,
                                          statistic = ifelse(term == "H", statistic[term == "H"] + statistic[term == "D"], statistic),
                                          conf.low = ifelse(term == "H", conf.low[term == "H"] + conf.low[term == "D"], conf.low),
                                          conf.high = ifelse(term == "H", conf.high[term == "H"] + conf.high[term == "D"], conf.high),
-                                         p.value = ifelse(term == "D", p.value[term == "H"], p.value),
+                                         p.value = ifelse(term == "D", p.value[term == "H"], p.value), #use the exposureH p-value for both
                                          df = NA) %>%
                                   rename("exposure" = "term") %>%
                                   mutate(time = "Dose", 
                                          graph_cat = "dose", 
-                                         c_time = ifelse(exposure == "D", -1.2, -1.5), 
+                                         c_time = ifelse(exposure == "D", -1.2, -1.5), #offset the x value for H and D slightly so they don't overlap
                                          final_disease_state = "na",
                                          facet_lab = "Doses") %>%
-                                  {. ->> set_one } %>% #save data to this var
+                                  {. ->> set_one } %>% #save the data to this variable
                                   mutate(std.error = NA, df = NA, conf.low = NA, conf.high = NA, statistic = NA,
-                                         c_time = c(-1.8, -0.9), final_disease_state = NA, exposure = NA) %>% #dummy set to change size of Dose Facet
-                                  rbind(set_one) %>%
-                                  {. ->> set_two } %>% #save data to this var
-                                  arrange(desc(estimate)) %>%
-                                  dplyr::slice(1) %>%
-                                  mutate(exposure = "p_val", c_time = -1.35, estimate = estimate + 3) %>%
-                                  rbind(set_two) #recombine them
+                                         c_time = c(-1.8, -0.9), final_disease_state = NA, exposure = NA) %>% #make 2 rows of NA values to increase the size of the Dose Facet so the real data points are centered in the facet
+                                  rbind(set_one) %>% #add the real dose data back in
+                                  {. ->> set_two } %>% #save the updated data to this variable
+                                  arrange(desc(estimate)) %>% #arrange by decreasing estimate (y-values)
+                                  dplyr::slice(1) %>% #keep the row with the highest estimate (y-value)
+                                  mutate(exposure = "p_val", c_time = -1.35, estimate = estimate + 3) %>% #use this row with the highest y-value to set what height the stars for significance should be
+                                  rbind(set_two) #add the dose data and NA rows back in
   )) %>%
-  mutate(homog_p_val = homogenate_pred %>% filter(exposure == "H") %>% pull(p.value)) %>%
+  mutate(homog_p_val = homogenate_pred %>% filter(exposure == "H") %>% pull(p.value)) %>% #pull p-value
   ungroup %>%
-  mutate(adj_homog_p_val = p.adjust(homog_p_val, method = 'fdr')) %>%
+  mutate(adj_homog_p_val = p.adjust(homog_p_val, method = 'fdr')) %>% # FDR correct p-value
   unnest(homogenate_pred) %>%
   mutate(p.value = adj_homog_p_val) %>%
   nest(homogenate_pred = -c(asv_id, data, model, homog_p_val, adj_homog_p_val))
 
+#34 ASVs are significantly different between the healthy and diseased doses
 sig_homog_asv_list <- homogenate_models %>%
   filter(adj_homog_p_val < 0.05) %>%
   pull(asv_id)
 
-#set up zero line
-
+## set up line showing normalized detection limit
 add_zero_lines <- homogenate_models %>% ungroup() %>% select(homogenate_pred) %>% unnest(homogenate_pred) %>% 
   dplyr::slice(1:4) %>% mutate(across(everything(), ~NA)) %>% 
   mutate(facet_lab = c("Doses", "Experimental", "Doses", "Experimental"), c_time = c(-5, -5, 10, 10), 
-         estimate = c(5.27, 5.294201, 5.27, 5.294201)) %>%
+         estimate = rep(detection_limit, 4)) %>%
   mutate(sig_p = NA, time = "zero_lines")
 
 
 ## Make Fancy Plots
 
-the_plots <- bacterial_signature_asv %>%
-  #filter(asv_id == "ASV_65") %>%
+abun_over_time_plots <- bacterial_signature_asv %>%
   group_by(asv_id) %>%
   reframe(signatures = str_c(signatures, collapse = ', ')) %>%
+  #categorize ASVs based on post hoc signatures
   mutate(grouped_signatures = case_when(str_detect(signatures, "Aquaria") ~ "Tank Effect",
                                         str_detect(signatures, "Field") ~ "Tank Effect",
                                         str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_early") & str_detect(signatures, "DD_vs_DH_early") & asv_id %in% sig_homog_asv_list ~ "Putative Early Pathogens",
                                         str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") & asv_id %in% sig_homog_asv_list ~ "Putative Late Pathogens",
-                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") & !asv_id %in% sig_homog_asv_list~ "Specialized Opportunists",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") & !asv_id %in% sig_homog_asv_list~ "WBD-Associated Opportunists",
                                         str_detect(signatures, "DiseaseOutcome") ~ "Unlikely Pathogens",
                                         str_detect(signatures, "HealthyOutcome") ~ "Healthy Associated",
                                         TRUE ~ signatures)) %>%
-  #don't bother plotting tank effect, etc...
-  filter(grouped_signatures %in% c("Putative Early Pathogens", "Putative Late Pathogens", "Specialized Opportunists", "Healthy Associated")) %>%
+  #only keep ASVs of interest (remove tank-associated ASVs)
+  filter(grouped_signatures %in% c("Putative Early Pathogens", "Putative Late Pathogens", "WBD-Associated Opportunists", "Healthy Associated")) %>%
   group_by(asv_id, grouped_signatures) %>%
   distinct() %>%
-  inner_join(significant_models,
-             by = 'asv_id') %>%
-  mutate(across(Family:Species, ~ifelse(str_detect(., "NA"), NA, .))) %>%
+  inner_join(significant_models, by = 'asv_id') %>%
+  mutate(across(Family:Species, ~ifelse(str_detect(., "NA"), NA, .))) %>% #set "NA" to NA
+  #set the taxonomy to be shown on the graph as the lowest classified taxonomic level
   mutate(taxonomy_for_graph = case_when(is.na(Order) ~ Class,
                                         is.na(Family) ~ Order,
                                         is.na(Genus) ~ Family,
                                         is.na(Species) ~ str_c(Family, Genus, sep = " "),
-                                        TRUE ~ str_c(Family, Species, sep = " "))) %>%
-  mutate(formatted_ASV = str_c("(ASV ", parse_number(asv_id), ")", sep = "")) %>%
-  mutate(prep = ifelse(is.na(Family),
-                       list(substitute(taxonomy_for_graph~italic(species_abbrev)~formatted_ASV, list(taxonomy_for_graph = taxonomy_for_graph, species_abbrev = "sp.", formatted_ASV = formatted_ASV))),
+                                        TRUE ~ str_c(Family, Species, sep = " "))) %>% #Species contains both genus and species
+  mutate(formatted_ASV = str_c("(ASV ", parse_number(asv_id), ")", sep = "")) %>% #format the asv ID
+  #format the taxonomy and asv ID to have the proper italics
+  #if family is NA, use a higher rank and add sp. and the ASV number (no italics)
+  #if species is NA, use family genus sp. (family and genus italicized)
+  #if there's species-level classifications, use family genus species (all italicized)
+  mutate(asv_taxa_labels = ifelse(is.na(Family),
+                       list(substitute(taxonomy_for_graph~species_abbrev~formatted_ASV, 
+                                       list(taxonomy_for_graph = taxonomy_for_graph, species_abbrev = "sp.", 
+                                            formatted_ASV = formatted_ASV))),
                        ifelse(is.na(Species),
-                              list(substitute(italic(taxonomy_for_graph)~italic(species_abbrev)~formatted_ASV, list(taxonomy_for_graph = taxonomy_for_graph, species_abbrev = "sp.", formatted_ASV = formatted_ASV))),
-                              list(substitute(italic(taxonomy_for_graph)~formatted_ASV, list(taxonomy_for_graph = taxonomy_for_graph, formatted_ASV = formatted_ASV))))
-                       
-  )
-  ) %>%
-  rowwise %>%
+                              list(substitute(italic(taxonomy_for_graph)~species_abbrev~formatted_ASV, 
+                                              list(taxonomy_for_graph = taxonomy_for_graph, species_abbrev = "sp.", 
+                                                   formatted_ASV = formatted_ASV))),
+                              list(substitute(italic(taxonomy_for_graph)~formatted_ASV, 
+                                              list(taxonomy_for_graph = taxonomy_for_graph, 
+                                                   formatted_ASV = formatted_ASV))))
+  )) %>%
+  rowwise() %>%
   mutate(plot_info = list(emmeans(model, ~treatment) %>%
                             broom::tidy(conf.int = TRUE) %>%
                             separate(treatment, into = c('time', 'exposure', 'final_disease_state')) %>%
+                            #the next set of lines is adding in identical rows of the T0 points for each of the 3 combinations
+                            #of exposure and outcome.  This is to allow identical T0 points to be plotted so that different
+                            #colored lines for the different graph categories can be drawn from T0 to T3
                             mutate(graph_cat = ifelse(time == "T0", NA, 
                                                       paste(exposure, final_disease_state, sep = "_"))) %>%
-                            {. ->> intermed } %>%
+                            {. ->> intermed } %>% #save this current output to intermed
                             mutate(graph_cat = ifelse(time == "T0", "D_D", 
-                                                      graph_cat)) %>%
-                            dplyr::slice(1) %>%
-                            rbind(intermed) %>%
+                                                      graph_cat)) %>% #set this T0 point to D_D
+                            dplyr::slice(1) %>% #keep only the first row
+                            rbind(intermed) %>% #add the rest of the rows from intermed back in
                             mutate(graph_cat = ifelse(is.na(graph_cat), "D_H", 
-                                                      graph_cat)) %>%
-                            dplyr::slice(rep(1:2, 1)) %>%
-                            rbind(intermed) %>%
+                                                      graph_cat)) %>% #set the newly added T0 point to D_H
+                            dplyr::slice(rep(1:2, 1)) %>% #keep the top 2 rows
+                            rbind(intermed) %>% #add the rest of the rows from intermed back in
                             mutate(graph_cat = ifelse(is.na(graph_cat), "H_H", 
-                                                      graph_cat)) %>%
-                            mutate(c_time = parse_number(time)) %>%
+                                                      graph_cat)) %>% #set the newly added T0 point to H_H
+                            mutate(c_time = parse_number(time)) %>% #make continuous time variable for plotting
                             mutate(facet_lab = "Experimental") %>%
-                            mutate(c_time = ifelse(time == "T0", c_time,
+                            mutate(c_time = ifelse(time == "T0", c_time, #adjust the time based on exposure/outcome so data points aren't overlapping
                                                    case_when(graph_cat == "D_D" ~ c_time + 0.30,
                                                              graph_cat == "D_H" ~ c_time,
                                                              graph_cat == "H_H" ~ c_time - 0.30))) %>%
                             mutate(graph_cat = factor(graph_cat, levels = c("D_D", "D_H", "H_H"), labels = c("D_D", "D_H", "H_H"))))) %>%
   left_join(homogenate_models, by = join_by(asv_id)) %>%
+  #add in homogenate dose model data
   mutate(plot_info = list(rbind(plot_info, homogenate_pred) %>% mutate(sig_p = ifelse(p.value < 0.05, "sig", "nonsig")))) %>%
+  #add in data for the detection limit lines
   mutate(plot_info = list(rbind(plot_info, add_zero_lines))) %>%
   rowwise() %>%
+  #make the plots
   mutate(plot = list(
     ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
-      geom_line(data = plot_info %>% filter(time == "zero_lines"), col = "gray45") +
+      geom_line(data = plot_info %>% filter(time == "zero_lines"), col = "gray45") + #detection limit lines
+      
+      # I used the relayer package to set up multiple legends
+      # colour1 is disease exposed, colour2 is healthy exposed, colour3 is the homogenate doses
       
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("D_H", "D_D"))), aes(colour1 = graph_cat, linetype = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
@@ -843,6 +840,7 @@ the_plots <- bacterial_signature_asv %>%
       (geom_point(data = (plot_info %>% filter(graph_cat %in% c("H_H"))), size = 3, aes(colour2 = graph_cat, pch = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
       
+      #stars showing whether there is a significant difference between H and D doses
       geom_point(data = (plot_info %>% filter(exposure == "p_val")), size = 5, col = "gray20", pch = "*", aes(alpha = sig_p)) +
       
       (geom_point(data = (plot_info %>% filter(graph_cat == "dose" & final_disease_state == "na")), size = 3.7, aes(colour3 = exposure), shape = "diamond") %>%
@@ -858,6 +856,7 @@ the_plots <- bacterial_signature_asv %>%
       scale_shape_manual(values = c("D_H" = 17, "D_D" = 17, "H_H" = 16), guide = "none") +
       scale_color_manual(aesthetics = "colour2", values = c("H_H" = "#406F23"), guide = "legend", 
                          name = "Healthy Exposed", labels = c("Healthy")) +
+      #manually set up legend
       guides(colour1 = guide_legend(
         override.aes=list(linetype = c(1, 1), shape = c(17, 17))),
         colour2 = guide_legend(
@@ -868,25 +867,10 @@ the_plots <- bacterial_signature_asv %>%
       scale_alpha_manual(values = c("sig" = 1, "nonsig" = 0), guide = "none") +
       scale_linetype_manual(values = c("D_H" = 1, "D_D" = 1, "H_H" = 6), guide = "none") +
       theme_bw() +
-      #theme(legend.position="none") + #remove legend for combining plots
-      #theme(plot.title = element_text(face = "italic")) +
-      #remove x and y labels for combo plots
       xlab(NULL) +
       ylab(NULL) +
-      #xlab("Time") +
-      #ylab(expression("Normalized log"[2]*" (cpm)")) +
-      labs(title = prep) +
-      #labs(title = case_when(is.na(Family) ~ bquote('hmm'~italic(.(taxonomy_for_graph))), 
-      #                       TRUE ~ bquote(italic(.(taxonomy_for_graph))))) +
-      # labs(title = ifelse(is.na(Family),
-      #                     str_c(taxonomy_for_graph, expression(italic("sp."))), #not all italics
-      #                     substitute(italic(taxa_description), list(taxa_description = taxonomy_for_graph))),
-      #      subtitle = str_c("ASV ", parse_number(asv_id), sep = "")) + # all italics
-      #labs(title = substitute(italic(taxa_description), list(taxa_description = str_c(Family, ifelse(str_detect(Species, " "), Species, str_c(Genus, Species, sep = " ")), sep = " ")))) +
-      #labs(title = substitute(italic(taxa_description), list(taxa_description = str_c(Family, ifelse(str_detect(Species, " "), Species, str_c(Genus, Species, sep = " ")), sep = " ")))) +
-      #labs(title = str_c(ifelse(is.na(Family), "NA", Family), " (", ifelse(is.na(Family_confidence), "NA", round(Family_confidence, digits = 0)), "%) ", ifelse(is.na(Genus), "NA", Genus)," (", ifelse(is.na(Genus_confidence), "NA", round(Genus_confidence, digits = 0)), "%) ", sep = ""),
-      #     subtitle = str_c(ifelse(is.na(Species), "NA", Species), " (", ifelse(is.na(Species_confidence), "NA", round(Species_confidence, digits = 0)), "%); ", asv_id, "\n", signatures, sep = "")) +
-      facet_grid(cols = vars(facet_lab), space = "free") + #scales = "free_x"
+      labs(title = asv_taxa_labels) +
+      facet_grid(cols = vars(facet_lab), space = "free") + 
       scale_y_continuous(limits = c(1, 15), breaks = c(2.5, 5, 7.5, 10, 12.5, 15)) +
       coord_panel_ranges(panel_ranges = list(
         list(x=c(-1.8, -0.9)), # Dose Panel
@@ -894,121 +878,21 @@ the_plots <- bacterial_signature_asv %>%
       ))
   )) %>%
   group_by(grouped_signatures) %>%
-  reframe(combo_plots = list(wrap_plots(plot, ncol = 2)), path_plot = list(plot[asv_id == "ASV_65"]))
+  #combine plots based on opportunist/pathogen signatures
+  reframe(combined_plots = list(wrap_plots(plot, ncol = 2)), pathogen_plot = list(plot[asv_id == "ASV_65"]))
 
-the_plots$path_plot[[1]]
+#extract legend
+abun_over_time_legend <- ggpubr::get_legend(abun_over_time_plots$combined_plots[[1]])
 
-#old way  
-#summarise(combo_plots = list(wrap_plots(plot))) %>%
-#pull(combo_plots) + plot_layout(guides = "none") & plot_annotation(title = grouped_signatures)))
+#set up x and y axes labels
+abun_x_axis <- cowplot::get_plot_component(ggplot() + labs(x = "Time"), "xlab-b")
+abun_y_axis <- cowplot::get_plot_component(ggplot() + labs(y = expression("Normalized log"[2]*" (cpm)")), "ylab-l")
 
-
-#view the plots
-the_plots$combo_plots[[1]]
-
-plot_for_legend <- the_plots$combo_plots[[1]]
-
-#combine plots
-library(ggpubr)
-
-the_plots$path_plot[[2]][[1]] # 700 x 450
-
-
-x_axis <- cowplot::get_plot_component(ggplot() + labs(x = "Time"), "xlab-b")
-y_axis <- cowplot::get_plot_component(ggplot() + labs(y = expression("Normalized log"[2]*" (cpm)")), "ylab-l")
-
-fancy_legend <- ggpubr::get_legend(plot_for_legend)
-
-design = "
-EAAL
-#HHL
-FBBL
-#IIL
-GCCL
-#DDL
-"
-
-list(
-  the_plots$path_plot[[2]][[1]], # A
-  the_plots$combo_plots[[1]], # B
-  the_plots$combo_plots[[3]], # C
-  x_axis, # D
-  y_axis, # E
-  y_axis, # F
-  y_axis, # G
-  x_axis, # H
-  x_axis, # I
-  fancy_legend #L
-) %>% 
-  wrap_plots() + 
-  plot_layout(heights = c(1, 0.125, 1, 0.125, 10, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
-  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
-
-design = "
-EAAL
-EBBL
-ECCL
-#DD#
-"
-
-list(
-  the_plots$path_plot[[2]][[1]], # A
-  the_plots$combo_plots[[1]], # B
-  the_plots$combo_plots[[3]], # C
-  x_axis, # D
-  y_axis, # E
-  fancy_legend #L
-) %>% 
-  wrap_plots() + 
-  plot_layout(heights = c(1, 1, 8, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
-  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
-#export to 1300x1700
-
+#empty space to go between plots
 spacer <- ggplot() + theme_void()
 
-ggplot() + fancy_legend
-
-list(
-  the_plots$path_plot[[2]][[1]], # A
-  the_plots$combo_plots[[1]], # B
-  the_plots$combo_plots[[3]], # C
-  x_axis, # D
-  y_axis, # E
-  y_axis, # F
-  y_axis, # G
-  x_axis, # H
-  x_axis, # I
-  fancy_legend #L
-) %>% 
-  wrap_plots() + 
-  plot_layout(heights = c(1, 0.125, 1, 0.125, 10, 0.125), widths = c(0.25, 200, 200, 50), design = design) +
-  plot_annotation(tag_levels = list(c("A", "B", "", "C")))
-
-design = "
-EAAL
-EPPL
-ECCL
-ESSL
-EBBL
-#DD#
-"
-
-list(
-  the_plots1$path_plot[[2]][[1]], # A
-  the_plots1$combo_plots[[1]], # B
-  the_plots1$combo_plots[[3]], # C
-  x_axis, # D
-  y_axis, # E
-  fancy_legend, #L
-  spacer, #P
-  spacer #S
-) %>% 
-  wrap_plots() + 
-  plot_layout(heights = c(1, 0.0325, 8, 0.0325, 1, 0.0125), widths = c(0.25, 200, 200, 50), design = design) +
-  plot_annotation(tag_levels = list(c("A", "C", "", "B")))
-
-# no healthies
-design = "
+#combine opportunists and putative pathogen into one plot
+opp_path_design = "
 EAAPL
 ESSPL
 EBBPL
@@ -1016,23 +900,239 @@ EBBPL
 "
 
 list(
-  the_plots$path_plot[[2]][[1]] + theme(legend.position="none"), # A
-  the_plots$combo_plots[[3]] + plot_layout(guides = "collect") & theme(legend.position = "none"), # C
-  x_axis, # D
-  y_axis, # E
-  fancy_legend, #L
+  abun_over_time_plots$pathogen_plot[[2]][[1]] + theme(legend.position="none"), # A
+  abun_over_time_plots$combined_plots[[3]] + plot_layout(guides = "collect") & theme(legend.position = "none"), # B
+  abun_x_axis, # D
+  abun_y_axis, # E
+  abun_over_time_legend, #L
   spacer, #P
   spacer #S
 ) %>% 
   wrap_plots() + 
-  plot_layout(heights = c(1, 0.0325, 8, 0.0325), widths = c(0.25, 200, 200, 10, 50), design = design) +
+  plot_layout(heights = c(1, 0.0325, 8, 0.0325), widths = c(0.25, 200, 200, 10, 50), design = opp_path_design) +
   plot_annotation(tag_levels = list(c("A", "B")))
-
 #export 1000 x 950
 
 
+#### Logfold Change Plots ####
+
+#format ASVs to be included in logfold change plot
+asvs_for_logfold <- bacterial_signature_asv %>%
+  group_by(asv_id) %>%
+  reframe(signatures = str_c(signatures, collapse = ', ')) %>%
+  #categorize ASVs based on post hoc signatures
+  mutate(grouped_signatures = case_when(str_detect(signatures, "Aquaria") ~ "Tank Effect",
+                                        str_detect(signatures, "Field") ~ "Tank Effect",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_early") & str_detect(signatures, "DD_vs_DH_early") & asv_id %in% sig_homog_asv_list ~ "Putative Early Pathogens",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") & asv_id %in% sig_homog_asv_list ~ "Pathogens",
+                                        str_detect(signatures, "DiseaseOutcome") & str_detect(signatures, "DD_late") & str_detect(signatures, "DD_vs_DH_late") & !asv_id %in% sig_homog_asv_list~ "White Band Disease- Associated Opportunists",
+                                        str_detect(signatures, "DiseaseOutcome") ~ "Unlikely Pathogens",
+                                        str_detect(signatures, "HealthyOutcome") ~ "Healthy-Associated",
+                                        TRUE ~ signatures)) %>%
+  #only keep ASVs of interest (remove tank-associated ASVs)
+  filter(grouped_signatures %in% c("Putative Early Pathogens", "Pathogens", "White Band Disease- Associated Opportunists", "Unlikely Pathogens")) %>%
+  group_by(asv_id, grouped_signatures) %>%
+  inner_join(significant_models, by = 'asv_id') %>%
+  mutate(across(Family:Species, ~ifelse(str_detect(., "NA"), NA, .))) #set "NA" to NA
+
+#make list of ASVs that are late responders
+late_responder_list <- significant_models %>%
+  select(asv_id, `fdr_DD_late_>`) %>% #fdr_DD_late_> tests whether they are late responders
+  rename("is_late_responder" = "fdr_DD_late_>") %>%
+  mutate(is_late_responder = ifelse(is_late_responder < 0.05, TRUE, FALSE)) #set to true/false
+
+#make list of stylized names with proper italics and ASV numbers
+list_of_stylized_names <- normalized_asv_counts %>%
+  mutate(across(Domain:Species, ~ifelse(. == "NA", NA, .))) %>%
+  mutate(stylized_name = case_when(is.na(Genus) ~ glue("_{Family}_ sp. (ASV {parse_number(asv_id)})"), #if genus is NA, use family sp.
+                                   !is.na(Genus) & is.na(Species) ~ glue("_{Family} {Genus}_ sp. (ASV {parse_number(asv_id)})"), #if species is NA, use family genus sp.
+                                   TRUE ~ glue("_{Family} {Species}_ (ASV {parse_number(asv_id)})")), #otherwise, use family genus species
+         .after = asv_id) %>%
+  mutate(stylized_name_no_family = case_when(is.na(Genus) ~ glue("_{Family}_ sp. (ASV {parse_number(asv_id)})"), #if genus is NA, use family sp.
+                                             !is.na(Genus) & is.na(Species) ~ glue("_{Genus}_ sp. (ASV {parse_number(asv_id)})"), #if species is NA, use genus sp.
+                                             TRUE ~ glue("_{Species}_ (ASV {parse_number(asv_id)})")), #otherwise, use genus species
+         .after = asv_id) %>%
+  left_join(late_responder_list, by = join_by("asv_id")) %>%
+  #set it so late responders will be bolded and early responders will not
+  mutate(stylized_name = ifelse(is_late_responder, glue("**{stylized_name}**"), stylized_name),
+         stylized_name_no_family = ifelse(is_late_responder, glue("**{stylized_name_no_family}**"), stylized_name_no_family)) %>%
+  select(asv_id, stylized_name, stylized_name_no_family) %>%
+  distinct()
+
+#dose model
+logfold_dose_model <- homogenate_data %>%
+  filter(asv_id %in% asvs_for_logfold$asv_id) %>% #filter to ASVs of interest
+  group_by(asv_id) %>%
+  filter(!asv_id %in% c("ASV_372", "ASV_117", "ASV_244", "ASV_285")) %>% #data are essentially constant, can't run t-test
+  summarise_at(vars(log2_cpm), list(dose_t_test = ~ list(t.test(. ~ exposure)))) %>% #run t-test
+  rowwise() %>%
+  mutate(t_stderr = dose_t_test$stderr, dose_t_test = broom::tidy(dose_t_test)) %>%
+  unnest(dose_t_test) %>%
+  rename("D" = "estimate1", "H" = "estimate2", "dose_D_minus_H" = "estimate") %>%
+  mutate(fdr_dose = p.adjust(p.value)) %>% #FDR correct
+  select(asv_id, dose_D_minus_H, fdr_dose, t_stderr) %>%
+  pivot_longer(dose_D_minus_H, names_to = "comparison", values_to = "estimate") %>%
+  rename("fdr_pval" = "fdr_dose")
+
+#add back in ASVs that were too constant to run a t-test
+logfold_dose_full_data <- logfold_dose_model %>% 
+  dplyr::slice(1:4) %>% #keep first 4 rows
+  mutate(across(everything(), ~NA)) %>% #make everything NA
+  #set up these rows for the ASVs that were too constant for a t-test
+  #set p-value to 1 and estimate for diseased dose minus healthy dose to 0
+  mutate(asv_id = c("ASV_372", "ASV_117", "ASV_244", "ASV_285"), fdr_pval = c(1, 1, 1, 1), 
+         comparison = c("dose_D_minus_H"), estimate = c(0, 0, 0, 0), t_stderr = c(0, 0, 0, 0)) %>%
+  #combine with model results
+  rbind(logfold_dose_model)
+
+
+#get results from main model
+logfold_model_metrics <- significant_models %>% select(asv_id, (contains("estimate") | contains("SE")) & #get estimates and standard errors
+                                                         (contains("DD_vs_DH_late") | contains("exposure") | contains("outcome"))) %>% #for the expposure and outcome main effects and the DD vs DH late post hoc
+  pivot_longer(cols = contains("estimate"), names_prefix = "estimate_", names_to = "comparison", values_to = "estimate") %>% #pivot estimates longer
+  mutate(comparison = str_remove(comparison, '_[><=]')) %>% #remove directionality
+  pivot_longer(cols = contains("SE"), names_prefix = "SE_", names_to = "comparison2", values_to = "t_stderr") %>% #pivot SE longer
+  mutate(comparison2 = str_remove(comparison2, '_[><=]')) %>% #remove directionality
+  filter(comparison == comparison2) %>% #pivoting twice made everything in triplicate, so only keep rows where the estimate and standard error are for the same comparison
+  select(-comparison2)
+
+
+model_for_plot <- significant_models %>%
+  #pull whether the exposure and outcome main effects and the DD vs DH late post hoc were significant for the ASVs of interest
+  select(asv_id, starts_with('fdr')) %>% 
+  select(-contains(c('treatment', 'tank', 'genotype'))) %>%
+  mutate(across(starts_with('fdr'), ~ifelse(. < 0.05, "sig", "nonsig"))) %>%
+  pivot_longer(cols = -asv_id,
+               names_to = c('comparison'),
+               values_to = 'significance') %>%
+  mutate(comparison = str_remove(comparison, 'fdr_')) %>%
+  mutate(comparison = str_remove(comparison, '_[><=]')) %>%
+  filter(asv_id %in% asvs_for_logfold$asv_id) %>% #filter for ASVs of interest
+  filter(comparison %in% c("DD_vs_DH_late", "exposure", "outcome")) %>% #comparisons of interest
+  left_join(logfold_model_metrics, by = join_by(asv_id, comparison)) %>% #add in estimates and standard errors
+  rbind(logfold_dose_full_data %>%
+          mutate(fdr_pval = ifelse(fdr_pval < 0.05, "sig", "nonsig"),
+                 comparison = "dose") %>%
+          rename("significance" = "fdr_pval")) %>% #add in dose information
+  mutate(graph_pval = str_c(comparison, significance, sep = "_")) %>%
+  filter(comparison != "exposure") %>%
+  left_join(asvs_for_logfold %>% select(asv_id, grouped_signatures), by = join_by(asv_id)) %>% #add in grouped signature (i.e. pathogen or opportunist)
+  mutate(grouped_signatures = ifelse(grouped_signatures == "Pathogens", "Putative Pathogen", grouped_signatures)) %>%
+  mutate(grouped_signatures = factor(grouped_signatures, 
+                                     levels = c("Putative Pathogen", "White Band Disease- Associated Opportunists", 
+                                                "Unlikely Pathogens"))) %>%
+  arrange(grouped_signatures) %>%
+  left_join(list_of_stylized_names, by = join_by(asv_id)) #add in italicized names
+
+#order ASVs by their logfold change value within their signature type to use to reorder y-axis of plot in decreasing order of logfold changes
+asvs_ordered_by_outcome <- model_for_plot %>% 
+  filter(comparison == "outcome") %>%
+  group_by(grouped_signatures) %>%
+  arrange(estimate, .by_group = TRUE) %>%
+  ungroup()
+
+#make asv_id an ordered factor
+model_for_plot <- model_for_plot %>%
+  mutate(asv_id = factor(asv_id, ordered = TRUE, levels = asvs_ordered_by_outcome$asv_id))
+
+
+#all of the ASVs being plotted are significant for the outcome main effect
+#for completeness sake of the legend, make a table where each of the 3 comparisons being examined are significant and 
+#non-significant so they will show up in the legend
+#pull this legend and use it for the actual logfold change plot
+make_logfold_legend <- model_for_plot %>%
+  filter(asv_id %in% c("ASV_65", "ASV_134")) %>%
+  mutate(graph_pval = ifelse((asv_id == "ASV_134" & comparison != "dose_D_minus_H"), str_replace(graph_pval, "sig", "nonsig"), graph_pval)) %>% #set it so each comparison is both significant and non-significant
+  mutate(asv_id = c(rep("test", 3), rep("test1", 3)), significance = NA, estimate = 0, t_stderr = 0, grouped_signatures = NA, stylized_name = NA, stylized_name_no_family = NA) #set all data fields to NA or 0
+
+#make plot to pull legend from
+relayer_logfold_change_for_legend <- ggplot(make_logfold_legend, aes(x = asv_id, y = estimate, ymin = estimate - t_stderr, ymax = estimate + t_stderr)) +
+  geom_hline(yintercept = 0) +
+  #outcome main effect
+  (geom_point(data = (make_logfold_legend %>% filter(comparison == "outcome")), aes(colour1 = graph_pval, fill1 = graph_pval), pch = 23, size = 3, stroke = 1) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour1", "fill" = "fill1"))) + 
+  scale_color_manual(aesthetics = "colour1", values = c("#FF7D1A", "#FF7D1A"), guide = "legend", 
+                     name = "Outcome", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Nonsignificant")) +
+  scale_fill_manual(aesthetics = "fill1", values = c("#FF7D1A", "transparent"), guide = "legend", 
+                    name = "Outcome", breaks = c("outcome_sig", "outcome_nonsig"), labels = c("Significant", "Nonsignificant")) +
+  #homogenate dose
+  (geom_point(data = (make_logfold_legend %>% filter(comparison == "dose")), aes(colour3 = graph_pval, fill3 = graph_pval), pch = 22, size = 4, stroke = 1) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour3", "fill" = "fill3"))) + 
+  scale_color_manual(aesthetics = "colour3", values = c("#732dcf", "#732dcf"), guide = "legend", 
+                     name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Nonsignificant")) +
+  scale_fill_manual(aesthetics = "fill3", values = c("#732dcf", "transparent"), guide = "legend", 
+                    name = "Homogenate Doses", breaks = c("dose_sig", "dose_nonnonsig"), labels = c("Significant", "Nonsignificant")) +
+  #exposure within disease-exposed tanks post hoc
+  (geom_point(data = (make_logfold_legend %>% filter(comparison == "DD_vs_DH_late")), aes(colour4 = graph_pval, fill4 = graph_pval), pch = 24, size = 3, stroke = 1) %>%
+     rename_geom_aes(new_aes = c("colour" = "colour4", "fill" = "fill4"))) + 
+  scale_color_manual(aesthetics = "colour4", values = c("#BA0D0D", "#BA0D0D"), guide = "legend", 
+                     name = str_wrap("Outcome within Disease-Exposed Tanks", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Nonsignificant")) +
+  scale_fill_manual(aesthetics = "fill4", values = c("#BA0D0D", "transparent"), guide = "legend", 
+                    name = str_wrap("Outcome within Disease-Exposed Tanks", 20), breaks = c("DD_vs_DH_late_sig", "DD_vs_DH_late_nonsig"), labels = c("Significant", "Nonsignificant")) +
+  coord_flip() +
+  theme_bw() +
+  guides(#outcome
+    color1 = guide_legend(order = 2),
+    fill1 = guide_legend(order = 2),
+    #dose
+    color3 = guide_legend(order = 4),
+    fill3 = guide_legend(order = 4),
+    #DD_DH
+    color4 = guide_legend(order = 3),
+    fill4 = guide_legend(order = 3))
+
+#use this legend for logfold change plot
+relayer_logfold_legend <- ggpubr::get_legend(relayer_logfold_change_for_legend) 
+
+#make logfold change plot
+logfold_change_plot <- ggplot(model_for_plot) +
+  geom_hline(yintercept = 0) +
+  geom_pointrange(aes(x = asv_id, y = estimate, fill = graph_pval, col = comparison, pch = comparison, ymin = estimate - t_stderr, ymax = estimate + t_stderr), 
+                  size = 1, stroke = 1, position = position_dodge(width = 0.65), linewidth = 0.8) +
+  scale_shape_manual(values = c(24, 22, 23)) +
+  scale_color_manual(values = c("outcome" = "#FF7D1A",
+                                "dose" = "#732dcf", 
+                                "DD_vs_DH_late" = "#BA0D0D")) +
+  scale_fill_manual(values = c("outcome_nonsig" = "white", 
+                               "outcome_sig" = "#FF7D1A",
+                               "exposure_nonsig" = "white", 
+                               "dose_nonsig" = "white", 
+                               "dose_sig" = "#732dcf", #DF369B
+                               "DD_vs_DH_late_nonsig" = "white", 
+                               "DD_vs_DH_late_sig" = "#BA0D0D"), guide = "none") +
+  coord_flip() +
+  theme_bw() +
+  theme(axis.text = element_markdown(size = 10),
+        axis.title = element_markdown(size = 12),
+        legend.position = "none",
+        strip.text = element_text(size = 12),
+        strip.text.y = element_text(angle = 0)
+  ) +
+  scale_x_discrete(breaks = model_for_plot$asv_id, labels = model_for_plot$stylized_name_no_family) +
+  facet_grid(rows = vars(grouped_signatures), space = "free", scales = "free",
+             labeller = label_wrap_gen(width = 15)) +
+  xlab(NULL) +
+  ylab("Log Fold Change (Diseased vs. Healthy)")
+
+
+#combine plot and legend
+logfold_design = "
+A##
+A#B
+A##
+"
+
+list(
+  logfold_change_plot, # A
+  relayer_logfold_legend # B
+) %>% 
+  wrap_plots() + 
+  plot_layout(heights = c(0.125, 1, 0.125), widths = c(200, 5, 50), design = logfold_design)
+#export 1050x950
+
 #### NMDS ####
 
+#make matrix for NMDS, ASVs on columns and samples on rows
 nmds_matrix <- normalized_asv_counts %>% 
   select(asv_id, sample_id, log2_cpm) %>%
   pivot_wider(names_from = sample_id, values_from = log2_cpm) %>%
@@ -1040,30 +1140,20 @@ nmds_matrix <- normalized_asv_counts %>%
   t() %>%
   as.matrix()
 
+#run NMDS
 asv_nmds <- metaMDS(nmds_matrix, distance = 'bray', k = 3, trymax = 100, autotransform = FALSE, verbose = TRUE)
 
-#shepard plot
-#doesn't follow y = x line well, so MDS might be misleading -> use nmds
-plot(asv_nmds$diss, asv_nmds$dist)
-abline(a = 0, b = 1, col = "red")
+#get NMDS scores
+nmds_scores <- as.data.frame(scores(asv_nmds)$sites)
 
-stressplot(asv_nmds)
-
-plot(asv_nmds)
-
-#ugly but functional I guess
-ordiplot(asv_nmds,type="n")
-orditorp(asv_nmds,display="species",col="red",air=0.01)
-orditorp(asv_nmds,display="sites",cex=1.25,air=0.01)
-
-nmds_scores <-  as.data.frame(scores(asv_nmds)$sites)
-
+#format metadata to match NMDS matrix
 nmds_metadata <- normalized_asv_counts %>% 
   select(asv_id, time, exposure, final_disease_state, susceptability, genotype, 
          sample_id, log2_cpm, tank, treatment) %>%
   pivot_wider(names_from = asv_id, values_from = log2_cpm) %>%
   as.data.frame()
 
+#add columns for each relevant piece of metadata to the scores data frame
 nmds_scores$time = nmds_metadata$time
 nmds_scores$exposure = nmds_metadata$exposure
 nmds_scores$final_disease_state = nmds_metadata$final_disease_state
@@ -1071,31 +1161,7 @@ nmds_scores$susceptability = nmds_metadata$susceptability
 nmds_scores$genotype = nmds_metadata$genotype
 nmds_scores$treatment = str_c(nmds_scores$time, nmds_scores$exposure, nmds_scores$final_disease_state, sep = "_")
 
-#nice nmds
-ggplot(nmds_scores) +
-  geom_point(aes(x = NMDS1, y = NMDS2, col = treatment, pch = time), size = 2.5) +
-  stat_ellipse(aes(x = NMDS1, y = NMDS2, col = treatment)) +
-  theme_bw() +
-  scale_shape_manual(values = c("T0" = 16, "T3" = 15, "T7" = 17), guide = "none") +
-  scale_color_manual(name = "Treatment", values = c("T0_F_F" = "#c389e0",
-                                                    "T3_D_D" = "#E79B9B",
-                                                    "T3_D_H" = "#97D9E1",
-                                                    "T3_H_H" = "#95AC85",
-                                                    "T7_D_D" = "#A70000",
-                                                    "T7_D_H" = "#22A7B6",
-                                                    "T7_H_H" = "#406F23")) +
-  guides(color = guide_legend(
-    override.aes=list(shape = c("T0_F_F" = 16,
-                                "T3_D_D" = 15,
-                                "T3_D_H" = 15,
-                                "T3_H_H" = 15,
-                                "T7_D_D" = 17,
-                                "T7_D_H" = 17,
-                                "T7_H_H" = 17),
-                      size = 3)))
-
-#Nice legend separated out by day
-
+#plot NMDS
 ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   #Day 0
   (geom_point(data = (nmds_scores %>% filter(time == "T0")), aes(colour0 = treatment, pch = time)) %>%
@@ -1112,7 +1178,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   scale_color_manual(aesthetics = "colour3", values = c("T3_D_D" = "#E79B9B", "T3_D_H" = "#97D9E1",
                                                         "T3_H_H" = "#95AC85"), guide = "legend", 
                      name = "Day 3", breaks = c("T3_H_H", "T3_D_H", "T3_D_D"), 
-                     labels = c("Healthy Control", "Exposed, Healthy", "Infected")) +
+                     labels = c("Healthy", "Disease-Exposed, Healthy", "Eventually Develops Disease")) +
   #Day 7
   (geom_point(data = (nmds_scores %>% filter(time == "T7")), aes(colour7 = treatment, pch = time)) %>%
      rename_geom_aes(new_aes = c("colour" = "colour7"))) +
@@ -1121,7 +1187,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   scale_color_manual(aesthetics = "colour7", values = c("T7_D_D" = "#A70000", "T7_D_H" = "#22A7B6",
                                                         "T7_H_H" = "#406F23"), guide = "legend", 
                      name = "Day 7", breaks = c("T7_H_H", "T7_D_H", "T7_D_D"), 
-                     labels = c("Healthy Control", "Exposed, Healthy", "Infected")) +
+                     labels = c("Healthy", "Disease-Exposed, Healthy", "Diseased")) +
   scale_shape_manual(values = c("T0" = 16, "T3" = 15, "T7" = 17), guide = "none") +
   guides(color0 = guide_legend(
     override.aes=list(shape = c("T0_F_F" = 16),
@@ -1139,11 +1205,11 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
         size = 3), order = 7)) +
   theme_bw()
 
-
-
+#run permanova
 permanova_results <- adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, 
                              method = "bray", perm = 10000, data = nmds_metadata)  
 
+#tidy statistics
 tidy_permanova_results <- broom::tidy(permanova_results) %>%
   rename("Sums of Squares" = "SumOfSqs") %>%
   mutate(term = case_when(term == "time" ~ "Time",
@@ -1156,13 +1222,7 @@ tidy_permanova_results <- broom::tidy(permanova_results) %>%
                           TRUE ~ term)) %>%
   rename("F" = "statistic")
 
+#output statistics to a table
 permanova_table <- nice_table(tidy_permanova_results, broom = "lm")
-
 print(permanova_table, preview = "docx")
-#flextable::save_as_docx(permanova_table, path = "../")
-
-#library(pairwiseAdonis)
-#pairwise.adonis2(nmds_matrix ~treatment, data = nmds_metadata) %>% broom::tidy()
-
-
 
