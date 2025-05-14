@@ -22,12 +22,6 @@ library(ggvenn)
 library(edgeR) #BiocManager::install("edgeR")
 library(magrittr)
 
-
-library(vegan)
-
-
-library(ComplexUpset)
-
 #### Functions ####
 
 #from https://rdrr.io/github/vmikk/metagMisc/src/R/phyloseq_filter.R
@@ -886,7 +880,7 @@ venn_all_times_and_doses %>% filter(OTU %in% not_t3t7_only) %>% ggvenn(c('D', 'T
 
 #normalization based on all samples & implement filtering 
 otu_tmm <- updated_microbiome_data %>%
-  phyloseq_filter_prevalence(prev.trh = 0.2) %>% #20% prevalence filter
+  mod_phyloseq_filter_prevalence(prev.trh = 0.2) %>% #20% prevalence filter
   otu_table() %>% 
   t %>% #NOTE: *genus and family do not need the t but ASVs need the t*
   as.data.frame %>%
