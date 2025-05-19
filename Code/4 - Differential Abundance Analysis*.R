@@ -605,9 +605,14 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
         ) +
           scale_fill_manual(values = full_palette, limits = upset_sig_classified_asvs$plot_genus %>% unique()) +
           scale_color_manual(values = c("yes" = "gray10", "no" = "white")) +
-          theme_nested(legend.position=c(1.06,0.2)) +
+          #theme_nested() +
+          theme_nested(legend.position=c(1.26,0.2), 
+                       axis.title = element_markdown(size = 14),
+                       axis.text = element_markdown(size = 13),
+                       legend.text = element_markdown(size = 12),
+                       legend.title=element_text(size=rel(1.3))) +
           guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")),
-                                   ncol = 1))
+                                   nrow = 25))
       ),
       
       matrix=(
@@ -627,6 +632,10 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
       ),
       name='ASVs', width_ratio=0.1, sort_sets = FALSE, sort_intersections=FALSE, 
       set_sizes=FALSE,
+      themes=upset_modify_themes(
+        list('intersections_matrix'=theme(axis.text=element_text(size=rel(1.3)),
+                                          axis.title=element_text(size=rel(1.3))))
+      ),
       intersections=list(
         'Diseased Outcome',
         'Healthy Outcome',
@@ -634,9 +643,8 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
         c('Healthy Outcome', 'Tank Effect'),
         'Tank Effect'
       )) +
-  ggtitle("Significant Main Effects") +
-  theme(plot.margin = margin(1, 5.5, 1, 1, "cm"))
-
+  theme(plot.margin = margin(1, 11, 1, 1, "cm"))
+#export 1500x900
 
 #complex upset of main effects and post hocs with tank effect removed
 upset(upset_sig_classified_asvs %>% filter(!`Tank Effect`) %>% group_by(Order) %>% filter(n() > 1), #removes headers from Orders that were filtered out
@@ -684,8 +692,6 @@ upset(upset_sig_classified_asvs %>% filter(!`Tank Effect`) %>% group_by(Order) %
       )) +
   ggtitle("Significant Main Effects") +
   theme(plot.margin = margin(1, 5.5, 1, 1, "cm"))
-
-#export 2000x1100
 
 #### Abundance Over Time Plots ####
 
@@ -1128,9 +1134,11 @@ list(
 ) %>% 
   wrap_plots() + 
   plot_layout(heights = c(0.125, 1, 0.125), widths = c(200, 5, 50), design = logfold_design)
-#export 1050x950
+#export 1050x700
 
 #### NMDS ####
+
+set.seed(68748)
 
 #make matrix for NMDS, ASVs on columns and samples on rows
 nmds_matrix <- normalized_asv_counts %>% 
@@ -1204,6 +1212,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
         "T7_H_H" = 17),
         size = 3), order = 7)) +
   theme_bw()
+#export 1000x550
 
 #run permanova
 permanova_results <- adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, 
