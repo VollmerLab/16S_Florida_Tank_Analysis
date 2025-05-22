@@ -233,7 +233,10 @@ taxonomy_tibble <- tax_table(read_rds("../intermediate_files/updated_microbiome_
   as_tibble()
 
 #detection limit of 5.202306
-detection_limit <- normalized_asv_counts %>% select(log2_cpm) %>% min()
+detection_limit <- min(normalized_asv_counts$log2_cpm)
+
+#detection limit in homogenate doses of 5.274105
+homog_detection_limit <- min(homogenate_data$log2_cpm)
 
 #### Miscellaneous Manuscript Metrics ####
 
@@ -244,6 +247,15 @@ normalized_asv_counts %>%
   distinct() %>%
   reframe(num_genotypes = length(genotype), minimum_DR = min(resistance), maximum_DR = max(resistance),
           average_DR = mean(resistance), SE_DR = sd(resistance)/sqrt(length((resistance))))
+
+#total number of each taxa present in the homogenate doses
+homogenate_data %>% 
+  left_join(normalized_asv_counts %>% select(asv_id, colnames(taxonomy_tibble)) %>% distinct(), by = join_by("asv_id")) %>%
+  filter(log2_cpm > homog_detection_limit + 0.000000001) %>%
+  select(Genus) %>% #change taxa level here
+  filter(!is.na(.)) %>%
+  distinct() %>%
+  nrow()
 
 # how many healthy and diseased fragments at T7
 normalized_asv_counts %>%
@@ -1216,7 +1228,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
 
 #run permanova
 permanova_results <- adonis2(nmds_matrix ~time*final_disease_state*exposure + genotype + tank, 
-                             method = "bray", perm = 10000, data = nmds_metadata)  
+                             method = "bray", perm = 10000, data = nmds_metadata)
 
 #tidy statistics
 tidy_permanova_results <- broom::tidy(permanova_results) %>%

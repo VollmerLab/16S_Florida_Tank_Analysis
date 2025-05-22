@@ -260,6 +260,7 @@ for(var in multiple_aggregation_levels) {
   
   #set aggregation level
   aggregation_level <- var
+  message('Calculating correlations between each bacterial ', ifelse(aggregation_level == "none", "ASV", aggregation_level), ' and disease resistance')
   
   #set taxa names and aggregate based on aggregation level
   if(aggregation_level != 'none'){
@@ -405,6 +406,8 @@ for(var in multiple_aggregation_levels) {
 }
 
 #### Examine Results ####
+
+write_rds(all_corr_results, "../intermediate_files/correlation_test_results.rds")
 
 #check if any correlations are significant
 all_corr_results %>% filter(fdr_p.value < 0.05)

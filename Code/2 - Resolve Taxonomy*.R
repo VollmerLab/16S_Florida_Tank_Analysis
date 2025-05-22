@@ -289,7 +289,7 @@ write_rds(updated_microbiome_data, "../intermediate_files/updated_microbiome_dat
 tax_table(updated_microbiome_data) %>% 
   as.data.frame() %>% 
   as_tibble() %>%
-  select(Class) %>% #change taxa level here
+  select(Genus) %>% #change taxa level here
   filter(!is.na(.)) %>%
   distinct() %>%
   nrow()

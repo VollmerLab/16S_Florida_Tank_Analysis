@@ -593,13 +593,19 @@ alpha_metric_signatures %>%
   group_by(term) %>%
   reframe(n = n())
 
-# get statistics for manuscript for whether metrics changed significantly between time points
+#get statistics for manuscript for whether metrics changed significantly between time points
 alpha_significant_models %>%
   select(metric, contains("t0"), contains("t3"), contains("t7")) %>% 
-  filter(metric %in% c("dominance_core_abundance", "chao1")) %>%
+  filter(metric %in% manuscript_alpha_metrics) %>%
   pivot_longer(cols = !metric, names_to = "val", values_to = "num") %>%
   mutate(time = str_after_first(val, "_"), val = str_before_first(val, "_")) %>%
   pivot_wider(names_from = val, values_from = num)
+
+#get intercept (T0) for chao1 
+summary((alpha_significant_models %>% filter(metric %in% manuscript_alpha_metrics))$model[[1]])
+
+#get intercept (T0) for core abundance
+summary((alpha_significant_models %>% filter(metric %in% manuscript_alpha_metrics))$model[[2]])
 
 #### Alpha Diversity Plots ####
 
