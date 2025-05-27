@@ -240,6 +240,23 @@ homog_detection_limit <- min(homogenate_data$log2_cpm)
 
 #### Miscellaneous Manuscript Metrics ####
 
+#Supplementary Data #3 - Read Counts of each ASV per Sample (tank environment)
+# normalized_asv_counts %>% 
+#   select(sample_id, asv_id, read_count) %>%
+#   pivot_wider(names_from = asv_id, values_from = read_count) %>%
+#   as.data.frame() %>% column_to_rownames(var = "sample_id") %>%
+#   as.matrix() %>%
+#   write.csv("../Supplementary Data/ECT2025_supplementary_data_3.csv")
+
+#Supplementary Data #4 - Log2 CPM of each ASV per Sample
+# normalized_asv_counts %>%
+#   select(sample_id, asv_id, log2_cpm) %>%
+#   rbind(homogenate_data %>% select(sample_id, asv_id, log2_cpm)) %>%
+#   pivot_wider(names_from = asv_id, values_from = log2_cpm) %>%
+#   as.data.frame() %>% column_to_rownames(var = "sample_id") %>%
+#   as.matrix() %>%
+#   write.csv("../Supplementary Data/ECT2025_supplementary_data_4.csv")
+
 #range of disease resistance scores for T0 corals
 normalized_asv_counts %>%
   filter(time == "T0") %>%

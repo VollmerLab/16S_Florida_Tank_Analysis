@@ -21,6 +21,7 @@ library(ggnested) #devtools::install_github("gmteunisse/ggnested")
 library(ggvenn)
 library(edgeR) #BiocManager::install("edgeR")
 library(magrittr)
+library(seqinr)
 
 #### Functions ####
 
@@ -420,11 +421,29 @@ filter_venn <- function(data, venn_asv){
 #### Read In Data ####
 updated_microbiome_data <- read_rds("../intermediate_files/updated_microbiome_data.rds")
 
+asv_sequences <- tax_table(updated_microbiome_data) %>%
+  as.data.frame() %>%
+  as_tibble(rownames = "asv_id") %>%
+  full_join(refseq(updated_microbiome_data) %>% as.data.frame() %>% as_tibble(rownames = "asv_id"), by = join_by("asv_id")) %>%
+  rename("sequence" = "x") %>%
+  pivot_longer(Domain:Species, names_to = "taxa_level", values_to = "classification") %>%
+  mutate(classification = ifelse(is.na(classification), "NA", classification)) %>%
+  mutate(combo_taxa = str_c(taxa_level, classification, sep = " - ")) %>%
+  group_by(asv_id, sequence) %>%
+  reframe(full_taxonomy = str_c(combo_taxa, collapse = "; ")) %>% 
+  mutate(full_taxonomy = str_c(asv_id, full_taxonomy, sep = ": "))
+  
+#Supplementary Data #1 - 16S Sequences
+#write.fasta(as.list(asv_sequences$sequence), names = asv_sequences$full_taxonomy, open = "w", file.out = "../Supplementary Data/ECT2025_supplementary_data_1.fasta")
+
 metadata <- sample_data(updated_microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
   dplyr::select(-retain_sample) %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
          .after = sample_id) #fragment ID tracks a single fragment regardless of timepoint sampled
+
+#Supplementary Data #2 - Metadata
+#write_csv(metadata, "../Supplementary Data/ECT2025_supplementary_data_2.csv")
 
 #melt phyloseq to examine sample data
 melted_ps <- mod_phyloseq_filter_prevalence(updated_microbiome_data, 

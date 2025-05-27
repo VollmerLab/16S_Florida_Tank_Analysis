@@ -407,7 +407,10 @@ for(var in multiple_aggregation_levels) {
 
 #### Examine Results ####
 
-write_rds(all_corr_results, "../intermediate_files/correlation_test_results.rds")
+#Supplementary Data #6 - Correlation Test Results
+write_rds(all_corr_results, "../Supplementary Data/ECT2025_supplementary_data_6.rds")
+
+write_csv(all_corr_results, "../Supplementary Data/ECT2025_supplementary_data_6.csv")
 
 #check if any correlations are significant
 all_corr_results %>% filter(fdr_p.value < 0.05)
