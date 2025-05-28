@@ -8,7 +8,7 @@ library(magrittr)
 
 #### Read in & Process Data ####
 preprocess_metadata <- read_csv('../Data/acropora_master_data.csv', show_col_types = FALSE) %>% #get coral fragment data
-  select(genotype, clone_group, starts_with('diseaseResistance'), 
+  select(genotype, starts_with('diseaseResistance'), 
          starts_with('fds'), starts_with('16s')) %>%
   filter(!if_all(starts_with('16s'), is.na)) %>%
   select(-diseaseResistance_H) %>% 

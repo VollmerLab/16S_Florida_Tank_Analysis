@@ -438,7 +438,6 @@ asv_sequences <- tax_table(updated_microbiome_data) %>%
 
 metadata <- sample_data(updated_microbiome_data) %>%
   as_tibble(rownames = 'sample_id') %>%
-  dplyr::select(-retain_sample) %>%
   mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
          .after = sample_id) #fragment ID tracks a single fragment regardless of timepoint sampled
 
