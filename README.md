@@ -5,7 +5,7 @@ Corresponding Author: Emily Trytten (trytten.e@northeastern.edu)
 
 
 
-![plot](./Figures/Fantaxtic_Relative_Abundance.png)
+![plot](./Figures/Fantaxtic%20Relative%20Abundance.png)
 
 
 
