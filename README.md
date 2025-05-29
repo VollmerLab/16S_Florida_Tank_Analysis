@@ -1,7 +1,10 @@
 
 # Code repository for Trytten et al. (2025)
-## Tank-based bacterial profiling identifies basin-wide white band disease pathogen candidate and no bacterial associations with host disease resistance
+### Tank-based bacterial profiling identifies basin-wide white band disease pathogen candidate and no bacterial associations with host disease resistance
 Corresponding Author: Emily Trytten (trytten.e@northeastern.edu)
+
+White band disease (WBD) has decimated the Caribbean staghorn coral, *Acropora cervicornis*, since its emergence in 1979, but its etiology remains unknown. Numerous WBD pathogen candidates from over nine bacterial families have been implicated, with a multi-year field study recently identifying *Cysteiniphilum litorale* as the likely pathogen. Here, we use 16S rRNA amplicon gene sequencing to profile changes in the bacterial communities in a tank-based transmission experiment in the Florida Keys using 50 nursery-raised staghorn coral genotypes with varying disease resistances to determine whether any bacteria in the native staghorn coral microbiomes were associated with WBD resistance and to identify bacterial ASVs associated with WBD exposure and transmission. We found no significant associations, positive or negative, between any bacterial ASV, genus, or family and disease resistance in native staghorn coral microbiomes but did identify nine bacterial ASVs strongly associated with disease outcome in the tank-based transmission experiment. ASV 65, classified as *Cysteiniphilum litorale*, showed strong disease associations consistent with a putative pathogen, including being significantly associated with WBD transmission within disease-exposed tanks and being significantly more abundant on the diseased experimental dose than the healthy dose. The V3-V4 16S rRNA gene sequence for ASV 65 differed by only 1 of 415 bp from the *C. litorale* ASV identified as the putative WBD pathogen in the recent multi-year study from Panama, suggesting a rare Caribbean-wide strain-level pathogen association. Eight additional disease-associated ASVs were identified as secondary opportunistic pathogens and included ASVs from the families *Vibrionaceae* and *Colwelliaceae*.![image](https://github.com/user-attachments/assets/20e64f41-f3b9-4b51-aa60-05022ecab8a8)
+
 
 ### Figure 1
 ![plot](./Figures/Experimental%20Overview.png)  
