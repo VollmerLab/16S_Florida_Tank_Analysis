@@ -437,7 +437,7 @@ significant_models <- asv_models %>%
   p_adjust(exclude_cols = c('treatment', 'tank', 'genotype')) #FDR correct the posthoc p values
 
 #Supplementary Data #5 - Model Outputs (T0, T3, T7)
-#write_rds(significant_models, "../Supplementary Data/ECT2025_supplementary_data_5.rds")
+#saveRDS(significant_models, "../Supplementary Data/ECT2025_supplementary_data_5.rds", compress = TRUE)
 
 #interpret significance and directionality of main effects of tank, exposure, and outcome
 simple_posthoc_sig_asvs <- significant_models %>%
@@ -769,17 +769,17 @@ homogenate_models <- homogenate_data %>%
   nest(homogenate_pred = -c(asv_id, data, model, homog_p_val, adj_homog_p_val))
 
 #Supplementary Data #6 - Model Outputs (homogenate doses)
-homogenate_data %>%
-  nest_by(asv_id) %>%
-  mutate(model = list(lm(log2_cpm ~ exposure, data = data))) %>% #run lm model for homogenate doses
-  mutate(model_stats = list(model %>%
-                                  broom::tidy(conf.int = TRUE))) %>%
-  mutate(p_val = model_stats %>% filter(term == "exposureH") %>% pull(p.value)) %>% #pull p-value
-  ungroup %>%
-  mutate(fdr_p_val = p.adjust(p_val, method = 'fdr')) %>% # FDR correct p-value
-  unnest(model_stats) %>%
-  nest(model_stats = -c(asv_id, data, model, p_val, fdr_p_val)) %>%
-#   write_rds("../Supplementary Data/ECT2025_supplementary_data_6.rds")
+# homogenate_data %>%
+#   nest_by(asv_id) %>%
+#   mutate(model = list(lm(log2_cpm ~ exposure, data = data))) %>% #run lm model for homogenate doses
+#   mutate(model_stats = list(model %>%
+#                                   broom::tidy(conf.int = TRUE))) %>%
+#   mutate(p_val = model_stats %>% filter(term == "exposureH") %>% pull(p.value)) %>% #pull p-value
+#   ungroup %>%
+#   mutate(fdr_p_val = p.adjust(p_val, method = 'fdr')) %>% # FDR correct p-value
+#   unnest(model_stats) %>%
+#   nest(model_stats = -c(asv_id, data, model, p_val, fdr_p_val)) %>%
+#   saveRDS("../Supplementary Data/ECT2025_supplementary_data_6.rds", compress = TRUE)
 
 #34 ASVs are significantly different between the healthy and diseased doses
 sig_homog_asv_list <- homogenate_models %>%

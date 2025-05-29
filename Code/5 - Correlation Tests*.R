@@ -274,7 +274,6 @@ for(var in multiple_aggregation_levels) {
   
   agg_metadata <- sample_data(agg_microbiome_data) %>%
     as_tibble(rownames = 'sample_id') %>%
-    dplyr::select(-retain_sample) %>%
     mutate(fragment_id = str_c(str_replace_na(exposure, 'NA'), tank, genotype, sep = '_'),
            .after = sample_id) #fragment ID tracks a single fragment regardless of timepoint sampled
   
@@ -383,7 +382,7 @@ for(var in multiple_aggregation_levels) {
     left_join(as_tibble(agg_otu_tmm$samples, rownames = 'sample_id') %>% select(-group), by = 'sample_id') %>% #add library size and normalization factors
     left_join(tax_table(agg_microbiome_data) %>% as.data.frame() %>% as_tibble(rownames = 'taxa_id'), by = c('taxa_id')) #add taxonomy
   
-  #read in and format data
+  #format data
   agg_normalized_asv_counts <- agg_full_data %>%
     mutate(time = factor(time, ordered = TRUE)) %>%
     mutate(final_disease_state = ifelse(time == "T0", "F", final_disease_state)) %>%
@@ -396,7 +395,7 @@ for(var in multiple_aggregation_levels) {
   t0_corr_test <- agg_normalized_asv_counts %>%
     filter(time == "T0") %>% #only looking at field-collected T0
     group_by(taxa_id) %>%
-    reframe(corr_val = broom::tidy(cor.test(log2_cpm, resistance))) %>% #test for correlation between log2 CPM abundance and fragment disease resistance
+    reframe(corr_val = broom::tidy(cor.test(log2_cpm, resistance, method = "kendall"))) %>% #test for correlation between log2 CPM abundance and fragment disease resistance
     unnest(corr_val) %>%
     mutate(fdr_p.value = p.adjust(p.value, method = "fdr")) %>% #FDR correct p-values
     arrange(fdr_p.value) %>%
@@ -408,7 +407,7 @@ for(var in multiple_aggregation_levels) {
 #### Examine Results ####
 
 #Supplementary Data #7 - Correlation Test Results
-#write_csv(all_corr_results, "../Supplementary Data/ECT2025_supplementary_data_7.csv")
+#saveRDS(all_corr_results, "../Supplementary Data/ECT2025_supplementary_data_7.rds", compress = TRUE)
 
 #check if any correlations are significant
 all_corr_results %>% filter(fdr_p.value < 0.05)
@@ -432,6 +431,7 @@ family_corr <- all_corr_results %>%
   filter(agg_level == "Family") %>% 
   left_join(family_taxonomy, by = join_by("taxa_id" == "Family")) %>% #add taxonomic info
   mutate(Family = taxa_id, Genus = NA, Species = NA) %>%
+  arrange(estimate) %>%
   mutate(Family = factor(Family, ordered = T, levels = .$Family))
 
 #combine ASV, Genus, and Family level correlation results (with taxonomy added back in) into one tibble to make the plot
@@ -446,7 +446,7 @@ ggplot(corr_plot, aes(x = Family, y = estimate, col = agg_level)) +
   geom_hline(yintercept = 0) +
   geom_boxplot(position = position_dodge(0.75)) +
   geom_point(data = corr_plot %>% filter(agg_level == "Family"), fill = "#397DBB", 
-             position = position_dodge(0.75), pch = 21, size = 2) + #data = (corr_plot %>% filter(agg_level == "none")),
+             position = position_dodge(0.75), pch = 21, size = 2) +
   scale_color_manual(values = c("none" = "#CB3309", "Genus" = "#E6AC0E", "Family" = "transparent"),
                      name = "Aggregation Level", breaks = c("none", "Genus", "Family"), 
                      labels = c("ASV", "Genus", "Family")) +
