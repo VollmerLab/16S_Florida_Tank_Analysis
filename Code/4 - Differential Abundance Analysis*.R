@@ -265,6 +265,23 @@ normalized_asv_counts %>%
   reframe(num_genotypes = length(genotype), minimum_DR = min(resistance), maximum_DR = max(resistance),
           average_DR = mean(resistance), SE_DR = sd(resistance)/sqrt(length((resistance))))
 
+#plot disease resistance scores
+normalized_asv_counts %>%
+  filter(time == "T0") %>%
+  select(genotype, resistance) %>%
+  distinct() %>%
+  arrange(resistance) %>%
+  mutate(resistance = zapsmall(resistance)) %>% #rounding errors caused problems
+  ggplot(aes(x=1, y = resistance, fill = resistance, group = resistance)) +
+  geom_hline(yintercept = 0.405, linetype = 2) +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=1) +
+  theme_bw() +
+  scale_fill_gradientn(colours = rev(terrain.colors(55))) +
+  ylab("Disease Resistance Score") +
+  xlab("") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), legend.position = "none")
+
 #total number of each taxa present in the homogenate doses
 homogenate_data %>% 
   left_join(normalized_asv_counts %>% select(asv_id, colnames(taxonomy_tibble)) %>% distinct(), by = join_by("asv_id")) %>%
