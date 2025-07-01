@@ -644,6 +644,7 @@ upset_sig_classified_asvs <- sig_classified_asvs %>%
          "Healthy Exposure" = HealthyExposed, "Diseased Exposure" = DiseaseExposed)
 
 #complex upset of main effects
+tiff("FigS1.tiff", units="in", width=15, height=9, res=300)
 upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
       colnames(upset_sig_classified_asvs %>% select(-c(asv_id, subgroup_colour, plot_genus, outline, group_subgroup, colnames(taxonomy_tibble), contains("DD"))) %>%
                  relocate(`Tank Effect`, contains("Healthy"), contains("Outcome"))),
@@ -693,6 +694,7 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
         'Tank Effect'
       )) +
   theme(plot.margin = margin(1, 11, 1, 1, "cm"))
+dev.off()
 #export 1500x900
 
 #complex upset of main effects and post hocs with tank effect removed
@@ -889,7 +891,7 @@ abun_over_time_plots <- bacterial_signature_asv %>%
   rowwise() %>%
   #make the plots
   mutate(plot = list(
-    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
+    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = estimate - std.error, ymax = estimate + std.error)) +
       geom_line(data = plot_info %>% filter(time == "zero_lines"), col = "gray45") + #detection limit lines
       
       # I used the relayer package to set up multiple legends
@@ -967,6 +969,7 @@ EBBPL
 #DDP#
 "
 
+tiff("FigS2.tiff", units="in", width=11, height=9.5, res=300)
 list(
   abun_over_time_plots$pathogen_plot[[2]][[1]] + theme(legend.position="none"), # A
   abun_over_time_plots$combined_plots[[3]] + plot_layout(guides = "collect") & theme(legend.position = "none"), # B
@@ -979,6 +982,7 @@ list(
   wrap_plots() + 
   plot_layout(heights = c(1, 0.0325, 8, 0.0325), widths = c(0.25, 200, 200, 10, 50), design = opp_path_design) +
   plot_annotation(tag_levels = list(c("A", "B")))
+dev.off()
 #export 1000 x 950
 
 
@@ -1190,12 +1194,14 @@ A#B
 A##
 "
 
+tiff("Fig5.tiff", units="in", width=10.5, height=7, res=300)
 list(
   logfold_change_plot, # A
   relayer_logfold_legend # B
 ) %>% 
   wrap_plots() + 
   plot_layout(heights = c(0.125, 1, 0.125), widths = c(200, 5, 50), design = logfold_design)
+dev.off()
 #export 1050x700
 
 #### NMDS ####
@@ -1232,6 +1238,7 @@ nmds_scores$genotype = nmds_metadata$genotype
 nmds_scores$treatment = str_c(nmds_scores$time, nmds_scores$exposure, nmds_scores$final_disease_state, sep = "_")
 
 #plot NMDS
+tiff("Fig4.tiff", units="in", width=10, height=5.5, res=300)
 ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   #Day 0
   (geom_point(data = (nmds_scores %>% filter(time == "T0")), aes(colour0 = treatment, pch = time)) %>%
@@ -1274,6 +1281,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
         "T7_H_H" = 17),
         size = 3), order = 7)) +
   theme_bw()
+dev.off()
 #export 1000x550
 
 #run permanova

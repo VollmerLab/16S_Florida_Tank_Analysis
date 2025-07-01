@@ -522,7 +522,7 @@ mod_alpha_tab <- alpha_table %>%
   pivot_longer(cols = !c(colnames(metadata), "fragment_id", "treatment"),
                names_to = 'metric',
                values_to = 'alpha_div_value') %>%
-  select(-c(susceptability, resistance, clone_group)) %>%
+  select(-c(susceptability, resistance)) %>%
   mutate(tank_field = if_else(str_detect(treatment, 'F'), 'field', 'tank'), .after = final_disease_state,
          weight = 1) %>%
   nest_by(metric) %>%
@@ -660,7 +660,7 @@ alpha_graphs_manuscript <- alpha_significant_models %>%
   # I used the relayer package to set up multiple legends
   # colour1 is disease exposed and colour2 is healthy exposed
   mutate(plot = list(
-    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = conf.low, ymax = conf.high)) +
+    ggplot(data = plot_info, aes(x = c_time, y = estimate, ymin = estimate - std.error, ymax = estimate + std.error)) +
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("D_H", "D_D"))), aes(colour1 = graph_cat, linetype = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour1"))) + 
       (geom_line(data = (plot_info %>% filter(graph_cat %in% c("H_H"))), aes(colour2 = graph_cat, linetype = graph_cat)) %>%
@@ -705,7 +705,7 @@ sig_lines <- alpha_significant_models %>%
   mutate(time1 = parse_number(time1), time2 = parse_number(time2)) %>%
   select(-sign) %>%
   rowwise() %>%
-  mutate(conf.low = 0, conf.high = 0, text_x = mean(c(time1, time2)), #put stars halfway between the timepoints
+  mutate(conf.low = 0, conf.high = 0, estimate = 0, text_x = mean(c(time1, time2)), #put stars halfway between the timepoints
          line_order = case_when(sum(time1, time2) == 7 ~ 3.5, #adjust height for comparing day 0 to day 7
                                 sum(time1, time2) == 10 ~ 2, #adjust height for comparing day 3 to day 7
                                 sum(time1, time2) == 3 ~ 1)) #adjust height for comparing day 0 to day 3
@@ -751,8 +751,11 @@ alpha_legend <- cowplot::get_legend(alpha_graphs_manuscript$plot[[2]])
 both_alphas <- chao1_plot / core_abun_plot + plot_annotation(tag_levels = "A")
 
 #add legend to plots
+
+tiff("Fig3.tiff", units="in", width=10, height=6, res=300)
 (both_alphas | alpha_legend) + 
   plot_layout(widths = c(4, 1)) + plot_annotation(tag_levels = list(c("A", "B")))
+dev.off()
 #export 1000x600
 
 #### Fantaxtic Relative Abundance ####
@@ -841,6 +844,7 @@ custom_palette <- taxon_colours(top_asv$ps_obj,
                                             Other = "gray75"))
 
 # Generate the plot
+tiff("Fig2.tiff", units="in", width=15, height=9, res=300)
 mod_ggnested(psdf,
              aes_string(main_group = top_level,
                         sub_group = nested_level,
@@ -863,6 +867,7 @@ mod_ggnested(psdf,
         axis.title = element_text(size=13),
         legend.title = element_text(size=13),
         strip.text = element_text(size=12))
+dev.off()
 #export 1500x900
 
 #color palette used in this plot
