@@ -39,6 +39,22 @@ microbiome_raw <- subset_samples(microbiome_raw, time != "Acerv")
 
 ### Check initial values
 
+#234 samples
+sample_data(microbiome_raw) %>% as_tibble() %>% nrow()
+
+#visualize distribution of read counts
+sample_sums(microbiome_raw) %>%
+  as_tibble() %>%
+  mutate(sample = names(sample_sums(microbiome_raw)), .before = value) %>%
+  rename("read_count" = "value") %>%
+  ggplot() +
+  geom_histogram(aes(read_count), bins = 30, fill = "#a3a3a8") +
+  geom_vline(aes(xintercept = 1000), col = "#cc0606", lwd = 1, lty = "dashed") +
+  theme_bw() +
+  xlab("Number of Reads") +
+  ylab("Number of Samples")
+#export 900x500
+
 #how many homogenate dose samples
 sample_data(microbiome_raw) %>% as_tibble() %>% filter(tank == "HOMO" | is.na(exposure)) %>% nrow()
 
@@ -58,6 +74,10 @@ sample_data(microbiome_raw) %>% as_tibble() %>% filter(time == "T3" | time == "T
 microbiome_raw <- prune_samples(sample_sums(microbiome_raw)>=1000, microbiome_raw)
 
 ### Check values after 1000 read filter
+
+#227 samples
+sample_data(microbiome_raw) %>% as_tibble() %>% nrow()
+
 #how many homogenate dose samples
 sample_data(microbiome_raw) %>% as_tibble() %>% filter(tank == "HOMO" | is.na(exposure)) %>% nrow()
 
