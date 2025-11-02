@@ -566,7 +566,8 @@ alpha_significant_models <- mod_alpha_tab %>%
   p_adjust(exclude_cols = c('treatment', 'tank', 'genotype'))
 
 #get statistics for manuscript metrics
-manuscript_alpha_metrics <- c("dominance_core_abundance", "chao1")
+manuscript_alpha_metrics <- c("dominance_simpson", "diversity_shannon")
+#manuscript_alpha_metrics <- c("dominance_core_abundance", "chao1")
 
 alpha_significant_models %>%
   select(metric, `fdr_aquarium_=`, posthoc) %>% #fdr_aquarium_= is the FDR corrected p-value for time/moving corals from the field to aquarium tanks
@@ -619,10 +620,10 @@ alpha_significant_models %>%
   mutate(time = str_after_first(val, "_"), val = str_before_first(val, "_")) %>%
   pivot_wider(names_from = val, values_from = num)
 
-#get intercept (T0) for chao1 
+#get intercept (T0) for shannon diversity
 summary((alpha_significant_models %>% filter(metric %in% manuscript_alpha_metrics))$model[[1]])
 
-#get intercept (T0) for core abundance
+#get intercept (T0) for simpson dominance
 summary((alpha_significant_models %>% filter(metric %in% manuscript_alpha_metrics))$model[[2]])
 
 #### Alpha Diversity Plots ####
@@ -674,10 +675,10 @@ alpha_graphs_manuscript <- alpha_significant_models %>%
       (geom_point(data = (plot_info %>% filter(graph_cat %in% c("H_H"))), size = 3, aes(colour2 = graph_cat, pch = graph_cat)) %>%
          rename_geom_aes(new_aes = c("colour" = "colour2"))) +
       scale_color_manual(aesthetics = "colour1", values = c("D_H" = "#22A7B6", "D_D" = "#A70000"), guide = "legend", 
-                         name = "Disease Exposed", breaks = c("D_H", "D_D"), labels = c("Healthy", "Diseased")) +
+                         name = "Disease-Exposed", breaks = c("D_H", "D_D"), labels = c("Healthy", "Diseased")) +
       scale_shape_manual(values = c("D_H" = 17, "D_D" = 17, "H_H" = 16), guide = "none") +
       scale_color_manual(aesthetics = "colour2", values = c("H_H" = "#406F23"), guide = "legend", 
-                         name = "Healthy Exposed", labels = c("Healthy")) +
+                         name = "Healthy-Exposed", labels = c("Healthy")) +
       guides(colour1 = guide_legend(
         override.aes=list(linetype = c(1, 1), shape = c(17, 17))),
         colour2 = guide_legend(
@@ -706,49 +707,47 @@ sig_lines <- alpha_significant_models %>%
   select(-sign) %>%
   rowwise() %>%
   mutate(conf.low = 0, conf.high = 0, estimate = 0, text_x = mean(c(time1, time2)), #put stars halfway between the timepoints
-         line_order = case_when(sum(time1, time2) == 7 ~ 3.5, #adjust height for comparing day 0 to day 7
-                                sum(time1, time2) == 10 ~ 2, #adjust height for comparing day 3 to day 7
-                                sum(time1, time2) == 3 ~ 1)) #adjust height for comparing day 0 to day 3
+         line_order = case_when(sum(time1, time2) == 7 ~ 2.5, #adjust height for comparing day 0 to day 7
+                                sum(time1, time2) == 10 ~ 1.5, #adjust height for comparing day 3 to day 7
+                                sum(time1, time2) == 3 ~ 1),
+         std.error = 0) #adjust height for comparing day 0 to day 3
 
-#make plot for Chao1
-chao1_plot <- alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") + 
-  ylab(str_wrap("Chao1 Richness Index", 15)) + labs(title = NULL) +
+#make plot for Shannon-Weiner Diversity
+(shannon_plot <- alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") + 
+  ylab(str_wrap("Shannon-Weiner Diversity Index", 15)) + labs(title = NULL) +
   xlab(NULL) +
   #add significance lines
-  geom_segment(data = sig_lines %>% filter(metric == "chao1"), 
-               aes(x = time1, xend = time2, y = 400 + line_order*26.667, 
-                   yend = 400 + line_order*26.667,
-                   alpha = significance), col = "gray20") +
+  geom_segment(data = sig_lines %>% filter(metric == "diversity_shannon"), 
+               aes(x = time1, xend = time2, y = 3.6 + line_order*0.5, 
+                   yend = 3.6 + line_order*0.5), col = "gray20") +
   #add significance stars
-  geom_text(data = sig_lines %>% filter(metric == "chao1"),
-            aes(x = text_x, y = 400 + 10 + line_order*26.667,
+  geom_text(data = sig_lines %>% filter(metric == "diversity_shannon"),
+            aes(x = text_x, y = 3.6 + 0.1 + line_order*0.5,
                 label = pval_label), col = "gray20", size = 6) +
-  scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
+  #scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
   theme(axis.text = element_text(size=11),
-        axis.title = element_text(size=12))
+        axis.title = element_text(size=12)))
 
 #make plot for core abundance
-core_abun_plot <- alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") +
-  ylab(str_wrap("Core abundance dominance index", 15)) + labs(title = NULL) +
+(simpson_plot <- alpha_graphs_manuscript$plot[[2]] + theme(legend.position="none") +
+  ylab(str_wrap("Simpson's Dominance Index", 15)) + labs(title = NULL) +
   #add significance lines
-  geom_segment(data = sig_lines %>% filter(metric == "dominance_core_abundance"), 
-               aes(x = time1, xend = time2, y = 0.75 + line_order*0.05, 
-                   yend = 0.75 + line_order*0.05,
-                   alpha = significance), col = "gray20") +
+  geom_segment(data = sig_lines %>% filter(metric == "dominance_simpson"), 
+               aes(x = time1, xend = time2, y = 0.43 + line_order*0.06, 
+                   yend = 0.43 + line_order*0.06), col = "gray20") +
   #add significance stars
-  geom_text(data = sig_lines %>% filter(metric == "dominance_core_abundance"),
-            aes(x = text_x, y = 0.75 + 0.01 + line_order*0.05,
+  geom_text(data = sig_lines %>% filter(metric == "dominance_simpson"),
+            aes(x = text_x, y = 0.43 + 0.01 + line_order*0.06,
                 label = pval_label), col = "gray20", size = 6) +
-  scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
-  ylim(0, 1) +
+  #scale_alpha_manual(values = c("yes" = 1, "no" = 0)) +
   theme(axis.text = element_text(size=11),
-        axis.title = element_text(size=12))
+        axis.title = element_text(size=12)))
 
 #extract legend from original plot
 alpha_legend <- cowplot::get_legend(alpha_graphs_manuscript$plot[[2]])
 
 #combine the alpha diversity plots
-both_alphas <- chao1_plot / core_abun_plot + plot_annotation(tag_levels = "A")
+both_alphas <- shannon_plot / simpson_plot + plot_annotation(tag_levels = "A")
 
 #add legend to plots
 
@@ -791,7 +790,7 @@ psdf <- psdf %>%
   mutate(Sample = str_c(time, exposure, final_disease_state, sep = "_")) %>%
   filter(!Sample %in% c("T3_H_D", "T7_H_D")) %>%
   mutate(facet_level = case_when(Sample == "T0_F_F" ~ "Day 0",
-                                 Sample %in% c("T0_D_D", "T0_H_H") ~ "Doses",
+                                 Sample %in% c("T0_D_D", "T0_H_H") ~ "Homogenate Doses",
                                  time == "T3" ~ "Day 3",
                                  time == "T7" ~ "Day 7")) %>%
   mutate(Sample = case_when(Sample == "T0_F_F" ~ "Field",
@@ -799,7 +798,7 @@ psdf <- psdf %>%
                             Sample == "T0_H_H" ~ "H Dose",
                             Sample %in% c("T3_D_D", "T3_D_H") ~ "T3 Diseased",
                             TRUE ~ Sample)) %>%
-  mutate(facet_level = factor(facet_level, levels = c("Doses", "Day 0", "Day 3", "Day 7")),
+  mutate(facet_level = factor(facet_level, levels = c("Homogenate Doses", "Day 0", "Day 3", "Day 7")),
          Sample = factor(Sample, levels = c("H Dose", "D Dose", "Field", "T3_H_H",
                                             "T3 Diseased", "T7_H_H", "T7_D_H", "T7_D_D")))
 
@@ -842,9 +841,31 @@ custom_palette <- taxon_colours(top_asv$ps_obj,
                                             Vibrionales = "#7C2C00",
                                             Thiotrichales = "#590404",
                                             Other = "gray75"))
+# Calculate sample sizes
+sample_data(updated_microbiome_data) %>%
+  as_tibble() %>%
+  mutate(facet_group = case_when(time == "T0" & tank == "HOMO" ~ "doses",
+                                 time == "T0" ~ "t0",
+                                 TRUE ~ time)) %>%
+  mutate(final_disease_state = ifelse(is.na(final_disease_state), "NA", final_disease_state)) %>%
+  mutate(combo_cat = str_c(facet_group, exposure, final_disease_state, sep = "_")) %>%
+  mutate(combo_cat = ifelse(combo_cat %in% c("T3_D_H", "T3_D_D"), "T3_D_x", combo_cat)) %>%
+  group_by(combo_cat) %>%
+  reframe(n = n())
+
+# Calculate the proportion of Other Orders
+psdf %>% 
+  as_tibble() %>% 
+  group_by(Sample) %>% 
+  mutate(tot_abun = sum(Abundance)) %>% 
+  filter(Order == "Other") %>% 
+  reframe(prop = sum(Abundance)/tot_abun) %>% 
+  unique() %>% 
+  mutate(percent = prop*100) %>%
+  mutate(percent_not_other = 100 - percent)
 
 # Generate the plot
-tiff("Fig2.tiff", units="in", width=15, height=9, res=300)
+tiff("Fig2.tiff", units="in", width=15, height=10, res=300)
 mod_ggnested(psdf,
              aes_string(main_group = top_level,
                         sub_group = nested_level,
@@ -856,10 +877,10 @@ mod_ggnested(psdf,
   theme_nested(theme_bw) + 
   geom_col(position = position_fill()) + 
   facet_grid(col = vars(facet_level), space = "free", scales = "free") + 
-  scale_x_discrete(name = element_blank(), labels = c("Field" = "Field", "D Dose" = "Diseased", "H Dose" =
-                                                        "Healthy", "T3 Diseased" = str_wrap("Disease- Exposed", 10), "T3_H_H" = str_wrap("Healthy- Exposed", 10),
-                                                      "T7_H_H" = str_wrap("Healthy", 10),
-                                                      "T7_D_H" = str_wrap("Disease- Exposed Healthy", 10), "T7_D_D" = "Diseased")) +
+  scale_x_discrete(name = element_blank(), labels = c("Field" = ("Nursery\n\n\n\n(n = 18)"), "D Dose" = ("Diseased\n\n\n\n(n = 5)"), "H Dose" =
+                                                        ("Healthy\n\n\n\n(n = 5)"), "T3 Diseased" = ("Disease-\nExposed\n\n\n(n = 46)"), "T3_H_H" = ("Healthy-\nExposed\n\n\n(n = 42)"),
+                                                      "T7_H_H" = ("Healthy-\nExposed\nHealthy\n\n(n = 45)"),
+                                                      "T7_D_H" = ("Disease-\nExposed\nHealthy\n\n(n = 19)"), "T7_D_D" = ("Disease-\nExposed\nDiseased\n\n(n = 47)"))) +
   guides(fill=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus")), nrow = 35),
          col=guide_legend(title=substitute(bold(bd)~nb, list(bd = "Order", nb = "/ Genus"))), nrow = 35) +
   ylab("Relative Abundance") +
@@ -868,7 +889,7 @@ mod_ggnested(psdf,
         legend.title = element_text(size=13),
         strip.text = element_text(size=12))
 dev.off()
-#export 1500x900
+#export 1500x1000
 
 #color palette used in this plot
 fantaxtic_palette <- get_mod_ggnested_palette(psdf,

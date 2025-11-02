@@ -238,6 +238,7 @@ detection_limit <- min(normalized_asv_counts$log2_cpm)
 #detection limit in homogenate doses of 5.274105
 homog_detection_limit <- min(homogenate_data$log2_cpm)
 
+
 #### Miscellaneous Manuscript Metrics ####
 
 #Supplementary Data #3 - Read Counts of each ASV per Sample (tank environment)
@@ -1246,7 +1247,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   (stat_ellipse(data = (nmds_scores %>% filter(time == "T0")), aes(colour0 = treatment), show.legend=FALSE) %>%
      rename_geom_aes(new_aes = c("colour" = "colour0"))) +
   scale_color_manual(aesthetics = "colour0", values = c("T0_F_F" = "#c389e0"), guide = "legend", 
-                     name = "Day 0", breaks = c("T0_F_F"), labels = c("Field-Collected")) +
+                     name = "Day 0", breaks = c("T0_F_F"), labels = c("Nursery-Collected")) +
   #Day 3
   (geom_point(data = (nmds_scores %>% filter(time == "T3")), aes(colour3 = treatment, pch = time)) %>%
      rename_geom_aes(new_aes = c("colour" = "colour3"))) +
@@ -1255,7 +1256,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   scale_color_manual(aesthetics = "colour3", values = c("T3_D_D" = "#E79B9B", "T3_D_H" = "#97D9E1",
                                                         "T3_H_H" = "#95AC85"), guide = "legend", 
                      name = "Day 3", breaks = c("T3_H_H", "T3_D_H", "T3_D_D"), 
-                     labels = c("Healthy", "Disease-Exposed, Healthy", "Eventually Develops Disease")) +
+                     labels = c("Healthy-Exposed Healthy", "Disease-Exposed Healthy", "Later Develops Disease")) +
   #Day 7
   (geom_point(data = (nmds_scores %>% filter(time == "T7")), aes(colour7 = treatment, pch = time)) %>%
      rename_geom_aes(new_aes = c("colour" = "colour7"))) +
@@ -1264,7 +1265,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   scale_color_manual(aesthetics = "colour7", values = c("T7_D_D" = "#A70000", "T7_D_H" = "#22A7B6",
                                                         "T7_H_H" = "#406F23"), guide = "legend", 
                      name = "Day 7", breaks = c("T7_H_H", "T7_D_H", "T7_D_D"), 
-                     labels = c("Healthy", "Disease-Exposed, Healthy", "Diseased")) +
+                     labels = c("Healthy-Exposed Healthy", "Disease-Exposed Healthy", "Disease-Exposed Diseased")) +
   scale_shape_manual(values = c("T0" = 16, "T3" = 15, "T7" = 17), guide = "none") +
   guides(color0 = guide_legend(
     override.aes=list(shape = c("T0_F_F" = 16),

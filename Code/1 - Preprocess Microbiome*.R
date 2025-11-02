@@ -17,6 +17,9 @@ preprocess_metadata <- read_csv('../intermediate_files/preprocess_metadata.csv',
 H_D_samples <- preprocess_metadata %>% filter((exposure == "H" & final_disease_state == "D")) %>%
   pull(sample_id)
 
+#proportion of healthy-exposed samples that contracted disease
+nrow(preprocess_metadata %>% filter((exposure == "H" & final_disease_state == "D")))/nrow(preprocess_metadata %>% filter((exposure == "H")))
+
 #filter out host/symbiont contamination
 microbiome_raw <- read_rds("../Data/updated_8_25_23_decipher_16s_ps.rds") %>%
   subset_taxa(Domain == "Bacteria" & 
