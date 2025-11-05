@@ -418,8 +418,8 @@ if(file.exists('../intermediate_files/mixed_model_results.rds.gz') & !refit_mode
            posthoc = list(run_posthoc(model, posthoc_categories))) %>%
     collect() %>%
     select(-re_model, -ends_with('global')) %>%
-    ungroup %>% 
-    p_adjust %>%
+    ungroup() %>% 
+    p_adjust() %>%
     relocate(anova_table, .after = model) %>% 
     relocate(posthoc, .after = random_anova)
   write_rds(asv_models, '../intermediate_files/mixed_model_results.rds.gz')
@@ -641,14 +641,14 @@ upset_sig_classified_asvs <- sig_classified_asvs %>%
          Order = factor(Order, ordered = T)) %>%
   arrange(group_subgroup) %>%
   rename("Healthy Outcome" = HealthyOutcome, "Diseased Outcome" = DiseaseOutcome, 
-         "Tank Effect" = TankEffect,
+         "Transplant Effect" = TankEffect,
          "Healthy Exposure" = HealthyExposed, "Diseased Exposure" = DiseaseExposed)
 
 #complex upset of main effects
 tiff("FigS1.tiff", units="in", width=15, height=9, res=300)
 upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
       colnames(upset_sig_classified_asvs %>% select(-c(asv_id, subgroup_colour, plot_genus, outline, group_subgroup, colnames(taxonomy_tibble), contains("DD"))) %>%
-                 relocate(`Tank Effect`, contains("Healthy"), contains("Outcome"))),
+                 relocate(`Transplant Effect`, contains("Healthy"), contains("Outcome"))),
       base_annotations=list(
         'Intersection size'=intersection_size(counts=T, text = aes(size = 6.5),
                                               bar_number_threshold = 25,
@@ -671,14 +671,14 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
         + scale_color_manual(
           values=c(
             "Healthy Outcome" = "#0d50ba",
-            "Tank Effect"= "#c389e0",
+            "Transplant Effect"= "#c389e0",
             "Diseased Outcome"= "#ba0d0d"
           )
         )
       ),
       queries=list(
         upset_query(set = "Healthy Outcome", fill = "#0d50ba"),
-        upset_query(set = "Tank Effect", fill = "#c389e0"),
+        upset_query(set = "Transplant Effect", fill = "#c389e0"),
         upset_query(set = "Diseased Outcome", fill = "#ba0d0d")
       ),
       name='ASVs', width_ratio=0.1, sort_sets = FALSE, sort_intersections=FALSE, 
@@ -690,9 +690,9 @@ upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
       intersections=list(
         'Diseased Outcome',
         'Healthy Outcome',
-        c('Diseased Outcome', 'Tank Effect'),
-        c('Healthy Outcome', 'Tank Effect'),
-        'Tank Effect'
+        c('Diseased Outcome', 'Transplant Effect'),
+        c('Healthy Outcome', 'Transplant Effect'),
+        'Transplant Effect'
       )) +
   theme(plot.margin = margin(1, 11, 1, 1, "cm"))
 dev.off()
