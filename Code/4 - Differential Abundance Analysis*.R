@@ -645,7 +645,7 @@ upset_sig_classified_asvs <- sig_classified_asvs %>%
          "Healthy Exposure" = HealthyExposed, "Diseased Exposure" = DiseaseExposed)
 
 #complex upset of main effects
-tiff("FigS1.tiff", units="in", width=15, height=9, res=300)
+tiff("FigS2.tiff", units="in", width=15, height=9, res=300)
 upset(upset_sig_classified_asvs %>% select(-c(contains("DD"))),
       colnames(upset_sig_classified_asvs %>% select(-c(asv_id, subgroup_colour, plot_genus, outline, group_subgroup, colnames(taxonomy_tibble), contains("DD"))) %>%
                  relocate(`Transplant Effect`, contains("Healthy"), contains("Outcome"))),
@@ -970,7 +970,7 @@ EBBPL
 #DDP#
 "
 
-tiff("FigS2.tiff", units="in", width=11, height=9.5, res=300)
+tiff("FigS3.tiff", units="in", width=11, height=9.5, res=300)
 list(
   abun_over_time_plots$pathogen_plot[[2]][[1]] + theme(legend.position="none"), # A
   abun_over_time_plots$combined_plots[[3]] + plot_layout(guides = "collect") & theme(legend.position = "none"), # B

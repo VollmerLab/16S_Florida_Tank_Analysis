@@ -13,7 +13,7 @@ preprocess_metadata <- read_csv('../intermediate_files/preprocess_metadata.csv',
 
 #### Data Filtering ####
 
-#make a list of all samples that were exposed to healthy homogenate but contracted disease
+#make a list of all samples that were exposed to healthy homogenate but contracted disease or died
 H_D_samples <- preprocess_metadata %>% filter((exposure == "H" & final_disease_state == "D")) %>%
   pull(sample_id)
 
@@ -46,6 +46,7 @@ microbiome_raw <- subset_samples(microbiome_raw, time != "Acerv")
 sample_data(microbiome_raw) %>% as_tibble() %>% nrow()
 
 #visualize distribution of read counts
+tiff("FigS1.tiff", units="in", width=9, height=5, res=300)
 sample_sums(microbiome_raw) %>%
   as_tibble() %>%
   mutate(sample = names(sample_sums(microbiome_raw)), .before = value) %>%
@@ -56,6 +57,7 @@ sample_sums(microbiome_raw) %>%
   theme_bw() +
   xlab("Number of Reads") +
   ylab("Number of Samples")
+dev.off()
 #export 900x500
 
 #how many homogenate dose samples
