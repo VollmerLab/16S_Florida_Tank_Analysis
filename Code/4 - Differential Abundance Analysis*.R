@@ -515,17 +515,6 @@ bacterial_signature_asv <- significant_models %>%
   rbind(simple_posthoc_sig_asvs) %>% #add the main effects back in with directionality indicated
   arrange(asv_id) #re-order by ASV number
 
-#complex upset of significant signutures
-bacterial_signature_asv %>%
-  group_by(asv_id) %>%
-  summarise(terms = list(signatures),
-            .groups = 'drop') %>%
-  ggplot(aes(x = terms)) +
-  geom_bar() +
-  scale_x_upset() +
-  theme_classic() +
-  theme_combmatrix(combmatrix.label.make_space = TRUE)
-
 #add taxonomy and pivot significant ASVs wider
 sig_classified_asvs <- select(significant_models, asv_id, Domain:Species) %>%
   left_join(bacterial_signature_asv %>%
@@ -542,7 +531,7 @@ sig_classified_asvs <- select(significant_models, asv_id, Domain:Species) %>%
   mutate(TankEffect = ifelse(Field | Aquaria, TRUE, FALSE)) %>% #make column for tank effect, regardless of its directionality
   select(-c(Field, Aquaria)) #remove directional tank effect columns
 
-write_csv(sig_classified_asvs, '../intermediate_files/classified_significant_asvs.csv.gz')
+#write_csv(sig_classified_asvs, '../intermediate_files/classified_significant_asvs.csv.gz')
 
 #how many ASVs significant for each contrast
 sig_classified_asvs %>% 
@@ -1175,7 +1164,8 @@ logfold_change_plot <- ggplot(model_for_plot) +
                                "DD_vs_DH_late_sig" = "#BA0D0D"), guide = "none") +
   coord_flip() +
   theme_bw() +
-  theme(axis.text = element_markdown(size = 10),
+  theme(axis.text.y = element_markdown(size = 10),
+        axis.text = element_markdown(size = 10),
         axis.title = element_markdown(size = 12),
         legend.position = "none",
         strip.text = element_text(size = 12),
@@ -1185,8 +1175,7 @@ logfold_change_plot <- ggplot(model_for_plot) +
   facet_grid(rows = vars(grouped_signatures), space = "free", scales = "free",
              labeller = label_wrap_gen(width = 15)) +
   xlab(NULL) +
-  ylab("Log Fold Change (Diseased vs. Healthy)")
-
+  ylab(expression("Log"[2]*" Fold Change (Diseased vs. Healthy)"))
 
 #combine plot and legend
 logfold_design = "
@@ -1256,7 +1245,7 @@ ggplot(nmds_scores, aes(x = NMDS1, y = NMDS2)) +
   scale_color_manual(aesthetics = "colour3", values = c("T3_D_D" = "#E79B9B", "T3_D_H" = "#97D9E1",
                                                         "T3_H_H" = "#95AC85"), guide = "legend", 
                      name = "Day 3", breaks = c("T3_H_H", "T3_D_H", "T3_D_D"), 
-                     labels = c("Healthy-Exposed Healthy", "Disease-Exposed Healthy", "Later Develops Disease")) +
+                     labels = c("Healthy-Exposed Healthy", "Disease-Exposed Healthy", "Disease-Exposed,\nLater Develops Disease")) +
   #Day 7
   (geom_point(data = (nmds_scores %>% filter(time == "T7")), aes(colour7 = treatment, pch = time)) %>%
      rename_geom_aes(new_aes = c("colour" = "colour7"))) +

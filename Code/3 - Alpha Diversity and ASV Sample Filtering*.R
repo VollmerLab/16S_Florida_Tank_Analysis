@@ -712,9 +712,9 @@ sig_lines <- alpha_significant_models %>%
                                 sum(time1, time2) == 3 ~ 1),
          std.error = 0) #adjust height for comparing day 0 to day 3
 
-#make plot for Shannon-Weiner Diversity
+#make plot for Shannon Diversity
 (shannon_plot <- alpha_graphs_manuscript$plot[[1]] + theme(legend.position="none") + 
-  ylab(str_wrap("Shannon-Weiner Diversity Index", 15)) + labs(title = NULL) +
+  ylab(str_wrap("Shannon Diversity Index", 15)) + labs(title = NULL) +
   xlab(NULL) +
   #add significance lines
   geom_segment(data = sig_lines %>% filter(metric == "diversity_shannon"), 
